@@ -1,0 +1,26 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+# Tests compile the vendored Ambire sources under test/ambire (see remappings.txt
+# + the `ambire/` mapping). They are NOT part of the deployable `src` surface.
+test = "test"
+optimizer = true
+optimizer_runs = 200
+# via-IR is required to compile the vendored, audited Ambire SignatureValidator
+# unchanged (it hits "stack too deep" on the legacy pipeline). This matches how the
+# upstream Ambire project builds, so the vendored sources stay byte-for-byte intact.
+via_ir = true
+# Pinned to Ambire's pragma so the vendored, audited AmbireAccount compiles unchanged.
+solc_version = "0.8.19"
+# Ambire predates Cancun; "paris" is the safe lowest-common-denominator EVM target.
+evm_version = "paris"
+
+[profile.lite]
+optimizer = false
+# Even with the optimizer off, via-IR is needed for the vendored Ambire sources.
+via_ir = true
+solc_version = "0.8.19"
+evm_version = "paris"
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

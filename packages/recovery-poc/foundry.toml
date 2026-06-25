@@ -15,6 +15,10 @@ via_ir = true
 solc_version = "0.8.19"
 # Ambire predates Cancun; "paris" is the safe lowest-common-denominator EVM target.
 evm_version = "paris"
+# Allow the v0 deploy script (script/DeployV0.s.sol) to write the address manifest to
+# deployments/anvil-v0.json via vm.writeJson. Scoped read-write to the package's
+# deployments/ directory only.
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
 
 [profile.lite]
 optimizer = false

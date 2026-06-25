@@ -31,3 +31,21 @@ export {
   // optional runtime wiring
   RecoveryClient,
 } from './recoveryAdapterClient.js';
+
+// --- recovery v0 (real ERC-7579) mirror ---
+export {
+  // constants
+  MODE_SINGLE_DEFAULT,
+  ROTATE_OWNER_SELECTOR,
+  PRIV_AUTHORIZED_V0,
+  // ABI fragments
+  RECOVERY_CONTROLLER_V0_ABI,
+  IERC7579_ACCOUNT_ABI,
+  MINIMAL_ACCOUNT_ABI,
+  // ERC-7579 single-call encoding
+  encodeSingleExecution,
+  encodeRotateOwnerCall,
+  // controller entrypoint + inspection helpers
+  encodeInitiateRecoveryV0,
+  buildExecuteFromExecutorArgs,
+} from './recoveryV0Client.js';

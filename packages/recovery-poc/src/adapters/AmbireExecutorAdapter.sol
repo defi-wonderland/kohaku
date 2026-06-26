@@ -103,7 +103,15 @@ contract AmbireExecutorAdapter is IERC7579Account {
 
     /// @notice The only caller permitted to invoke {executeFromExecutor}. The adapter
     ///         trusts the controller to have enforced recovery policy before calling.
-    address public immutable controller;
+    /// @dev    Single-write (set exactly once via {setController}) rather than a
+    ///         constructor immutable. This resolves the deploy-time circular dependency
+    ///         between the adapter and the controller: the controller's address is a
+    ///         constructor argument of nothing here, so the adapter's CREATE2 init code
+    ///         (and therefore its address) no longer depends on the controller. The
+    ///         controller can then be deployed with the now-known adapter address as its
+    ///         `target`, and bound back into the adapter once via {setController}. After
+    ///         that single write it is immutable in practice.
+    address public controller;
 
     // ---------------------------------------------------------------------
     // State (introspection parity only)
@@ -134,6 +142,9 @@ contract AmbireExecutorAdapter is IERC7579Account {
     /// @notice Thrown when {executeFromExecutor} is called by anyone but {controller}.
     error NotController();
 
+    /// @notice Thrown when {setController} is called after the controller is already set.
+    error ControllerAlreadySet();
+
     /// @notice Thrown when an unsupported ERC-7579 ModeCode is supplied.
     error UnsupportedMode();
 
@@ -145,10 +156,28 @@ contract AmbireExecutorAdapter is IERC7579Account {
     // ---------------------------------------------------------------------
 
     /// @param _ambireAccount The deployed Ambire account this adapter wraps.
-    /// @param _controller    The {RecoveryController} allowed to drive this adapter.
-    constructor(address _ambireAccount, address _controller) {
-        if (_ambireAccount == address(0) || _controller == address(0)) revert ZeroAddress();
+    /// @dev   The controller is intentionally NOT a constructor argument; it is bound
+    ///        once after deployment via {setController} to break the adapter<->controller
+    ///        CREATE2 circular dependency (see {controller}).
+    constructor(address _ambireAccount) {
+        if (_ambireAccount == address(0)) revert ZeroAddress();
         ambireAccount = _ambireAccount;
+    }
+
+    /// @notice Bind the controller exactly once. This resolves the deploy-time circular
+    ///         dependency between the adapter and controller addresses: the adapter is
+    ///         deployed first (its CREATE2 address is fully determined by `_ambireAccount`
+    ///         alone), then the controller is deployed against that known adapter address,
+    ///         then the controller is bound here.
+    /// @dev    Permissionless but single-shot: reverts {ControllerAlreadySet} once set, so
+    ///         the binding is immutable in practice after the one-time Activate wiring.
+    ///         The {executeFromExecutor} `msg.sender != controller` guard safely rejects
+    ///         all callers while `controller` is still the zero address (unset), so there
+    ///         is no window in which an unbound adapter can be driven.
+    /// @param  _controller The {RecoveryController} allowed to drive this adapter.
+    function setController(address _controller) external {
+        if (_controller == address(0)) revert ZeroAddress();
+        if (controller != address(0)) revert ControllerAlreadySet();
         controller = _controller;
     }
 

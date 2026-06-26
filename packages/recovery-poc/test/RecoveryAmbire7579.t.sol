@@ -61,16 +61,17 @@ contract RecoveryAmbire7579Test is Test {
         // 2) Deploy the trivial v0 method.
         method = new AlwaysValidMethod();
 
-        // 3) Deploy adapter + controller. The adapter's `controller` is immutable, so
-        //    predict the controller CREATE address (deployed on the very next nonce)
-        //    and pin the adapter to it — keeps both wirings immutable, no setters.
-        address predictedController = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        adapter = new AmbireExecutorAdapter(address(account), predictedController);
+        // 3) Deploy adapter + controller using the forward (no-prediction) wiring:
+        //    deploy the adapter first (its address depends only on `account`), deploy the
+        //    controller against the now-known adapter address, then bind the controller
+        //    into the adapter once via setController. This mirrors the on-chain Activate
+        //    flow and removes the adapter<->controller CREATE2 circular dependency.
+        adapter = new AmbireExecutorAdapter(address(account));
         controller = new RecoveryController(
             IERC7579Account(address(adapter)),
             IRecoveryMethod(address(method))
         );
-        assertEq(address(controller), predictedController, "setup: controller address prediction must hold");
+        adapter.setController(address(controller));
         assertEq(adapter.controller(), address(controller), "setup: adapter bound to controller");
         assertEq(address(controller.target()), address(adapter), "setup: controller target is the adapter");
 
@@ -160,13 +161,12 @@ contract RecoveryAmbire7579Test is Test {
     ///         rotate. Reverts with Ambire's own INSUFFICIENT_PRIVILEGE.
     function test_RevertWhen_AdapterNotAuthorizedOnAccount() public {
         AmbireAccountHarness freshAccount = new AmbireAccountHarness(ownerA);
-        address predictedController = vm.computeCreateAddress(address(this), vm.getNonce(address(this)) + 1);
-        AmbireExecutorAdapter freshAdapter = new AmbireExecutorAdapter(address(freshAccount), predictedController);
+        AmbireExecutorAdapter freshAdapter = new AmbireExecutorAdapter(address(freshAccount));
         RecoveryController freshController = new RecoveryController(
             IERC7579Account(address(freshAdapter)),
             IRecoveryMethod(address(method))
         );
-        assertEq(address(freshController), predictedController, "fresh fixture: prediction must hold");
+        freshAdapter.setController(address(freshController));
         assertEq(freshAccount.privileges(address(freshAdapter)), bytes32(0), "adapter unauthorized here");
 
         vm.prank(relayer);
@@ -186,6 +186,24 @@ contract RecoveryAmbire7579Test is Test {
         vm.prank(address(controller));
         vm.expectRevert(AmbireExecutorAdapter.UnsupportedIntent.selector);
         adapter.executeFromExecutor(bytes32(0), execData);
+    }
+
+    /// @notice Proves {setController} is single-shot: once bound it cannot be rebound, so
+    ///         the controller binding is immutable in practice after Activate. Also proves
+    ///         a fresh adapter rejects a zero controller.
+    function test_RevertWhen_SetControllerCalledTwice() public {
+        // The setUp() adapter is already bound to `controller`; rebinding must revert.
+        vm.expectRevert(AmbireExecutorAdapter.ControllerAlreadySet.selector);
+        adapter.setController(address(0xCAFE));
+        assertEq(adapter.controller(), address(controller), "controller binding unchanged");
+
+        // A fresh, unbound adapter rejects a zero controller and accepts a real one once.
+        AmbireExecutorAdapter freshAdapter = new AmbireExecutorAdapter(address(account));
+        assertEq(freshAdapter.controller(), address(0), "fresh adapter starts unbound");
+        vm.expectRevert(AmbireExecutorAdapter.ZeroAddress.selector);
+        freshAdapter.setController(address(0));
+        freshAdapter.setController(address(controller));
+        assertEq(freshAdapter.controller(), address(controller), "fresh adapter bound once");
     }
 
     /// @notice Locks the on-chain recoveryHash encoding to the canonical SDK tuple. Here

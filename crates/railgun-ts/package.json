@@ -51,8 +51,8 @@
     "prool": "^0.2.4",
     "typescript": "^5.9.2",
     "viem": "^2.51.3",
-    "vite": "^8.0.2",
+    "vite": "^7.3.5",
     "vite-plugin-wasm": "^3.6.0",
-    "vitest": "^4.1.1"
+    "vitest": "^3.2.6"
   }
 }

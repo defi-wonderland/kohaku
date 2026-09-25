@@ -1,0 +1,8 @@
+out/
+cache/
+broadcast/
+node_modules/
+foundry.lock
+.DS_Store
+# forge-std is provisioned via `forge install` (see makefile), not committed
+lib/

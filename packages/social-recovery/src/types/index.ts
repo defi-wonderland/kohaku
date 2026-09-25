@@ -24,3 +24,4 @@ export type { RemovedKeyInputs } from './removed-key';
 export type { SetupClientRecoveryAction } from './setup-client';
 export type * from './method-zkpassport';
 export type { PasskeyConfig, PasskeyProof } from './method-passkey';
+export type * from './method-aadhaar';

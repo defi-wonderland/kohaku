@@ -12,3 +12,4 @@ export type {
   WindowFacts,
 } from './validation';
 export type { GatheringMembers, PlaceStanding } from './gathering';
+export type * from './method-passkey';

@@ -103,20 +103,29 @@ const WELL_KNOWN_SYMBOLS = new Set([
   'replace', 'search', 'species', 'split', 'toPrimitive', 'toStringTag', 'unscopables',
 ]);
 
-/** Whether the property is declared under a key written `[Symbol.<well-known>]`. */
-const isWellKnownSymbolKey = (property: ts.Symbol): boolean =>
+/** The property of the global `Symbol` constructor a well-known name resolves to, if any. */
+const globalWellKnownSymbol = (checker: ts.TypeChecker, name: string): ts.Symbol | undefined => {
+  const constructor = checker.resolveName('Symbol', undefined, ts.SymbolFlags.Value, false);
+
+  return constructor === undefined || !WELL_KNOWN_SYMBOLS.has(name)
+    ? undefined
+    : checker.getPropertyOfType(checker.getTypeOfSymbol(constructor), name);
+};
+
+/** Whether every declaration of the property is keyed on a well-known symbol of the global `Symbol`, by identity. */
+const isWellKnownSymbolKey = (checker: ts.TypeChecker, property: ts.Symbol): boolean =>
   (property.declarations ?? []).length > 0 &&
   (property.declarations ?? []).every((declaration) => {
     const key = ts.getNameOfDeclaration(declaration);
 
-    return (
-      key !== undefined &&
-      ts.isComputedPropertyName(key) &&
-      ts.isPropertyAccessExpression(key.expression) &&
-      ts.isIdentifier(key.expression.expression) &&
-      key.expression.expression.text === 'Symbol' &&
-      WELL_KNOWN_SYMBOLS.has(key.expression.name.text)
-    );
+    if (key === undefined || !ts.isComputedPropertyName(key) || !ts.isPropertyAccessExpression(key.expression)) {
+      return false;
+    }
+
+    const resolved = checker.getSymbolAtLocation(key.expression.name);
+    const wellKnown = globalWellKnownSymbol(checker, key.expression.name.text);
+
+    return resolved !== undefined && wellKnown !== undefined && resolved === wellKnown;
   });
 
 /** The paths under a type that reach a symbol-keyed property, the key a brand hides behind. */
@@ -127,7 +136,7 @@ function brandPaths(checker: ts.TypeChecker, type: ts.Type, name: string): strin
     checker,
     type,
     (_type, path, via) => {
-      if (via !== undefined && via.getName().startsWith('__@') && !isWellKnownSymbolKey(via)) paths.push(path);
+      if (via !== undefined && via.getName().startsWith('__@') && !isWellKnownSymbolKey(checker, via)) paths.push(path);
     },
     name,
   );
@@ -163,6 +172,16 @@ describe('the brand detector', () => {
 
   it('still flags a brand whose own symbol is named like a well-known one', () => {
     expect(judge('Disguised')).toHaveLength(1);
+  });
+
+  it('flags a brand keyed through a local binding that shadows Symbol', () => {
+    const shadowed = fixtureProgram(`
+      declare const Symbol: { readonly iterator: unique symbol };
+      export type Shadowed = { readonly [Symbol.iterator]: 'Shadowed' };
+    `);
+    const type = aliasTypes(shadowed.checker, shadowed.sourceFile).get('Shadowed') as ts.Type;
+
+    expect(brandPaths(shadowed.checker, type, 'Shadowed')).toHaveLength(1);
   });
 });
 

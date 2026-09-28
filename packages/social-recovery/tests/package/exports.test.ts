@@ -82,7 +82,7 @@ describe('package.json', () => {
 
     expect(scripts['build']).toMatch(/\btsup\b/);
     expect(scripts['dev']).toMatch(/\btsup\b.*--watch/);
-    expect(scripts['test']).toBe('vitest run');
+    expect(scripts['test']).toBe('pnpm build && vitest run');
     expect(scripts['lint']).toBe('eslint .');
     expect(scripts['lint:fix']).toBe('eslint . --fix');
   });

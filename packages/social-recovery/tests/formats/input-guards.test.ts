@@ -56,16 +56,30 @@ describe('address spelling', () => {
     ['all lowercase', LOWER],
     ['all uppercase', UPPER],
     ['EIP-55 mixed case', CHECKSUMMED],
-  ])('returns typed data with the lowercase spelling of an %s address, which hashTypedData accepts', (_label, address) => {
+  ])('returns typed data with the checksummed spelling of an %s address, which hashTypedData accepts', (_label, address) => {
     const typed = approvalTypedData(withEveryAddress(address), 3);
     const cancel = cancellationTypedData(withEveryAddress(address), 3);
 
-    expect(typed.domain.verifyingContract).toBe(LOWER);
-    expect(typed.message).toMatchObject({ account: LOWER, action: LOWER, order: { token: LOWER, payee: LOWER } });
-    expect(cancel.domain.verifyingContract).toBe(LOWER);
-    expect(cancel.message).toMatchObject({ account: LOWER, action: LOWER });
+    expect(typed.domain.verifyingContract).toBe(CHECKSUMMED);
+    expect(typed.message.account).toBe(CHECKSUMMED);
+    expect(typed.message.action).toBe(CHECKSUMMED);
+    expect(typed.message.order.token).toBe(CHECKSUMMED);
+    expect(typed.message.order.payee).toBe(CHECKSUMMED);
+    expect(cancel.domain.verifyingContract).toBe(CHECKSUMMED);
+    expect(cancel.message.account).toBe(CHECKSUMMED);
+    expect(cancel.message.action).toBe(CHECKSUMMED);
     expect(hashTypedData(typed as Parameters<typeof hashTypedData>[0])).toBe(approvalDigest(withEveryAddress(address), 3));
     expect(hashTypedData(cancel as Parameters<typeof hashTypedData>[0])).toBe(cancellationDigest(withEveryAddress(address), 3));
+  });
+
+  it('returns a checksummed input byte-identical', () => {
+    const typed = approvalTypedData(withEveryAddress(CHECKSUMMED), 0);
+
+    expect([typed.domain.verifyingContract, typed.message.account, typed.message.order.payee]).toStrictEqual([
+      '0x8ba1f109551bD432803012645Ac136ddd64DBA72',
+      '0x8ba1f109551bD432803012645Ac136ddd64DBA72',
+      '0x8ba1f109551bD432803012645Ac136ddd64DBA72',
+    ]);
   });
 
   it.each([
@@ -133,6 +147,20 @@ describe('missing objects', () => {
       expect(build).toThrow(TypeError);
       expect(build).toThrow(new TypeError('members must be an object'));
       expect(build).not.toThrow(ENGINE_REFUSAL);
+    }
+  });
+  it.each([
+    ['token', 'order.token'],
+    ['payee', 'order.payee'],
+  ])('the approval builders refuse an order without its %s by name', (member, name) => {
+    const order: Record<string, unknown> = { ...baseMembers().order };
+
+    delete order[member];
+
+    const members = { ...baseMembers(), order } as unknown as ApprovalMembers;
+
+    for (const build of [() => approvalTypedData(members, 0), () => approvalDigest(members, 0)]) {
+      expect(build).toThrow(new TypeError(`${name} must be a 20-byte address`));
     }
   });
 });

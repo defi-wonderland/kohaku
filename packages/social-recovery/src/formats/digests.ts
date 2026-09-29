@@ -24,7 +24,7 @@ function copyTypes(types: TypedData['types']): TypedData['types'] {
   );
 }
 
-/** The EIP-712 domain both digests are signed under, its manager address lower-cased. */
+/** The EIP-712 domain both digests are signed under, its manager address checksummed. */
 function domainOf(members: CancellationMembers): TypedDataDomain {
   assertObject(members, 'members');
   assertUintNumber(members.chainId, FORMATS_CHAIN_ID_BITS, 'chainId');
@@ -34,7 +34,7 @@ function domainOf(members: CancellationMembers): TypedDataDomain {
   return { name: FORMATS_DIGEST_DOMAIN_NAME, version: DIGEST_VERSION, chainId: members.chainId, verifyingContract: manager };
 }
 
-/** The members both messages share, each checked against its width, addresses lower-cased. */
+/** The members both messages share, each checked against its width, addresses checksummed. */
 function cancellationMessageOf(members: CancellationMembers, place: number): CancellationMessage {
   const account = normalizeAddress(members.account, 'account');
   const action = normalizeAddress(members.action, 'action');

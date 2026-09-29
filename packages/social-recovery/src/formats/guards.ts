@@ -1,4 +1,4 @@
-import { checksumAddress } from 'viem';
+import { checksumAddress, getAddress } from 'viem';
 import { FORMATS_HEX_ADDRESS_PATTERN, FORMATS_HEX_BYTES32_PATTERN, FORMATS_HEX_BYTES_PATTERN, FORMATS_SAFE_INTEGER_BITS } from '../constants';
 import type { Address, Hex } from '../interfaces';
 
@@ -34,11 +34,11 @@ export function assertAddress(value: unknown, name: string): asserts value is Ad
   }
 }
 
-/** Refuses what `assertAddress` refuses and returns the accepted address lower-cased, the one spelling every encoder takes. */
+/** Refuses what `assertAddress` refuses and returns the accepted address in its EIP-55 checksummed spelling. */
 export function normalizeAddress(value: unknown, name: string): Address {
   assertAddress(value, name);
 
-  return value.toLowerCase() as Address;
+  return getAddress(value);
 }
 
 /** Refuses null, undefined and any other non-object before a member of it is read. */

@@ -1,6 +1,6 @@
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { credentialHash, setupBodyHash, setupCommitment } from '../../src/index';
+import { credentialHash, setupBodyHash, setupCommitment, type Hex } from '../../src/index';
 import {
   A_ACCOUNT,
   A_METHOD,
@@ -13,7 +13,6 @@ import {
   UINT64_MAX,
   word,
   ZERO_ADDRESS,
-  type Hex,
 } from './support';
 
 const SALT_AA = repeat('aa', 32);

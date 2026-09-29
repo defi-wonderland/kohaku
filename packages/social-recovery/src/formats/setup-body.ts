@@ -1,11 +1,12 @@
 import { decodeAbiParameters, encodeAbiParameters } from 'viem';
 import { FORMATS_SETUP_BODY_ABI, FORMATS_THRESHOLD_BITS, FORMATS_WAIT_BITS } from '../constants';
 import type { Hex } from '../interfaces';
-import { assertBool, assertBytes, assertBytes32, assertUintNumber } from './guards';
+import { assertBool, assertBytes, assertBytes32, assertObject, assertUintNumber } from './guards';
 import type { BodyClause, SetupBody } from '../types';
 
-/** Refuses a body member outside its width. */
+/** Refuses a missing body and a body member outside its width. */
 function assertSetupBody(body: SetupBody): void {
+  assertObject(body, 'body');
   assertUintNumber(body.wait, FORMATS_WAIT_BITS, 'wait');
   assertBool(body.ignoresPause, 'ignoresPause');
 

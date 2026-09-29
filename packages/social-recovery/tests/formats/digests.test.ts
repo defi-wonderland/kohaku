@@ -20,10 +20,9 @@ import {
   UINT48_MAX,
   UINT64_MAX,
   ZERO_ADDRESS,
-  type Members,
 } from './support';
 
-const members = (overrides: Partial<Members> = {}): ApprovalMembers => ({ ...baseMembers(), ...overrides });
+const members = (overrides: Partial<ApprovalMembers> = {}): ApprovalMembers => ({ ...baseMembers(), ...overrides });
 
 describe('the EIP-712 constants, derived by hand', () => {
   it('type hashes and the domain separator of the blessed row', () => {
@@ -53,7 +52,7 @@ describe('approvalDigest and cancellationDigest', () => {
     ['largest place a number carries', {}, Number.MAX_SAFE_INTEGER],
     ['a long payload', { payload: repeat('c3', 97) }, 2],
     ['another chain', { chainId: 11_155_111 }, 5],
-  ] as [string, Partial<Members>, number][])('boundary row: %s', (_label, overrides, place) => {
+  ] as [string, Partial<ApprovalMembers>, number][])('boundary row: %s', (_label, overrides, place) => {
     const m = { ...baseMembers(), ...overrides };
 
     expect(approvalDigest(members(overrides), place)).toBe(oracleApproval(m, place));
@@ -72,7 +71,7 @@ describe('approvalDigest and cancellationDigest', () => {
     expect(new Set(digests).size).toBe(4);
   });
 
-  const CHANGES: [string, Partial<Members>, boolean][] = [
+  const CHANGES: [string, Partial<ApprovalMembers>, boolean][] = [
     ['chainId', { chainId: 2 }, true],
     ['manager', { manager: A_METHOD }, true],
     ['account', { account: A_METHOD }, true],
@@ -208,7 +207,7 @@ describe('width refusals', () => {
     ['an odd-length setupBodyHash', { setupBodyHash: `${repeat('00', 32)}0` }, TypeError],
     ['a short manager', { manager: '0x6666' }, TypeError],
     ['a short account', { account: '0x1111' }, TypeError],
-  ] as [string, Partial<Members>, ErrorConstructor][])('both builders refuse %s', (_label, overrides, error) => {
+  ] as [string, Partial<ApprovalMembers>, ErrorConstructor][])('both builders refuse %s', (_label, overrides, error) => {
     expect(() => approvalDigest(members(overrides), 0)).toThrow(error);
     expect(() => cancellationDigest(members(overrides), 0)).toThrow(error);
     expect(() => approvalTypedData(members(overrides), 0)).toThrow(error);
@@ -222,7 +221,7 @@ describe('width refusals', () => {
     ['a non-hex payload', { payload: '0xzz' }, TypeError],
     ['a short token', { order: { ...baseMembers().order, token: '0x44' } }, TypeError],
     ['a short payee', { order: { ...baseMembers().order, payee: '0x55' } }, TypeError],
-  ] as [string, Partial<Members>, ErrorConstructor][])('the approval builders refuse %s', (_label, overrides, error) => {
+  ] as [string, Partial<ApprovalMembers>, ErrorConstructor][])('the approval builders refuse %s', (_label, overrides, error) => {
     expect(() => approvalDigest(members(overrides), 0)).toThrow(error);
     expect(() => approvalTypedData(members(overrides), 0)).toThrow(error);
   });

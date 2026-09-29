@@ -9,6 +9,7 @@ import {
   encodeSetupBody,
   setupCommitment,
   type ApprovalMembers,
+  type Hex,
   type SetupBody,
 } from '../../src/index';
 import {
@@ -21,8 +22,6 @@ import {
   UINT256_MAX,
   UINT48_MAX,
   UINT64_MAX,
-  type Hex,
-  type Members,
 } from './support';
 
 const numRuns = Number(process.env['FC_NUM_RUNS'] ?? 256);
@@ -49,7 +48,7 @@ const body: fc.Arbitrary<SetupBody> = fc.record({
   clauses: fc.array(clause, { maxLength: 5 }),
 });
 
-const members: fc.Arbitrary<Members> = fc.record({
+const members: fc.Arbitrary<ApprovalMembers> = fc.record({
   chainId: safeInt(0, Number.MAX_SAFE_INTEGER),
   manager: address,
   account: address,
@@ -127,10 +126,8 @@ describe('commitments', () => {
   }, TIMEOUT);
 });
 
-const asMembers = (m: Members): ApprovalMembers => m;
-
 /** Replaces one member with a different value of the same width. */
-const MUTATORS: Record<string, (m: Members) => Members> = {
+const MUTATORS: Record<string, (m: ApprovalMembers) => ApprovalMembers> = {
   chainId: (m) => ({ ...m, chainId: m.chainId === 0 ? 1 : m.chainId - 1 }),
   manager: (m) => ({ ...m, manager: flip(m.manager) }),
   account: (m) => ({ ...m, account: flip(m.account) }),
@@ -156,9 +153,9 @@ describe('digests', () => {
   it('equal the hand-assembled EIP-712 digests and are deterministic', () => {
     run(
       fc.property(members, place, (m, p) => {
-        expect(approvalDigest(asMembers(m), p)).toBe(oracleApproval(m, p, '1', fastKeccak));
-        expect(cancellationDigest(asMembers(m), p)).toBe(oracleCancellation(m, p, '1', fastKeccak));
-        expect(approvalDigest(asMembers(structuredClone(m)), p)).toBe(approvalDigest(asMembers(m), p));
+        expect(approvalDigest(m, p)).toBe(oracleApproval(m, p, '1', fastKeccak));
+        expect(cancellationDigest(m, p)).toBe(oracleCancellation(m, p, '1', fastKeccak));
+        expect(approvalDigest(structuredClone(m), p)).toBe(approvalDigest(m, p));
       }),
     );
   }, TIMEOUT);
@@ -166,7 +163,7 @@ describe('digests', () => {
   it('an approval and a cancellation over the same members differ', () => {
     run(
       fc.property(members, place, (m, p) => {
-        expect(approvalDigest(asMembers(m), p)).not.toBe(cancellationDigest(asMembers(m), p));
+        expect(approvalDigest(m, p)).not.toBe(cancellationDigest(m, p));
       }),
     );
   }, TIMEOUT);
@@ -174,16 +171,16 @@ describe('digests', () => {
   it('changing any one member, or the place, changes the digest', () => {
     run(
       fc.property(members, place, fc.constantFrom(...Object.keys(MUTATORS)), (m, p, member) => {
-        const changed = (MUTATORS[member] as (x: Members) => Members)(m);
+        const changed = (MUTATORS[member] as (x: ApprovalMembers) => ApprovalMembers)(m);
 
-        expect(approvalDigest(asMembers(changed), p)).not.toBe(approvalDigest(asMembers(m), p));
-        expect(approvalDigest(asMembers(m), p === 0 ? 1 : p - 1)).not.toBe(approvalDigest(asMembers(m), p));
-        expect(cancellationDigest(asMembers(m), p === 0 ? 1 : p - 1)).not.toBe(cancellationDigest(asMembers(m), p));
+        expect(approvalDigest(changed, p)).not.toBe(approvalDigest(m, p));
+        expect(approvalDigest(m, p === 0 ? 1 : p - 1)).not.toBe(approvalDigest(m, p));
+        expect(cancellationDigest(m, p === 0 ? 1 : p - 1)).not.toBe(cancellationDigest(m, p));
 
         if (APPROVAL_ONLY.has(member)) {
-          expect(cancellationDigest(asMembers(changed), p)).toBe(cancellationDigest(asMembers(m), p));
+          expect(cancellationDigest(changed, p)).toBe(cancellationDigest(m, p));
         } else {
-          expect(cancellationDigest(asMembers(changed), p)).not.toBe(cancellationDigest(asMembers(m), p));
+          expect(cancellationDigest(changed, p)).not.toBe(cancellationDigest(m, p));
         }
       }),
     );
@@ -194,12 +191,12 @@ describe('digests', () => {
 
     run(
       fc.property(members, over(64), over(256), safeInt(2 ** 48, Number.MAX_SAFE_INTEGER), fc.integer({ min: -(2 ** 31), max: -1 }), (m, big64, big256, wide, negative) => {
-        expect(() => approvalDigest(asMembers({ ...m, attemptId: big64 }), 0)).toThrow(RangeError);
-        expect(() => cancellationDigest(asMembers({ ...m, setupNonce: big64 }), 0)).toThrow(RangeError);
-        expect(() => cancellationDigest(asMembers({ ...m, validUntil: wide }), 0)).toThrow(RangeError);
-        expect(() => approvalDigest(asMembers({ ...m, order: { ...m.order, amount: big256 } }), 0)).toThrow(RangeError);
-        expect(() => approvalDigest(asMembers(m), negative)).toThrow(RangeError);
-        expect(() => cancellationDigest(asMembers(m), negative)).toThrow(RangeError);
+        expect(() => approvalDigest({ ...m, attemptId: big64 }, 0)).toThrow(RangeError);
+        expect(() => cancellationDigest({ ...m, setupNonce: big64 }, 0)).toThrow(RangeError);
+        expect(() => cancellationDigest({ ...m, validUntil: wide }, 0)).toThrow(RangeError);
+        expect(() => approvalDigest({ ...m, order: { ...m.order, amount: big256 } }, 0)).toThrow(RangeError);
+        expect(() => approvalDigest(m, negative)).toThrow(RangeError);
+        expect(() => cancellationDigest(m, negative)).toThrow(RangeError);
       }),
     );
   }, TIMEOUT);
@@ -209,7 +206,7 @@ describe('digests', () => {
       fc.property(members, (m) => {
         const max = { ...m, attemptId: UINT64_MAX, setupNonce: UINT64_MAX, validUntil: UINT48_MAX, order: { ...m.order, amount: UINT256_MAX } };
 
-        expect(approvalDigest(asMembers(max), Number.MAX_SAFE_INTEGER)).toBe(oracleApproval(max, Number.MAX_SAFE_INTEGER, '1', fastKeccak));
+        expect(approvalDigest(max, Number.MAX_SAFE_INTEGER)).toBe(oracleApproval(max, Number.MAX_SAFE_INTEGER, '1', fastKeccak));
       }),
     );
   }, TIMEOUT);

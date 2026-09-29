@@ -14,10 +14,11 @@ import {
   setupCommitment,
   type ApprovalMembers,
   type CancellationMembers,
+  type Hex,
   type SetupBody,
 } from '../../src/index';
 import { readVector } from '../kat/read-vector';
-import { keccakLocal, type Hex } from './support';
+import { keccakLocal } from './support';
 
 /** The row key, read as a string because the root lint forbids `id` as an identifier. */
 const ROW_KEY = 'id';

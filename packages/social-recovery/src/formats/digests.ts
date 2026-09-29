@@ -15,7 +15,7 @@ import {
 } from '../constants';
 import type { ApprovalMessage, CancellationMessage, Hex, TypedData, TypedDataDomain } from '../interfaces';
 import type { ApprovalMembers, ApprovalTypedData, CancellationMembers, CancellationTypedData } from '../types';
-import { assertAddress, assertBytes, assertBytes32, assertUintBigint, assertUintNumber } from './guards';
+import { assertBytes, assertBytes32, assertObject, assertUintBigint, assertUintNumber, normalizeAddress } from './guards';
 
 /** A fresh copy of a types table, so a caller editing one typed data object reaches no other. */
 function copyTypes(types: TypedData['types']): TypedData['types'] {
@@ -24,18 +24,21 @@ function copyTypes(types: TypedData['types']): TypedData['types'] {
   );
 }
 
-/** The EIP-712 domain both digests are signed under. */
+/** The EIP-712 domain both digests are signed under, its manager address lower-cased. */
 function domainOf(members: CancellationMembers): TypedDataDomain {
+  assertObject(members, 'members');
   assertUintNumber(members.chainId, FORMATS_CHAIN_ID_BITS, 'chainId');
-  assertAddress(members.manager, 'manager');
 
-  return { name: FORMATS_DIGEST_DOMAIN_NAME, version: DIGEST_VERSION, chainId: members.chainId, verifyingContract: members.manager };
+  const manager = normalizeAddress(members.manager, 'manager');
+
+  return { name: FORMATS_DIGEST_DOMAIN_NAME, version: DIGEST_VERSION, chainId: members.chainId, verifyingContract: manager };
 }
 
-/** The members both messages share, each checked against its width. */
+/** The members both messages share, each checked against its width, addresses lower-cased. */
 function cancellationMessageOf(members: CancellationMembers, place: number): CancellationMessage {
-  assertAddress(members.account, 'account');
-  assertAddress(members.action, 'action');
+  const account = normalizeAddress(members.account, 'account');
+  const action = normalizeAddress(members.action, 'action');
+
   assertUintBigint(members.attemptId, FORMATS_ATTEMPT_ID_BITS, 'attemptId');
   assertUintBigint(members.setupNonce, FORMATS_SETUP_NONCE_BITS, 'setupNonce');
   assertBytes32(members.setupBodyHash, 'setupBodyHash');
@@ -43,8 +46,8 @@ function cancellationMessageOf(members: CancellationMembers, place: number): Can
   assertUintNumber(place, FORMATS_PLACE_BITS, 'place');
 
   return {
-    account: members.account,
-    action: members.action,
+    account,
+    action,
     attemptId: members.attemptId,
     setupNonce: members.setupNonce,
     setupBodyHash: members.setupBodyHash,
@@ -53,42 +56,51 @@ function cancellationMessageOf(members: CancellationMembers, place: number): Can
   };
 }
 
-/** The `Approval` typed data for one place, as a wallet's signing call takes it; throws on a member outside its width. */
-export function approvalTypedData(members: ApprovalMembers, place: number): ApprovalTypedData {
+/** The checked domain and `Approval` message for one place, shared by the typed data and the digest. */
+function approvalParts(members: ApprovalMembers, place: number): { domain: TypedDataDomain; message: ApprovalMessage } {
   const domain = domainOf(members);
   const shared = cancellationMessageOf(members, place);
 
   assertBytes(members.payload, 'payload');
-  assertAddress(members.order.token, 'order.token');
-  assertUintBigint(members.order.amount, FORMATS_AMOUNT_BITS, 'order.amount');
-  assertAddress(members.order.payee, 'order.payee');
+  assertObject(members.order, 'order');
 
-  const message: ApprovalMessage = {
-    account: shared.account,
-    action: shared.action,
-    attemptId: shared.attemptId,
-    setupNonce: shared.setupNonce,
-    setupBodyHash: shared.setupBodyHash,
-    payload: members.payload,
-    order: { token: members.order.token, amount: members.order.amount, payee: members.order.payee },
-    validUntil: shared.validUntil,
-    place: shared.place,
-  };
+  const token = normalizeAddress(members.order.token, 'order.token');
+
+  assertUintBigint(members.order.amount, FORMATS_AMOUNT_BITS, 'order.amount');
+
+  const order = { token, amount: members.order.amount, payee: normalizeAddress(members.order.payee, 'order.payee') };
+
+  return { domain, message: { ...shared, payload: members.payload, order } };
+}
+
+/** The checked domain and `Cancellation` message for one place, shared by the typed data and the digest. */
+function cancellationParts(members: CancellationMembers, place: number): { domain: TypedDataDomain; message: CancellationMessage } {
+  return { domain: domainOf(members), message: cancellationMessageOf(members, place) };
+}
+
+/**
+ * The `Approval` typed data for one place, as a wallet's signing call takes it; throws on a member outside its width.
+ * The types omit `EIP712Domain`: a signing library supplies it from the domain, and a raw `eth_signTypedData_v4` caller adds it from the domain's four fields.
+ */
+export function approvalTypedData(members: ApprovalMembers, place: number): ApprovalTypedData {
+  const { domain, message } = approvalParts(members, place);
 
   return { domain, types: copyTypes(FORMATS_APPROVAL_TYPED_DATA_TYPES), primaryType: FORMATS_APPROVAL_PRIMARY_TYPE, message };
 }
 
-/** The `Cancellation` typed data for one place; throws on a member outside its width. */
+/**
+ * The `Cancellation` typed data for one place; throws on a member outside its width.
+ * The types omit `EIP712Domain`: a signing library supplies it from the domain, and a raw `eth_signTypedData_v4` caller adds it from the domain's four fields.
+ */
 export function cancellationTypedData(members: CancellationMembers, place: number): CancellationTypedData {
-  const domain = domainOf(members);
-  const message = cancellationMessageOf(members, place);
+  const { domain, message } = cancellationParts(members, place);
 
   return { domain, types: copyTypes(FORMATS_CANCELLATION_TYPED_DATA_TYPES), primaryType: FORMATS_CANCELLATION_PRIMARY_TYPE, message };
 }
 
 /** The EIP-712 digest of the `Approval` message for one place. */
 export function approvalDigest(members: ApprovalMembers, place: number): Hex {
-  const { domain, message } = approvalTypedData(members, place);
+  const { domain, message } = approvalParts(members, place);
 
   return hashTypedData({
     domain,
@@ -100,7 +112,7 @@ export function approvalDigest(members: ApprovalMembers, place: number): Hex {
 
 /** The EIP-712 digest of the `Cancellation` message for one place. */
 export function cancellationDigest(members: CancellationMembers, place: number): Hex {
-  const { domain, message } = cancellationTypedData(members, place);
+  const { domain, message } = cancellationParts(members, place);
 
   return hashTypedData({
     domain,

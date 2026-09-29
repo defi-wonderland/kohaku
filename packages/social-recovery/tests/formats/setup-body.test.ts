@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { decodeSetupBody, encodeSetupBody, setupCommitment, type SetupBody } from '../../src/index';
-import { A_ACCOUNT, AN_ACTION, join, oracleBody, repeat, UINT48_MAX, word, type Hex } from './support';
+import { decodeSetupBody, encodeSetupBody, setupCommitment, type Hex, type SetupBody } from '../../src/index';
+import { A_ACCOUNT, AN_ACTION, join, oracleBody, repeat, UINT48_MAX, word } from './support';
 
 /** Hand-rolled abi.encode of the body, word by word, independent of any ABI library. */
 const handBody = (wait: number, ignoresPause: boolean, clauses: readonly { t: number; c: readonly Hex[] }[]): Hex => {

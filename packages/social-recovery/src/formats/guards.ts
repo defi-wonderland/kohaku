@@ -1,4 +1,4 @@
-import { isAddress } from 'viem';
+import { checksumAddress } from 'viem';
 import { FORMATS_HEX_ADDRESS_PATTERN, FORMATS_HEX_BYTES32_PATTERN, FORMATS_HEX_BYTES_PATTERN, FORMATS_SAFE_INTEGER_BITS } from '../constants';
 import type { Address, Hex } from '../interfaces';
 
@@ -16,10 +16,35 @@ export function assertBytes32(value: unknown, name: string): asserts value is He
   }
 }
 
+/** Whether the hex digits mix lower- and upper-case letters, the only spelling that claims an EIP-55 checksum. */
+function hasMixedCase(value: string): boolean {
+  const digits = value.slice(2);
+
+  return digits !== digits.toLowerCase() && digits !== digits.toUpperCase();
+}
+
 /** Refuses anything but 20 bytes of 0x-prefixed hex, and a mixed-case address whose EIP-55 checksum fails. */
 export function assertAddress(value: unknown, name: string): asserts value is Address {
-  if (typeof value !== 'string' || !FORMATS_HEX_ADDRESS_PATTERN.test(value) || !isAddress(value)) {
+  if (
+    typeof value !== 'string' ||
+    !FORMATS_HEX_ADDRESS_PATTERN.test(value) ||
+    (hasMixedCase(value) && checksumAddress(value as Address) !== value)
+  ) {
     throw new TypeError(`${name} must be a 20-byte address`);
+  }
+}
+
+/** Refuses what `assertAddress` refuses and returns the accepted address lower-cased, the one spelling every encoder takes. */
+export function normalizeAddress(value: unknown, name: string): Address {
+  assertAddress(value, name);
+
+  return value.toLowerCase() as Address;
+}
+
+/** Refuses null, undefined and any other non-object before a member of it is read. */
+export function assertObject(value: unknown, name: string): asserts value is object {
+  if (typeof value !== 'object' || value === null) {
+    throw new TypeError(`${name} must be an object`);
   }
 }
 

@@ -5,7 +5,7 @@
 
 Social recovery SDK for the recovery kit's contracts. It holds no signer and sends no transaction: every write comes back as a prepared call the integrator signs and sends, and every read goes through a provider the integrator supplies.
 
-This release declares the SDK's interfaces only. The value records they take and return are placeholders until a later release replaces them, and no implementation ships yet.
+This release ships the SDK's interfaces and the byte formats the kit's contracts check: the credential hash, the setup body encoder and decoder, the setup commitment, and the approval and cancellation typed data with their digests. The clients, the orchestrator and the recovery methods are declared as interfaces, with the value records they take and return; their implementations ship in later releases.
 
 ## Installation
 
@@ -17,7 +17,7 @@ pnpm add @kohaku-eth/social-recovery
 
 | entry | holds |
 | --- | --- |
-| `@kohaku-eth/social-recovery` | the core: the interfaces, and later the clients, the orchestrator, the builder and the wallet and passkey methods |
+| `@kohaku-eth/social-recovery` | the core: the interfaces, the formats and their constants, and later the clients, the orchestrator, the builder and the wallet and passkey methods |
 | `@kohaku-eth/social-recovery/recovery-methods` | the zkPassport and Aadhaar methods, which need the optional peer dependencies `@zkpassport/sdk` and `@anon-aadhaar/core`, beside the orchestrator |
 
 ## Interfaces

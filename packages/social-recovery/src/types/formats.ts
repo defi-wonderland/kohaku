@@ -1,5 +1,5 @@
 import type { FORMATS_APPROVAL_PRIMARY_TYPE, FORMATS_CANCELLATION_PRIMARY_TYPE } from '../constants';
-import type { Address, Hex, PaymentOrder, TypedData } from '../interfaces';
+import type { Address, Hex, PaymentOrder, ProofPlace, TypedData } from '../interfaces';
 
 /** One clause as the body bytes carry it, its credentials as commitments rather than by method and config. */
 export type BodyClause = {
@@ -37,3 +37,18 @@ export type ApprovalTypedData = Extract<TypedData, { readonly primaryType: typeo
 
 /** The `TypedData` record narrowed to the `Cancellation` primary type. */
 export type CancellationTypedData = Extract<TypedData, { readonly primaryType: typeof FORMATS_CANCELLATION_PRIMARY_TYPE }>;
+
+/** One privilege write of the account's creation code: the storage slot and the 32-byte value stored there. */
+export type CreationEntry = {
+  readonly slot: Hex;
+  readonly value: Hex;
+};
+
+/** The account a creation produces and the privilege writes its creation code makes, in code order. */
+export type CreationPrivileges = {
+  readonly account: Address;
+  readonly entries: readonly CreationEntry[];
+};
+
+/** A proof place as the ABI carries it, its place a `uint256`. */
+export type AbiProofPlace = Omit<ProofPlace, 'place'> & { readonly place: bigint };

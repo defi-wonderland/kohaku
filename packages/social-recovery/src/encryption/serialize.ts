@@ -1,54 +1,53 @@
 import {
-  BACKUP_ADDRESS_SIZE as ADDRESS_SIZE,
   BACKUP_CLAUSE_HEADER_SIZE as CLAUSE_HEADER_SIZE,
   BACKUP_COUNT_SIZE as COUNT_SIZE,
   BACKUP_CREDENTIAL_FIXED_SIZE as CREDENTIAL_FIXED_SIZE,
   BACKUP_FLAG_SIZE as FLAG_SIZE,
   BACKUP_HEADER_SIZE as HEADER_SIZE,
   BACKUP_LENGTH_SIZE as LENGTH_SIZE,
-  BACKUP_MAX_THRESHOLD as MAX_THRESHOLD,
-  BACKUP_MAX_UINT16 as MAX_UINT16,
-  BACKUP_MAX_WAIT as MAX_WAIT,
   BACKUP_SALT_ABSENT as SALT_ABSENT,
   BACKUP_SALT_PRESENT as SALT_PRESENT,
   BACKUP_SALT_SIZE as SALT_SIZE,
   BACKUP_THRESHOLD_SIZE as THRESHOLD_SIZE,
+  BACKUP_UINT16_BITS as UINT16_BITS,
   BACKUP_WAIT_SIZE as WAIT_SIZE,
+  FORMATS_THRESHOLD_BITS,
+  FORMATS_WAIT_BITS,
 } from '../constants';
+import { assertBool, assertBytes32, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import type { Clause, Configuration, Credential, Hex } from '../interfaces';
-import type { ClauseBytes, CredentialBytes } from '../types';
-import { bytesToHex, fixedHexToBytes, hexToBytes, writeUint } from './hex';
+import type { ClauseBytes, CredentialBytes } from '../types/encryption';
+import { bytesToHex, hexToBytes, writeUint } from './hex';
 
-function checkInteger(value: unknown, max: number, what: string): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > max) {
-    throw new RangeError(`${what} must be an integer from 0 to ${max}`);
-  }
-
-  return value;
-}
-
-function checkCount(items: unknown, what: string): readonly unknown[] {
+function checkElements(items: unknown, what: string): readonly object[] {
   if (!Array.isArray(items)) throw new TypeError(`${what} must be an array`);
 
-  checkInteger(items.length, MAX_UINT16, `${what} count`);
+  assertUintNumber(items.length, UINT16_BITS, `${what} count`);
 
-  return items;
+  for (let index = 0; index < items.length; index += 1) assertObject(items[index], `${what}[${index}]`);
+
+  return items as readonly object[];
 }
 
 function credentialBytes(credential: Credential, where: string): CredentialBytes {
-  const method = fixedHexToBytes(credential.method, ADDRESS_SIZE, `${where}.method`);
+  const method = hexToBytes(normalizeAddress(credential.method, `${where}.method`), `${where}.method`);
   const config = hexToBytes(credential.config, `${where}.config`);
 
-  checkInteger(config.length, MAX_UINT16, `${where}.config length`);
+  assertUintNumber(config.length, UINT16_BITS, `${where}.config length`);
 
   if (credential.salt === undefined) return { method, config };
 
-  return { method, config, salt: fixedHexToBytes(credential.salt, SALT_SIZE, `${where}.salt`) };
+  assertBytes32(credential.salt, `${where}.salt`);
+
+  return { method, config, salt: hexToBytes(credential.salt, `${where}.salt`) };
 }
 
 function clauseBytes(clause: Clause, where: string): ClauseBytes {
-  const threshold = checkInteger(clause.threshold, MAX_THRESHOLD, `${where}.threshold`);
-  const credentials = checkCount(clause.credentials, `${where}.credentials`) as readonly Credential[];
+  const { threshold } = clause;
+
+  assertUintNumber(threshold, FORMATS_THRESHOLD_BITS, `${where}.threshold`);
+
+  const credentials = checkElements(clause.credentials, `${where}.credentials`) as readonly Credential[];
 
   return {
     threshold,
@@ -61,13 +60,14 @@ const credentialSize = (credential: CredentialBytes): number =>
 
 /** Writes the configuration's big-endian bytes; throws a TypeError or RangeError on a field outside its width. */
 export function serializeConfigurationBytes(configuration: Configuration): Uint8Array<ArrayBuffer> {
-  const wait = checkInteger(configuration.wait, MAX_WAIT, 'configuration.wait');
+  assertObject(configuration, 'configuration');
 
-  if (typeof configuration.ignoresPause !== 'boolean') {
-    throw new TypeError('configuration.ignoresPause must be a boolean');
-  }
+  const { wait, ignoresPause } = configuration;
 
-  const clauses = (checkCount(configuration.clauses, 'configuration.clauses') as readonly Clause[]).map(
+  assertUintNumber(wait, FORMATS_WAIT_BITS, 'configuration.wait');
+  assertBool(ignoresPause, 'configuration.ignoresPause');
+
+  const clauses = (checkElements(configuration.clauses, 'configuration.clauses') as readonly Clause[]).map(
     (clause, index) => clauseBytes(clause, `configuration.clauses[${index}]`),
   );
   const size = clauses.reduce(
@@ -86,7 +86,7 @@ export function serializeConfigurationBytes(configuration: Configuration): Uint8
   };
 
   putUint(WAIT_SIZE, wait);
-  putUint(FLAG_SIZE, configuration.ignoresPause ? 1 : 0);
+  putUint(FLAG_SIZE, ignoresPause ? 1 : 0);
   putUint(COUNT_SIZE, clauses.length);
 
   for (const clause of clauses) {

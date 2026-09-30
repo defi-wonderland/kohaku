@@ -1,3 +1,4 @@
+import { getAddress } from 'viem';
 import {
   BACKUP_ADDRESS_SIZE as ADDRESS_SIZE,
   BACKUP_COUNT_SIZE as COUNT_SIZE,
@@ -10,7 +11,7 @@ import {
   BACKUP_WAIT_SIZE as WAIT_SIZE,
 } from '../constants';
 import type { Clause, Configuration, Credential, Hex } from '../interfaces';
-import type { ParsedConfiguration } from '../types';
+import type { ParsedConfiguration } from '../types/encryption';
 import { bytesToHex, hexToBytes, readUint } from './hex';
 
 /** Parses a configuration from the front of `bytes`; throws a RangeError on bytes that do not parse. */
@@ -40,7 +41,7 @@ export function parseConfigurationBytes(bytes: Uint8Array): ParsedConfiguration 
     const credentials: Credential[] = [];
 
     for (let credentialIndex = 0; credentialIndex < credentialCount; credentialIndex += 1) {
-      const method = bytesToHex(take(ADDRESS_SIZE));
+      const method = getAddress(bytesToHex(take(ADDRESS_SIZE)));
       const config = bytesToHex(take(uint(LENGTH_SIZE)));
       const saltFlag = uint(FLAG_SIZE);
 
@@ -61,7 +62,7 @@ export function parseConfigurationBytes(bytes: Uint8Array): ParsedConfiguration 
 
 /**
  * Inverts `serializeConfiguration`, throwing a RangeError on trailing bytes.
- * Hex comes back lowercase, with no label and only the salts the holder supplied.
+ * Methods come back EIP-55 checksummed, configs and salts lowercase, with no label and only the salts supplied.
  */
 export function deserializeConfiguration(serialized: Hex): Configuration {
   const bytes = hexToBytes(serialized, 'serialized configuration');

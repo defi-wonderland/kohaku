@@ -5,7 +5,7 @@ import {
 } from '../constants';
 import type { BackupAuthenticated, Configuration, Hex } from '../interfaces';
 import { encodeAssociatedData } from './associated-data';
-import { decrypt, deriveKey, encrypt } from './cipher';
+import { assertPassword, decrypt, deriveKey, encrypt } from './cipher';
 import { parseConfigurationBytes } from './deserialize';
 import { BackupTooWideError, BackupUnopenedError } from './errors';
 import { bytesToHex, fixedHexToBytes, hexToBytes } from './hex';
@@ -17,7 +17,7 @@ import { serializeConfigurationBytes } from './serialize';
  * The caller draws a fresh random `nonce` for every seal: the key is fixed by the password alone, so a nonce
  * repeated in any two seals under one password, whatever the account or setup, breaks AES-GCM.
  * Throws `BackupTooWideError` when the serialization exceeds the padding, and a TypeError or RangeError on a
- * malformed argument.
+ * malformed argument, including a password with a lone surrogate.
  */
 export async function sealBackup(
   configuration: Configuration,
@@ -26,7 +26,7 @@ export async function sealBackup(
   paddingSize: number,
   authenticated: BackupAuthenticated,
 ): Promise<Hex> {
-  if (typeof password !== 'string') throw new TypeError('password must be a string');
+  assertPassword(password);
 
   if (paddingSize !== BACKUP_PADDING_SIZE) {
     throw new RangeError(`paddingSize must be the shipped BACKUP_PADDING_SIZE of ${BACKUP_PADDING_SIZE} bytes`);
@@ -61,7 +61,7 @@ const zeroFrom = (bytes: Uint8Array, start: number): boolean => bytes.subarray(s
  * a malformed `password` or `authenticated`, or a payload that is not hex, throws a TypeError or RangeError.
  */
 export async function openBackup(payload: Hex, password: string, authenticated: BackupAuthenticated): Promise<Configuration> {
-  if (typeof password !== 'string') throw new TypeError('password must be a string');
+  assertPassword(password);
 
   const additionalData = encodeAssociatedData(authenticated);
   const bytes = hexToBytes(payload, 'payload');

@@ -1,21 +1,12 @@
-import { BACKUP_HEX_BODY } from '../constants';
+import { bytesToHex as viemBytesToHex, hexToBytes as viemHexToBytes } from 'viem';
+import { assertBytes } from '../formats/guards';
 import type { Hex } from '../interfaces';
-
-/** Whether `value` is 0x-prefixed hex of whole bytes, either case. */
-export const isByteHex = (value: unknown): value is Hex =>
-  typeof value === 'string' && value.startsWith('0x') && value.length % 2 === 0 && BACKUP_HEX_BODY.test(value.slice(2));
 
 /** Decodes 0x-prefixed hex; throws a TypeError naming `what` when it is not hex of whole bytes. */
 export function hexToBytes(value: unknown, what: string): Uint8Array<ArrayBuffer> {
-  if (!isByteHex(value)) throw new TypeError(`${what} must be 0x-prefixed hex of whole bytes`);
+  assertBytes(value, what);
 
-  const bytes = new Uint8Array((value.length - 2) / 2);
-
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = Number.parseInt(value.slice(2 + index * 2, 4 + index * 2), 16);
-  }
-
-  return bytes;
+  return new Uint8Array(viemHexToBytes(value));
 }
 
 /** Decodes 0x-prefixed hex of exactly `size` bytes. */
@@ -28,8 +19,7 @@ export function fixedHexToBytes(value: unknown, size: number, what: string): Uin
 }
 
 /** Encodes bytes as lowercase 0x-prefixed hex. */
-export const bytesToHex = (bytes: Uint8Array): Hex =>
-  `0x${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
+export const bytesToHex = (bytes: Uint8Array): Hex => viemBytesToHex(bytes);
 
 /** Writes a non-negative bigint big-endian into `target` at `offset`, over `size` bytes. */
 export function writeUint(target: Uint8Array, offset: number, size: number, value: bigint): void {

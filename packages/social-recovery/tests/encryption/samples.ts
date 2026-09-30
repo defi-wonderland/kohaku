@@ -1,3 +1,4 @@
+import { getAddress } from 'viem';
 import type { BackupAuthenticated, Clause, Configuration, Credential, Hex } from '../../src/index';
 import { BACKUP_PAYLOAD_VERSION } from '../../src/index';
 
@@ -16,7 +17,10 @@ export const AADHAAR_CONFIG_WORD: Hex = '0x0000000000000000000000000000000000000
 export const AADHAAR_CONFIG_BLESSED: Hex =
   '0x0000000000000000000000000000000000000000000000000000000000000016000000000000000000000000000000000000000000000000000000000000004d';
 
-export const METHOD_WALLET: Hex = '0xE1E1e1E1e1e1E1e1e1E1e1E1E1e1e1E1e1E1e1E1';
+/** A correct EIP-55 spelling, so a sealed rule also carries a mixed-case method. */
+export const METHOD_WALLET: Hex = '0xE1E1E1e1E1E1e1e1E1E1E1e1e1e1E1E1E1E1e1e1';
+/** `METHOD_WALLET` with the case of its first letter flipped, a mixed-case spelling whose checksum fails. */
+export const METHOD_WALLET_BAD_CHECKSUM: Hex = '0xe1E1E1e1E1E1e1e1E1E1E1e1e1e1E1E1E1E1e1e1';
 export const METHOD_PASSKEY: Hex = '0xe2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2';
 export const METHOD_ZKPASSPORT: Hex = '0xe3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3e3';
 export const METHOD_AADHAAR: Hex = '0xe4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4e4';
@@ -89,15 +93,14 @@ export const MIXED_RULE: Configuration = {
 };
 
 /**
- * What an opened configuration is expected to be: the backup payload carries no
- * label, so opening drops it; a supplied salt is kept and none is added; hex
- * comes back lowercase.
+ * What an opened configuration is expected to be: the backup payload carries no label, so opening drops it;
+ * a supplied salt is kept and none is added; methods come back EIP-55 checksummed, configs and salts lowercase.
  */
 export function expectedOpened(configuration: Configuration): Configuration {
   const clauses: Clause[] = configuration.clauses.map((clause) => ({
     threshold: clause.threshold,
     credentials: clause.credentials.map((credential) => ({
-      method: credential.method.toLowerCase() as Hex,
+      method: getAddress(credential.method),
       config: credential.config.toLowerCase() as Hex,
       ...(credential.salt === undefined ? {} : { salt: credential.salt.toLowerCase() as Hex }),
     })),

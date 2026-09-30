@@ -178,6 +178,8 @@ describe('the brand detector', () => {
     export type Plain = { readonly kind: 'plain'; readonly value: string };
     export type Tagged = { readonly kind: 'tagged'; readonly [Symbol.toStringTag]: 'Tagged' };
     export type Bytes = { readonly method: Uint8Array };
+    declare const iterator: unique symbol;
+    export type Disguised = { readonly [iterator]: 'Disguised' };
   `);
   const types = aliasTypes(checker, sourceFile);
   const judge = (name: string): string[] => brandPaths(checker, types.get(name) as ts.Type, name);
@@ -199,6 +201,11 @@ describe('the brand detector', () => {
     expect(propertyNames(checker, method).some((key) => key.startsWith('__@'))).toBe(true);
     expect(judge('Bytes')).toEqual([]);
   });
+
+  it('still flags a brand whose own symbol is named like a well-known one', () => {
+    expect(judge('Disguised')).toHaveLength(1);
+  });
+
   it('flags a brand keyed through a local binding that shadows Symbol', () => {
     const shadowed = fixtureProgram(`
       declare const Symbol: { readonly iterator: unique symbol };

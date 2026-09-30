@@ -4,8 +4,18 @@ import {
   BACKUP_KDF_HASH,
   BACKUP_KDF_ITERATIONS,
   BACKUP_KEY_BITS,
+  BACKUP_LONE_SURROGATE_PATTERN,
   BACKUP_TAG_SIZE,
 } from '../constants';
+
+/** Refuses a non-string and a string with a lone surrogate, which would share a key with its U+FFFD spelling. */
+export function assertPassword(password: unknown): asserts password is string {
+  if (typeof password !== 'string') throw new TypeError('password must be a string');
+
+  if (BACKUP_LONE_SURROGATE_PATTERN.test(password)) {
+    throw new TypeError('password must be well-formed UTF-16, with no lone surrogate');
+  }
+}
 
 function subtle(): SubtleCrypto {
   const crypto = (globalThis as { crypto?: Crypto }).crypto;
@@ -20,8 +30,6 @@ function subtle(): SubtleCrypto {
  * so the same password gives the same key for every account and setup.
  */
 export async function deriveKey(password: string): Promise<CryptoKey> {
-  if (typeof password !== 'string') throw new TypeError('password must be a string');
-
   const api = subtle();
   const material = await api.importKey('raw', new TextEncoder().encode(password), BACKUP_KDF, false, ['deriveKey']);
 

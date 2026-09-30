@@ -1,37 +1,31 @@
-import {
-  BACKUP_ADDRESS_SIZE,
-  BACKUP_ASSOCIATED_DATA_SIZE,
-  BACKUP_MAX_SETUP_NONCE,
-  BACKUP_WORD_SIZE as WORD,
-} from '../constants';
+import { encodeAbiParameters } from 'viem';
+import { BACKUP_ASSOCIATED_DATA_ABI, BACKUP_PAYLOAD_VERSION_BITS, FORMATS_SETUP_NONCE_BITS } from '../constants';
+import { assertBytes32, assertObject, assertUintBigint, assertUintNumber, normalizeAddress } from '../formats/guards';
 import type { BackupAuthenticated } from '../interfaces';
-import { fixedHexToBytes, writeUint } from './hex';
+import { hexToBytes } from './hex';
 
 /**
  * Encodes the values as `abi.encode(address account, address action, bytes32 setupCommitment, uint64 nonce,
- * uint256 payloadVersion)`; throws a TypeError or RangeError on a value outside its width.
+ * uint256 payloadVersion)`; throws a TypeError on a malformed value and a RangeError on a number outside its width.
  */
 export function encodeAssociatedData(authenticated: BackupAuthenticated): Uint8Array<ArrayBuffer> {
-  const account = fixedHexToBytes(authenticated.account, BACKUP_ADDRESS_SIZE, 'authenticated.account');
-  const action = fixedHexToBytes(authenticated.action, BACKUP_ADDRESS_SIZE, 'authenticated.action');
-  const commitment = fixedHexToBytes(authenticated.setupCommitment, WORD, 'authenticated.setupCommitment');
-  const { nonce, payloadVersion } = authenticated;
+  assertObject(authenticated, 'authenticated');
 
-  if (typeof nonce !== 'bigint' || nonce < 0n || nonce > BACKUP_MAX_SETUP_NONCE) {
-    throw new RangeError('authenticated.nonce must be a bigint from 0 to 2^64 - 1');
-  }
+  const account = normalizeAddress(authenticated.account, 'authenticated.account');
+  const action = normalizeAddress(authenticated.action, 'authenticated.action');
+  const { setupCommitment, nonce, payloadVersion } = authenticated;
 
-  if (typeof payloadVersion !== 'number' || !Number.isSafeInteger(payloadVersion) || payloadVersion < 0) {
-    throw new RangeError('authenticated.payloadVersion must be a non-negative safe integer');
-  }
+  assertBytes32(setupCommitment, 'authenticated.setupCommitment');
+  assertUintBigint(nonce, FORMATS_SETUP_NONCE_BITS, 'authenticated.nonce');
+  assertUintNumber(payloadVersion, BACKUP_PAYLOAD_VERSION_BITS, 'authenticated.payloadVersion');
 
-  const out = new Uint8Array(BACKUP_ASSOCIATED_DATA_SIZE);
+  const encoded = encodeAbiParameters(BACKUP_ASSOCIATED_DATA_ABI, [
+    account,
+    action,
+    setupCommitment,
+    nonce,
+    BigInt(payloadVersion),
+  ]);
 
-  out.set(account, WORD - account.length);
-  out.set(action, 2 * WORD - action.length);
-  out.set(commitment, 2 * WORD);
-  writeUint(out, 3 * WORD, WORD, nonce);
-  writeUint(out, 4 * WORD, WORD, BigInt(payloadVersion));
-
-  return out;
+  return hexToBytes(encoded, 'associated data');
 }

@@ -1,4 +1,5 @@
 import fc from 'fast-check';
+import { getAddress } from 'viem';
 import { beforeAll, describe, expect, it } from 'vitest';
 import {
   BACKUP_PADDING_SIZE,
@@ -33,9 +34,12 @@ const shardParameters = (shard: number): fc.Parameters<unknown> => ({
 const bytesHex = (minLength: number, maxLength = minLength): fc.Arbitrary<Hex> =>
   fc.uint8Array({ minLength, maxLength }).map((bytes) => toHex(bytes));
 
-/** Hex in either case; the opened configuration comes back lowercase. */
+/** Hex in either case; an opened config or salt comes back lowercase. */
 const anyCaseHex = (size: number): fc.Arbitrary<Hex> =>
   fc.tuple(bytesHex(size), fc.boolean()).map(([hex, upper]) => (upper ? (`0x${hex.slice(2).toUpperCase()}` as Hex) : hex));
+
+/** An address in one of the three accepted spellings; an opened method comes back EIP-55 checksummed. */
+const addressArb: fc.Arbitrary<Hex> = fc.oneof(anyCaseHex(20), bytesHex(20).map((hex) => getAddress(hex)));
 
 /** The shipped config widths and arbitrary ones, the empty config included. */
 const configArb = fc.oneof(
@@ -45,7 +49,7 @@ const configArb = fc.oneof(
 );
 
 const credentialArb: fc.Arbitrary<Credential> = fc.record(
-  { method: anyCaseHex(20), config: configArb, salt: anyCaseHex(32), label: fc.string({ maxLength: 12 }) },
+  { method: addressArb, config: configArb, salt: anyCaseHex(32), label: fc.string({ maxLength: 12 }) },
   { requiredKeys: ['method', 'config'] },
 );
 
@@ -66,8 +70,8 @@ const underBound = fc
 const overBound = configurationArb(2, 30).filter((configuration) => referenceSize(configuration) > BACKUP_PADDING_SIZE);
 
 const authenticatedArb: fc.Arbitrary<BackupAuthenticated> = fc.record({
-  account: anyCaseHex(20),
-  action: anyCaseHex(20),
+  account: addressArb,
+  action: addressArb,
   setupCommitment: anyCaseHex(32),
   nonce: fc.bigInt({ min: 0n, max: 2n ** 64n - 1n }),
   payloadVersion: fc.integer({ min: 0, max: 2 ** 31 }),

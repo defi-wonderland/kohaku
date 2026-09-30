@@ -75,8 +75,12 @@ export function referenceSize(configuration: Configuration): number {
   );
 }
 
-export const referenceKey = (password: string, associatedData: Buffer): Buffer =>
-  pbkdf2Sync(Buffer.from(password, 'utf8'), associatedData, KDF_ITERATIONS, 32, 'sha256');
+/** PBKDF2-HMAC-SHA256 over the password's UTF-8 bytes to 32 bytes, with any salt and iteration count, for the negative cases. */
+export const pbkdf2Key = (password: string, salt: Buffer, iterations: number): Buffer =>
+  pbkdf2Sync(Buffer.from(password, 'utf8'), salt, iterations, 32, 'sha256');
+
+/** The documented key: PBKDF2 over a zero-length salt at 600,000 iterations, so it depends on the password alone. */
+export const referenceKey = (password: string): Buffer => pbkdf2Key(password, Buffer.alloc(0), KDF_ITERATIONS);
 
 /** nonce ‖ AES-256-GCM(key, nonce, AD, plaintext) ‖ tag, as documented. */
 export function referenceSealRaw(key: Buffer, nonce: Buffer, associatedData: Buffer, plaintext: Buffer): Buffer {
@@ -121,6 +125,6 @@ export function referenceSeal(
   const associatedData = referenceAssociatedData(authenticated);
 
   return toHex(
-    referenceSealRaw(referenceKey(password, associatedData), toBytes(nonce), associatedData, referencePlaintext(configuration, paddingSize)),
+    referenceSealRaw(referenceKey(password), toBytes(nonce), associatedData, referencePlaintext(configuration, paddingSize)),
   );
 }

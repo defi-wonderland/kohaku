@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   BACKUP_CREDENTIAL_COUNT,
   BACKUP_KDF_HASH,
@@ -14,9 +14,11 @@ import {
   openBackup,
   sealBackup,
   serializeConfiguration,
+  type BackupAuthenticated,
   type Hex,
 } from '../../src/index';
 import {
+  pbkdf2Key,
   referenceAssociatedData,
   referenceKey,
   referenceOpenRaw,
@@ -28,7 +30,16 @@ import {
   toBytes,
   toHex,
 } from './reference';
-import { AUTHENTICATED, byteLength, MIXED_RULE, NONCE, passkeyClausesRule, passkeyRule } from './samples';
+import {
+  AUTHENTICATED,
+  byteLength,
+  expectedOpened,
+  MIXED_RULE,
+  NONCE,
+  passkeyClausesRule,
+  passkeyRule,
+  PASSWORD,
+} from './samples';
 
 const TIMEOUT = 60_000;
 const UNICODE_PASSWORD = 'pässwörd 🔑 密码';
@@ -37,7 +48,7 @@ describe('the sealed payload against node:crypto', () => {
   it('opens under node PBKDF2-HMAC-SHA256 600k and AES-256-GCM to the documented plaintext', async () => {
     const payload = toBytes(await sealBackup(MIXED_RULE, UNICODE_PASSWORD, NONCE, BACKUP_PADDING_SIZE, AUTHENTICATED));
     const associatedData = referenceAssociatedData(AUTHENTICATED);
-    const plaintext = referenceOpenRaw(referenceKey(UNICODE_PASSWORD, associatedData), payload, associatedData);
+    const plaintext = referenceOpenRaw(referenceKey(UNICODE_PASSWORD), payload, associatedData);
 
     expect(associatedData.length).toBe(160);
     expect(payload.length).toBe(12 + BACKUP_PADDING_SIZE + 16);
@@ -59,11 +70,13 @@ describe('the sealed payload against node:crypto', () => {
   it('does not open under a key node derives with any other iteration count', async () => {
     const associatedData = referenceAssociatedData(AUTHENTICATED);
     const plaintext = referencePlaintext(MIXED_RULE, BACKUP_PADDING_SIZE);
-    const { pbkdf2Sync } = await import('node:crypto');
-    const weakKey = pbkdf2Sync(Buffer.from(UNICODE_PASSWORD, 'utf8'), associatedData, 599_999, 32, 'sha256');
+    // the same empty salt as the scheme, so only the iteration count differs
+    const weakKey = pbkdf2Key(UNICODE_PASSWORD, Buffer.alloc(0), 599_999);
     const forged = toHex(referenceSealRaw(weakKey, toBytes(NONCE), associatedData, plaintext));
+    const genuine = toHex(referenceSealRaw(referenceKey(UNICODE_PASSWORD), toBytes(NONCE), associatedData, plaintext));
 
     await expect(openBackup(forged, UNICODE_PASSWORD, AUTHENTICATED)).rejects.toBeInstanceOf(BackupUnopenedError);
+    await expect(openBackup(genuine, UNICODE_PASSWORD, AUTHENTICATED)).resolves.toEqual(expectedOpened(MIXED_RULE));
   }, TIMEOUT);
 
   it('encodes the version as a word of the associated data, so a node seal under version 2 opens only under 2', async () => {
@@ -75,12 +88,108 @@ describe('the sealed payload against node:crypto', () => {
   }, TIMEOUT);
 });
 
+/** A second setup whose five authenticated values all differ from `AUTHENTICATED`. */
+const OTHER_SETUP: BackupAuthenticated = {
+  account: '0x4444444444444444444444444444444444444444',
+  action: '0x5555555555555555555555555555555555555555',
+  setupCommitment: `0x${'c7'.repeat(32)}`,
+  nonce: 2n ** 64n - 1n,
+  payloadVersion: 2,
+};
+
+const ONE_AT_A_TIME: ReadonlyArray<readonly [string, BackupAuthenticated]> = [
+  ['account', { ...AUTHENTICATED, account: OTHER_SETUP.account }],
+  ['action', { ...AUTHENTICATED, action: OTHER_SETUP.action }],
+  ['setup commitment', { ...AUTHENTICATED, setupCommitment: OTHER_SETUP.setupCommitment }],
+  ['setup nonce', { ...AUTHENTICATED, nonce: OTHER_SETUP.nonce }],
+  ['payload version', { ...AUTHENTICATED, payloadVersion: OTHER_SETUP.payloadVersion }],
+];
+
+describe('the key is PBKDF2 over the password alone, with a zero-length salt', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('does not open under the former key, PBKDF2 with the 160-byte associated data as the salt', async () => {
+    const payload = toBytes(await sealBackup(MIXED_RULE, PASSWORD, NONCE, BACKUP_PADDING_SIZE, AUTHENTICATED));
+    const associatedData = referenceAssociatedData(AUTHENTICATED);
+    const formerKey = pbkdf2Key(PASSWORD, associatedData, 600_000);
+    const formerSeal = toHex(referenceSealRaw(formerKey, toBytes(NONCE), associatedData, referencePlaintext(MIXED_RULE, BACKUP_PADDING_SIZE)));
+
+    expect(associatedData.length).toBe(160);
+    expect(formerKey.equals(referenceKey(PASSWORD))).toBe(false);
+    expect(() => referenceOpenRaw(formerKey, payload, associatedData)).toThrow();
+    await expect(openBackup(formerSeal, PASSWORD, AUTHENTICATED)).rejects.toBeInstanceOf(BackupUnopenedError);
+  }, TIMEOUT);
+
+  it('hands crypto.subtle.deriveKey a zero-length salt and 600,000 iterations for two different authenticated sets', async () => {
+    const deriveKey = vi.spyOn(globalThis.crypto.subtle, 'deriveKey');
+
+    await sealBackup(MIXED_RULE, PASSWORD, NONCE, BACKUP_PADDING_SIZE, AUTHENTICATED);
+    await sealBackup(MIXED_RULE, PASSWORD, NONCE, BACKUP_PADDING_SIZE, OTHER_SETUP);
+
+    const params = deriveKey.mock.calls.map(([algorithm]) => algorithm as Pbkdf2Params);
+
+    expect(params).toHaveLength(2);
+
+    for (const { salt, iterations } of params) {
+      expect((salt as ArrayBuffer | ArrayBufferView).byteLength).toBe(0);
+      expect(iterations).toBe(600_000);
+    }
+  }, TIMEOUT);
+
+  it('opens payloads sealed for two different setups with one node key, each under its own associated data only', async () => {
+    const key = referenceKey(PASSWORD);
+    const plaintext = referencePlaintext(MIXED_RULE, BACKUP_PADDING_SIZE);
+    const sealFor = async (authenticated: BackupAuthenticated): Promise<Buffer> =>
+      toBytes(await sealBackup(MIXED_RULE, PASSWORD, NONCE, BACKUP_PADDING_SIZE, authenticated));
+    const [first, second] = await Promise.all([sealFor(AUTHENTICATED), sealFor(OTHER_SETUP)]);
+    const firstData = referenceAssociatedData(AUTHENTICATED);
+    const secondData = referenceAssociatedData(OTHER_SETUP);
+
+    expect(referenceOpenRaw(key, first, firstData).equals(plaintext)).toBe(true);
+    expect(referenceOpenRaw(key, second, secondData).equals(plaintext)).toBe(true);
+    expect(() => referenceOpenRaw(key, first, secondData)).toThrow();
+    expect(() => referenceOpenRaw(key, second, firstData)).toThrow();
+  }, TIMEOUT);
+
+  it('shares one keystream across setups under one password, so a nonce must never repeat under that password', async () => {
+    const other = passkeyRule(3, true);
+    const first = toBytes(await sealBackup(MIXED_RULE, PASSWORD, NONCE, BACKUP_PADDING_SIZE, AUTHENTICATED));
+    const second = toBytes(await sealBackup(other, PASSWORD, NONCE, BACKUP_PADDING_SIZE, OTHER_SETUP));
+    const body = (payload: Buffer): Buffer => payload.subarray(12, 12 + BACKUP_PADDING_SIZE);
+    const xor = (left: Buffer, right: Buffer): Buffer => Buffer.from(left.map((byte, index) => byte ^ (right[index] ?? 0)));
+
+    expect(xor(body(first), body(second)).equals(
+      xor(referencePlaintext(MIXED_RULE, BACKUP_PADDING_SIZE), referencePlaintext(other, BACKUP_PADDING_SIZE)),
+    )).toBe(true);
+  }, TIMEOUT);
+
+  it('opens a node seal through openBackup under its own five values', async () => {
+    const sealed = referenceSeal(MIXED_RULE, PASSWORD, NONCE, BACKUP_PADDING_SIZE, OTHER_SETUP);
+
+    await expect(openBackup(sealed, PASSWORD, OTHER_SETUP)).resolves.toEqual(expectedOpened(MIXED_RULE));
+  }, TIMEOUT);
+
+  it.for(ONE_AT_A_TIME)('still binds the %s: a node seal does not open when only that value differs', { timeout: TIMEOUT }, async ([, foreign]) => {
+    const sealed = referenceSeal(MIXED_RULE, PASSWORD, NONCE, BACKUP_PADDING_SIZE, AUTHENTICATED);
+
+    await expect(openBackup(sealed, PASSWORD, foreign)).rejects.toBeInstanceOf(BackupUnopenedError);
+  });
+});
+
 describe('authentic plaintexts the layout does not describe', () => {
   const sealRaw = (plaintext: Buffer): Hex => {
     const associatedData = referenceAssociatedData(AUTHENTICATED);
 
-    return toHex(referenceSealRaw(referenceKey('pw', associatedData), toBytes(NONCE), associatedData, plaintext));
+    return toHex(referenceSealRaw(referenceKey('pw'), toBytes(NONCE), associatedData, plaintext));
   };
+
+  it('opens the same node seal of the valid padded serialization, so the refusals below are not a key mismatch', async () => {
+    await expect(
+      openBackup(sealRaw(referencePlaintext(MIXED_RULE, BACKUP_PADDING_SIZE)), 'pw', AUTHENTICATED),
+    ).resolves.toEqual(expectedOpened(MIXED_RULE));
+  }, TIMEOUT);
 
   it('refuses a non-zero byte in the padding after a valid serialization', async () => {
     const plaintext = referencePlaintext(MIXED_RULE, BACKUP_PADDING_SIZE);

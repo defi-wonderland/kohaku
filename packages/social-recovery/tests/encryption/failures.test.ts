@@ -318,7 +318,7 @@ describe('an authenticated payload whose plaintext is not a configuration', () =
   /** Seals with the node:crypto reference, since only a sealer holding the key can authenticate such a plaintext. */
   const sealPlaintext = (plaintext: Buffer): Hex => {
     const associatedData = referenceAssociatedData(AUTHENTICATED);
-    const key = referenceKey(PASSWORD, associatedData);
+    const key = referenceKey(PASSWORD);
     const sealed = referenceSealRaw(key, toBytes(NONCE), associatedData, plaintext);
 
     expect(referenceOpenRaw(key, sealed, associatedData).equals(plaintext)).toBe(true);

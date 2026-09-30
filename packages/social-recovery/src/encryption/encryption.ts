@@ -14,8 +14,8 @@ import { serializeConfigurationBytes } from './serialize';
 /**
  * Seals `configuration` under `password` as the nonce, the ciphertext and the tag, binding `authenticated`.
  * `paddingSize` must be `BACKUP_PADDING_SIZE`; any other value throws a RangeError.
- * The caller draws a fresh random `nonce` for every seal: the key is fixed by the password and `authenticated`,
- * so a repeated nonce breaks AES-GCM.
+ * The caller draws a fresh random `nonce` for every seal: the key is fixed by the password alone, so a nonce
+ * repeated in any two seals under one password, whatever the account or setup, breaks AES-GCM.
  * Throws `BackupTooWideError` when the serialization exceeds the padding, and a TypeError or RangeError on a
  * malformed argument.
  */
@@ -42,7 +42,7 @@ export async function sealBackup(
 
   plaintext.set(serialized);
 
-  const key = await deriveKey(password, additionalData);
+  const key = await deriveKey(password);
   const sealed = await encrypt(key, nonceBytes, additionalData, plaintext);
   const payload = new Uint8Array(BACKUP_NONCE_SIZE + sealed.length);
 
@@ -68,7 +68,7 @@ export async function openBackup(payload: Hex, password: string, authenticated: 
 
   if (bytes.length !== SEALED_PAYLOAD_SIZE) throw new BackupUnopenedError(bytes.length);
 
-  const key = await deriveKey(password, additionalData);
+  const key = await deriveKey(password);
   let plaintext: Uint8Array;
 
   try {

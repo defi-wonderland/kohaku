@@ -35,6 +35,7 @@ import {
   ZKPASSPORT_CONFIG_BLESSED,
   ZKPASSPORT_CONFIG_WORD,
 } from './samples';
+import { referenceKey, toHex } from './reference';
 
 const TIMEOUT = 60_000;
 const PAYLOAD_SIZE = 12 + BACKUP_PADDING_SIZE + 16;
@@ -196,6 +197,7 @@ type FixtureVector = {
   readonly expected: {
     readonly serialization: Hex;
     readonly serializationSize: number;
+    readonly key?: Hex;
     readonly payload?: Hex;
     readonly payloadSize?: number;
     readonly refusal?: { readonly error: string; readonly plaintextSize: number; readonly paddingSize: number };
@@ -205,6 +207,7 @@ type FixtureVector = {
 type FixtureFile = {
   readonly format: string;
   readonly blessed: boolean;
+  readonly derivation: string;
   readonly paddingSize: number;
   readonly payloadVersion: number;
   readonly vectors: readonly FixtureVector[];
@@ -220,6 +223,8 @@ const authenticatedOf = (vector: FixtureVector): BackupAuthenticated => ({
 describe.concurrent('replays the unblessed backup-payload fixture byte for byte', () => {
   it('is marked unblessed and states the shipped numbers', ({ expect }) => {
     expect(FIXTURE.blessed).toBe(false);
+    expect(FIXTURE.derivation).toContain('PBKDF2-HMAC-SHA256(utf8(password), salt = zero-length byte string, 600000, 32)');
+    expect(FIXTURE.derivation).not.toContain('salt = AD');
     expect(FIXTURE.paddingSize).toBe(BACKUP_PADDING_SIZE);
     expect(FIXTURE.vectors.every((vector) => vector.input.paddingSize === BACKUP_PADDING_SIZE)).toBe(true);
     expect(FIXTURE.vectors.some((vector) => vector.expected.serializationSize === BACKUP_PADDING_SIZE && vector.expected.payload !== undefined)).toBe(true);
@@ -250,6 +255,7 @@ describe.concurrent('replays the unblessed backup-payload fixture byte for byte'
 
     expect(payload).toBe(vector.expected.payload);
     expect(byteLength(payload)).toBe(vector.expected.payloadSize);
-    expect(await openBackup(payload, password, authenticated)).toEqual(expectedOpened(configuration));
+    expect(await openBackup(vector.expected.payload as Hex, password, authenticated)).toEqual(expectedOpened(configuration));
+    expect(vector.expected.key).toBe(toHex(referenceKey(password)));
   });
 });

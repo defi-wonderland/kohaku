@@ -1,6 +1,7 @@
 export * from './interfaces';
 export * from './constants';
 export * from './formats';
+export * from './salts';
 export * from './types';
 export * from './event-manager';
 export * from './method-ecdsa';

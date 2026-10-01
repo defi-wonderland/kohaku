@@ -21,11 +21,10 @@ export type DeploymentDescriptor = {
   readonly auditedActions: readonly Address[];
 };
 
-/** A request window's default and bounds, in seconds. */
+/** A request window's default width and the floor under which a gathering warns, in seconds. */
 export type RequestWindowBounds = {
   readonly default: number;
   readonly floor: number;
-  readonly ceiling: number;
 };
 
 /** How and in which block the account was created. */

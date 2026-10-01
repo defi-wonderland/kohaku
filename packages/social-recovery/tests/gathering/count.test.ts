@@ -14,7 +14,7 @@ import {
   TWO_CLAUSES_BODY,
 } from './support';
 
-const BOUNDS: RequestWindowBounds = { default: 86_400, floor: FLOOR, ceiling: 259_200 };
+const BOUNDS: RequestWindowBounds = { default: 86_400, floor: FLOOR };
 const NOW = PINNED_AT + 60;
 
 /** A record with replies filed at the given places, in the given order. */

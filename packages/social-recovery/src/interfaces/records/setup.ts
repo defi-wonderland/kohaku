@@ -51,10 +51,20 @@ export type Configuration = {
  */
 export type ConfigurationSource = { readonly password: string } | Configuration;
 
+/** Why a setup confirmation did not land. */
+export const NOT_LANDED_CAUSES = ['no-event', 'other-commitment'] as const;
+
+export type NotLandedCause = (typeof NOT_LANDED_CAUSES)[number];
+
 /** What `confirmSetup` yields. */
 export type SetupConfirmation = {
   /** Whether the event at the predicted nonce was found with that commitment. */
   readonly landed: boolean;
+  /**
+   * Present exactly when `landed` is false: no event at the predicted nonce yet, or one carrying another commitment.
+   * On `'other-commitment'`, `position` points at that event.
+   */
+  readonly cause?: NotLandedCause;
   readonly nonce: bigint;
   readonly setupCommitment: Hex;
   readonly isAuthorized: boolean;

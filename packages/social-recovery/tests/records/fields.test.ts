@@ -1,14 +1,23 @@
 import ts from 'typescript';
 import { beforeAll, describe, expect, expectTypeOf, it } from 'vitest';
+import * as core from '../../src/index';
 import {
   ADD_OUTCOMES,
+  type Address,
   type ApproverRequest,
   type Configuration,
   type Ctx,
   type ConfigurationSource,
   type GatheringPlace,
+  type LogPosition,
   NO_BACKUP_CASES,
+  NOT_LANDED_CAUSES,
+  type RecoveryState,
+  REMOVED_KEY_UNNAMED,
+  type RemovedKey,
   RESTORE_CAUSE_CODES,
+  type SetupConfirmation,
+  type SetupDescription,
 } from '../../src/index';
 import {
   constituents,
@@ -54,6 +63,9 @@ function elementOf(type: ts.Type, name: string): ts.Type {
   return element;
 }
 
+/** The values RemovedKey takes when no address could be named, listed independently of src/. */
+const REMOVED_KEY_VALUES = ['no-creation-triple', 'no-key-entry', 'several-key-entries', 'unread'];
+
 /** SetupDescription's fields besides removedKey, listed independently of src/. */
 const SETUP_DESCRIPTION_FIELDS = [
   'rule',
@@ -80,17 +92,39 @@ describe('the setup description and the recovery state', () => {
     expect(fieldsOf(typeOf('SetupDescription'))).toEqual(sorted([...SETUP_DESCRIPTION_FIELDS, 'removedKey']));
   });
 
-  it('removedKey is an address or a value saying no creation triple was given, and is required', () => {
+  it('removedKey is an address or one of the four values saying why none was named, and is required', () => {
     const removedKey = field(typeOf('SetupDescription'), 'removedKey');
     const members = constituents(removedKey);
-    const addressLike = members.filter((member) => hasFlag(member, ts.TypeFlags.TemplateLiteral | ts.TypeFlags.String));
+    const addressLike = members.filter((member) => !member.isStringLiteral());
     const markers = members.filter((member) => member.isStringLiteral());
 
     expect(optional(typeOf('SetupDescription'), 'removedKey')).toBe(false);
-    expect(addressLike.length).toBeGreaterThan(0);
-    expect(markers.length).toBeGreaterThan(0);
-    expect(context.checker.isTypeAssignableTo(typeOf('Address'), removedKey)).toBe(true);
+    expect(addressLike).toHaveLength(1);
+    expect(mutuallyAssignable(addressLike[0] as ts.Type, typeOf('Address'))).toBe(true);
+    expect(sorted(markers.map((marker) => (marker as ts.StringLiteralType).value))).toEqual(sorted(REMOVED_KEY_VALUES));
     expect(markers.every((marker) => !context.checker.isTypeAssignableTo(marker, typeOf('Address')))).toBe(true);
+    expect(mutuallyAssignable(removedKey, typeOf('RemovedKey'))).toBe(true);
+  });
+
+  it('RemovedKey is exactly an address or the four values, as callers write it', () => {
+    expectTypeOf<RemovedKey>().toEqualTypeOf<
+      Address | 'no-creation-triple' | 'no-key-entry' | 'several-key-entries' | 'unread'
+    >();
+    expectTypeOf<SetupDescription['removedKey']>().toEqualTypeOf<RemovedKey>();
+    expectTypeOf<RecoveryState['removedKey']>().toEqualTypeOf<RemovedKey>();
+  });
+
+  it('REMOVED_KEY_UNNAMED is the four values, once each, exported from the core entry', () => {
+    expect(REMOVED_KEY_UNNAMED).toEqual(REMOVED_KEY_VALUES);
+    expect(new Set(REMOVED_KEY_UNNAMED).size).toBe(4);
+    expect(core.REMOVED_KEY_UNNAMED).toBe(REMOVED_KEY_UNNAMED);
+  });
+
+  it('REMOVED_KEY_UNNAMED and the non-address part of RemovedKey agree', () => {
+    expectTypeOf<(typeof REMOVED_KEY_UNNAMED)[number]>().toEqualTypeOf<Exclude<RemovedKey, Address>>();
+    expectTypeOf(REMOVED_KEY_UNNAMED).toEqualTypeOf<
+      readonly ['no-creation-triple', 'no-key-entry', 'several-key-entries', 'unread']
+    >();
   });
 
   it('RecoveryState carries removedKey, required and of the same type as the description', () => {
@@ -429,6 +463,9 @@ describe('the big values inside the gathering records travel as decimal strings'
   });
 });
 
+/** The causes a setup confirmation that did not land names, listed independently of src/. */
+const NOT_LANDED_VALUES = ['no-event', 'other-commitment'];
+
 describe('the other records with named fields', () => {
   it.each(['SetupState', 'RecoveryState', 'Configuration', 'SetupConfirmation', 'AddResult', 'Assessment', 'EnrollFailure'])(
     '%s, returned by a frozen member, carries no version field of its own',
@@ -439,7 +476,7 @@ describe('the other records with named fields', () => {
 
   it.each([
     ['Handover', ['newAuthority', 'removedAuthority'], 'the handover'],
-    ['SetupConfirmation', ['landed', 'nonce', 'setupCommitment', 'isAuthorized', 'position'], 'the setup confirmation'],
+    ['SetupConfirmation', ['landed', 'cause', 'nonce', 'setupCommitment', 'isAuthorized', 'position'], 'the setup confirmation'],
     ['Assessment', ['filled', 'missing', 'clauses', 'ruleSatisfied', 'findings'], 'the assessment of a gathering'],
     ['BlockRange', ['from', 'to'], 'the block range of a fetch'],
     ['ValidationResult', ['errors', 'warnings'], 'the validation result'],
@@ -460,6 +497,36 @@ describe('the other records with named fields', () => {
     const descriptor = typeOf('DeploymentDescriptor');
 
     expect(fieldsOf(descriptor).filter((name) => optional(descriptor, name))).toEqual([]);
+  });
+
+  it('the setup confirmation leaves cause and position optional and every other field required', () => {
+    const confirmation = typeOf('SetupConfirmation');
+
+    expect(fieldsOf(confirmation).filter((name) => optional(confirmation, name))).toEqual(['cause', 'position']);
+  });
+
+  it("the confirmation's cause is exactly no-event or other-commitment", () => {
+    expect(stringLiterals(field(typeOf('SetupConfirmation'), 'cause'))).toEqual(sorted(NOT_LANDED_VALUES));
+    expectTypeOf<NonNullable<SetupConfirmation['cause']>>().toEqualTypeOf<'no-event' | 'other-commitment'>();
+  });
+
+  it("the confirmation's landed is a boolean, its position a log position", () => {
+    const confirmation = typeOf('SetupConfirmation');
+
+    expect(hasFlag(field(confirmation, 'landed'), ts.TypeFlags.Boolean)).toBe(true);
+    expect(mutuallyAssignable(field(confirmation, 'position'), typeOf('LogPosition'))).toBe(true);
+    expectTypeOf<SetupConfirmation['landed']>().toEqualTypeOf<boolean>();
+    expectTypeOf<NonNullable<SetupConfirmation['position']>>().toEqualTypeOf<LogPosition>();
+  });
+
+  it('NOT_LANDED_CAUSES is the two causes, exported from the core entry', () => {
+    expect(NOT_LANDED_CAUSES).toEqual(NOT_LANDED_VALUES);
+    expect(core.NOT_LANDED_CAUSES).toBe(NOT_LANDED_CAUSES);
+  });
+
+  it("NOT_LANDED_CAUSES and the confirmation's cause agree", () => {
+    expectTypeOf<(typeof NOT_LANDED_CAUSES)[number]>().toEqualTypeOf<NonNullable<SetupConfirmation['cause']>>();
+    expectTypeOf(NOT_LANDED_CAUSES).toEqualTypeOf<readonly ['no-event', 'other-commitment']>();
   });
 
   it('the handover leaves removedAuthority optional and newAuthority required', () => {

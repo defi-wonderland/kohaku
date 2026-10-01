@@ -1,7 +1,8 @@
 import { decodeAbiParameters, encodeAbiParameters } from 'viem';
 import { FORMATS_SETUP_BODY_ABI, FORMATS_THRESHOLD_BITS, FORMATS_WAIT_BITS } from '../constants';
 import type { Hex } from '../interfaces';
-import { assertBool, assertBytes, assertBytes32, assertObject, assertUintNumber } from './guards';
+import { assertBool, assertBytes32, assertObject, assertUintNumber } from './guards';
+import { decodeStrictly } from './strict';
 import type { BodyClause, SetupBody } from '../types';
 
 /** Refuses a missing body and a body member outside its width. */
@@ -40,33 +41,13 @@ export function encodeSetupBody(body: SetupBody): Hex {
 
 /** Decodes setup body bytes, refusing any its encoder would not reproduce, so a decoded body re-encodes to its input. */
 export function decodeSetupBody(encoded: Hex): SetupBody {
-  assertBytes(encoded, 'setupBody');
-
-  let decoded: SetupBody;
-
-  try {
-    const [wait, ignoresPause, clauses] = decodeAbiParameters(FORMATS_SETUP_BODY_ABI, encoded);
-
-    decoded = {
+  return decodeStrictly(encoded, 'setupBody', '(uint48, bool, (uint8, bytes32[])[])', {
+    decode: (bytes) => decodeAbiParameters(FORMATS_SETUP_BODY_ABI, bytes),
+    build: ([wait, ignoresPause, clauses]) => ({
       wait,
       ignoresPause,
       clauses: clauses.map((clause) => ({ threshold: clause.threshold, credentials: [...clause.credentials] })),
-    };
-  } catch (cause) {
-    throw new RangeError('setupBody does not decode as (uint48, bool, (uint8, bytes32[])[])', { cause });
-  }
-
-  let reencoded: Hex;
-
-  try {
-    reencoded = encodeSetupBody(decoded);
-  } catch (cause) {
-    throw new RangeError('setupBody carries a member outside its width', { cause });
-  }
-
-  if (reencoded !== encoded.toLowerCase()) {
-    throw new RangeError('setupBody is not in the canonical encoding its members re-encode to');
-  }
-
-  return decoded;
+    }),
+    encode: encodeSetupBody,
+  });
 }

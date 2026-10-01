@@ -109,16 +109,21 @@ export const privilegeSlot = (addr: Address): Hex => keccakLocal(join(addressWor
 
 const push = (bytesHex: string): string => (0x5f + bytesHex.length / 2).toString(16) + bytesHex;
 
-/** The implementation address with its leading zero bytes dropped, as the proxy builder pushes it. */
+/** The implementation address with its leading zero bytes dropped, as the pinned proxy builder pushes it. */
 export const trimmedImpl = (impl: Address): string => impl.slice(2).toLowerCase().replace(/^(00)+/, '');
 
-/** Creation code assembled by hand from the proxy layout: the privilege stores, the init prefix and the runtime. */
-export const buildCreationCode = (impl: Address, entries: readonly HandEntry[]): Hex => {
+const assemble = (implHex: string, entries: readonly HandEntry[]): Hex => {
   const stores = entries.map((e) => `${push(e.valueBytes)}7f${privilegeSlot(e.addr).slice(2)}55`).join('');
   const offset = (stores.length / 2 + 10).toString(16).padStart(2, '0');
 
-  return `0x${stores}3d602d8060${offset}3d3981f3363d3d373d3d3d363d${push(trimmedImpl(impl))}5af43d82803e903d91602b57fd5bf3`;
+  return `0x${stores}3d602d8060${offset}3d3981f3363d3d373d3d3d363d${push(implHex)}5af43d82803e903d91602b57fd5bf3`;
 };
+
+/** Creation code assembled by hand from the proxy layout, the implementation pushed as a full PUSH20. */
+export const buildCreationCode = (impl: Address, entries: readonly HandEntry[]): Hex => assemble(impl.slice(2).toLowerCase(), entries);
+
+/** A port of the pinned proxy builder, which drops the implementation's leading zero bytes and so pushes it short. */
+export const builderCreationCode = (impl: Address, entries: readonly HandEntry[]): Hex => assemble(trimmedImpl(impl), entries);
 
 /** The CREATE2 address by hand: the low twenty bytes of keccak256(0xff ++ factory ++ salt ++ keccak256(code)). */
 export const create2ByHand = (factory: Address, salt: Hex, code: Hex): Address =>

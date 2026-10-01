@@ -33,6 +33,8 @@ import {
   type RowFile,
 } from './request-rows';
 import {
+  buildCreationCode,
+  builderCreationCode,
   create2ByHand,
   create2Viem,
   fixturePrivileges,
@@ -105,10 +107,23 @@ const REPLAYERS: Record<string, Replayer> = {
     const factory = str(input['factory']) as Address;
     const bytecode = str(input['bytecode']) as Hex;
     const salt = str(input['salt']) as Hex;
-    const privileges = input['privileges'] as { addr: Address }[];
-    const record = fixturePrivileges(expected);
+    const privileges = input['privileges'] as { addr: Address; valueBytes: Hex }[];
 
     expect(keccakLocal(bytecode)).toBe(expected['bytecodeHash']);
+
+    if (expected['refused'] !== undefined) {
+      const implementation = str(input['implementation']) as Address;
+      const entries = privileges.map((p) => ({ addr: p.addr, valueBytes: p.valueBytes.slice(2) }));
+
+      expect(bytecode).toBe(builderCreationCode(implementation, entries));
+      expect(bytecode).not.toBe(buildCreationCode(implementation, entries));
+      expect(() => creationPrivileges(factory, bytecode, salt)).toThrow(new RangeError(str(expected['refused'])));
+
+      return;
+    }
+
+    const record = fixturePrivileges(expected);
+
     expect(create2Viem(factory, salt, bytecode)).toBe(record.account);
     expect(create2ByHand(factory, salt, bytecode)).toBe(record.account);
     expect(record.entries.map((entry) => entry.slot)).toStrictEqual(privileges.map((p) => privilegeSlot(p.addr)));
@@ -169,5 +184,15 @@ describe('tester-authored request fixtures (tests/formats/fixtures, blessed: fal
     const sorted = rowOf(blessed('attempt-request.json'), 'sorted-proofs');
 
     expect(reversed.expected['calldata']).toBe(sorted.expected['calldata']);
+  });
+
+  it('the creation fixture refuses the builder\'s trimmed push and accepts the same implementation padded', () => {
+    const file = fixture('ambire-creation-privileges-boundaries.json');
+    const trimmed = rowOf(file, 'builder-trimmed-implementation');
+    const padded = rowOf(file, 'padded-leading-zero-implementation');
+
+    expect(trimmed.input['implementation']).toBe(padded.input['implementation']);
+    expect(trimmed.expected['refused']).toBe('bytecode does not push the implementation at byte 86 as exactly 20 bytes');
+    expect(padded.expected['account']).toBe('0x94317914b57f10a23d854e04ACd7E5adbDcb6338');
   });
 });

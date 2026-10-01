@@ -1,7 +1,7 @@
 {
   "format": "ambire-creation-privileges-v1",
   "blessed": false,
-  "note": "Tester-authored, not blessed. Expected values computed outside the implementation: abi.encode by viem encodeAbiParameters (selectors recomputed from the struct signatures), keccak256 over hand-built words, CREATE2 by viem getContractAddress and by hand, creation code assembled by hand from the proxy layout.",
+  "note": "Tester-authored, not blessed. Expected values computed outside the implementation: abi.encode by viem encodeAbiParameters (selectors recomputed from the struct signatures), keccak256 over hand-built words, CREATE2 by viem getContractAddress and by hand, creation code assembled by hand from the proxy layout. A row whose expected member carries refused holds code the parser must refuse with that message.",
   "source": "tester-authored boundary rows",
   "derivation": "account = create2(factory, salt, keccak256(bytecode)); entries = the (PUSHn value, PUSH32 slot, SSTORE) groups of the creation code, slot = keccak256(abi.encode(uint256(addr), uint256(0)))",
   "vectors": [
@@ -105,7 +105,8 @@
       }
     },
     {
-      "id": "trimmed-implementation",
+      "id": "builder-trimmed-implementation",
+      "note": "The pinned builder's own defective output for a leading-zero implementation: it pushes the address short (PUSH16), so the proxy's fixed runtime length and jump target do not hold. Refused.",
       "input": {
         "factory": "0x26cE6745A633030A6faC5e64e41D21fb6246dc2d",
         "bytecode": "0x7f00000000000000000000000000000000000000000000000000000000000000027f977b86d8b2c12cb1b0cf5c34210e07337f1ed424f3f38ee3bddb639468b3095f553d602d80604d3d3981f3363d3d373d3d3d363d6f71727de22e5e9d8baf0edac6f37da0325af43d82803e903d91602b57fd5bf3",
@@ -120,7 +121,26 @@
       },
       "expected": {
         "bytecodeHash": "0x7449508e7cb4095482ebc51a1e6725f8e887e3e2b50dd83610c84ce9856b1bf5",
-        "account": "0xd3Cb18981303435Bf626edC1C1F71eb0034E8a36",
+        "refused": "bytecode does not push the implementation at byte 86 as exactly 20 bytes"
+      }
+    },
+    {
+      "id": "padded-leading-zero-implementation",
+      "input": {
+        "factory": "0x26cE6745A633030A6faC5e64e41D21fb6246dc2d",
+        "bytecode": "0x7f00000000000000000000000000000000000000000000000000000000000000027f977b86d8b2c12cb1b0cf5c34210e07337f1ed424f3f38ee3bddb639468b3095f553d602d80604d3d3981f3363d3d373d3d3d363d730000000071727de22e5e9d8baf0edac6f37da0325af43d82803e903d91602b57fd5bf3",
+        "salt": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "implementation": "0x0000000071727De22E5E9d8BAf0edAc6f37da032",
+        "privileges": [
+          {
+            "addr": "0x8ba1f109551bD432803012645Ac136ddd64DBA72",
+            "valueBytes": "0x0000000000000000000000000000000000000000000000000000000000000002"
+          }
+        ]
+      },
+      "expected": {
+        "bytecodeHash": "0x883b680f52b19d685aea28d28ece9b349ced4673b4e34e007c65b57e73207a44",
+        "account": "0x94317914b57f10a23d854e04ACd7E5adbDcb6338",
         "entries": [
           {
             "slot": "0x977b86d8b2c12cb1b0cf5c34210e07337f1ed424f3f38ee3bddb639468b3095f",

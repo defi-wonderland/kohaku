@@ -41,14 +41,21 @@ function pushAt(code: Uint8Array, at: number, maxBytes: number, part: string): {
   return { data: code.subarray(at + 1, next), next };
 }
 
+/** The operand of a `PUSH` of exactly `width` bytes at `at` and the byte after it; any other push throws a `RangeError`. */
+function exactPushAt(code: Uint8Array, at: number, width: number, part: string): { data: Uint8Array; next: number } {
+  const next = at + 1 + width;
+
+  if (code[at] !== FORMATS_CREATION_PUSH0_OPCODE + width || next > code.length) {
+    throw new RangeError(`bytecode does not push the ${part} at byte ${at} as exactly ${width} bytes`);
+  }
+
+  return { data: code.subarray(at + 1, next), next };
+}
+
 /** One `(PUSHn value, PUSH32 slot, SSTORE)` entry at `at` and the byte after it. */
 function entryAt(code: Uint8Array, at: number): { entry: CreationEntry; next: number } {
   const value = pushAt(code, at, FORMATS_CREATION_WORD_BYTES, 'stored value');
-  const slot = pushAt(code, value.next, FORMATS_CREATION_WORD_BYTES, 'storage slot');
-
-  if (slot.data.length !== FORMATS_CREATION_WORD_BYTES) {
-    throw new RangeError(`bytecode pushes the storage slot at byte ${value.next} in fewer than 32 bytes`);
-  }
+  const slot = exactPushAt(code, value.next, FORMATS_CREATION_WORD_BYTES, 'storage slot');
 
   if (code[slot.next] !== FORMATS_CREATION_SSTORE_OPCODE) {
     throw new RangeError(`bytecode does not store the entry at byte ${slot.next}`);
@@ -63,7 +70,7 @@ function entryAt(code: Uint8Array, at: number): { entry: CreationEntry; next: nu
 /**
  * The privilege entries of the account's proxy creation code, in code order.
  * Code that is not up to three entries followed by the minimal proxy's deploy code and runtime throws a `RangeError`,
- * as does an implementation push with a leading zero byte, which the code's builder drops.
+ * as does an implementation pushed in fewer than 20 bytes, whose proxy's fixed runtime length and jump target would not hold.
  */
 export function parseCreationEntries(bytecode: Hex): readonly CreationEntry[] {
   const code = hexToBytes(bytecode);
@@ -90,11 +97,7 @@ export function parseCreationEntries(bytecode: Hex): readonly CreationEntry[] {
   }
 
   const implementationStart = expectAt(code, runtimeStart, FORMATS_CREATION_RUNTIME_HEAD, 'proxy runtime');
-  const implementation = pushAt(code, implementationStart, FORMATS_ADDRESS_BYTES, 'implementation');
-
-  if (implementation.data[0] === 0) {
-    throw new RangeError('bytecode pushes the implementation address with a leading zero byte');
-  }
+  const implementation = exactPushAt(code, implementationStart, FORMATS_ADDRESS_BYTES, 'implementation');
 
   if (expectAt(code, implementation.next, FORMATS_CREATION_RUNTIME_TAIL, 'proxy runtime') !== code.length) {
     throw new RangeError('bytecode carries bytes after the proxy runtime');

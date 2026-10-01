@@ -32,7 +32,7 @@ export const FORMATS_APPROVAL_PRIMARY_TYPE = 'Approval';
 /** The primary type of the cancellation message. */
 export const FORMATS_CANCELLATION_PRIMARY_TYPE = 'Cancellation';
 
-/** The nested `PaymentOrder` EIP-712 struct. */
+/** The `PaymentOrder` struct's members in their on-chain order, its EIP-712 type and its ABI parameters alike. */
 export const FORMATS_PAYMENT_ORDER_TYPED_DATA_FIELDS = [
   { name: 'token', type: 'address' },
   { name: 'amount', type: 'uint256' },

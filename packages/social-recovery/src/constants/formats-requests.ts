@@ -1,11 +1,5 @@
 import { toFunctionSelector } from 'viem';
-
-/** The `PaymentOrder` struct's members, in their on-chain order. */
-export const FORMATS_PAYMENT_ORDER_COMPONENTS = [
-  { name: 'token', type: 'address' },
-  { name: 'amount', type: 'uint256' },
-  { name: 'payee', type: 'address' },
-] as const;
+import { FORMATS_PAYMENT_ORDER_TYPED_DATA_FIELDS } from './formats';
 
 /** The `ProofPlace` struct's members, in their on-chain order. */
 export const FORMATS_PROOF_PLACE_COMPONENTS = [
@@ -15,9 +9,6 @@ export const FORMATS_PROOF_PLACE_COMPONENTS = [
   { name: 'salt', type: 'bytes32' },
   { name: 'proof', type: 'bytes' },
 ] as const;
-
-/** A payment order's ABI parameters, encoded as three static words rather than one wrapping tuple. */
-export const FORMATS_PAYMENT_ORDER_ABI = FORMATS_PAYMENT_ORDER_COMPONENTS;
 
 /** A proof place's ABI parameters: one tuple, so its encoding opens with an offset word. */
 export const FORMATS_PROOF_PLACE_ABI = [{ name: 'proof', type: 'tuple', components: FORMATS_PROOF_PLACE_COMPONENTS }] as const;
@@ -39,7 +30,7 @@ export const FORMATS_START_ATTEMPT_ABI = [
           { name: 'setupNonce', type: 'uint64' },
           { name: 'setupBody', type: 'bytes' },
           { name: 'payload', type: 'bytes' },
-          { name: 'order', type: 'tuple', components: FORMATS_PAYMENT_ORDER_COMPONENTS },
+          { name: 'order', type: 'tuple', components: FORMATS_PAYMENT_ORDER_TYPED_DATA_FIELDS },
           { name: 'validUntil', type: 'uint48' },
           { name: 'proofs', type: 'tuple[]', components: FORMATS_PROOF_PLACE_COMPONENTS },
         ],
@@ -83,7 +74,7 @@ export const FORMATS_CANCEL_BY_PROOFS_SELECTOR = toFunctionSelector(FORMATS_CANC
 /** The string literal a kit slot's preimage opens with. */
 export const FORMATS_KIT_SLOT_TAG = 'kit';
 
-/** The kit slot's preimage parameters; the tag is typed `string`, whose encoding differs from `bytes`. */
+/** The kit slot's preimage parameters, `abi.encode("kit", action)` with the tag typed `string` as the contract spells it. */
 export const FORMATS_KIT_SLOT_PREIMAGE_ABI = [{ type: 'string' }, { type: 'address' }] as const;
 
 /** The kit binding's preimage parameters: the action and its validator data. */

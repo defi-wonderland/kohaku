@@ -1,6 +1,5 @@
 import { hashTypedData } from 'viem';
 import {
-  FORMATS_AMOUNT_BITS,
   FORMATS_APPROVAL_PRIMARY_TYPE,
   FORMATS_APPROVAL_TYPED_DATA_TYPES,
   FORMATS_ATTEMPT_ID_BITS,
@@ -16,6 +15,7 @@ import {
 import type { ApprovalMessage, CancellationMessage, Hex, TypedData, TypedDataDomain } from '../interfaces';
 import type { ApprovalMembers, ApprovalTypedData, CancellationMembers, CancellationTypedData } from '../types';
 import { assertBytes, assertBytes32, assertObject, assertUintBigint, assertUintNumber, normalizeAddress } from './guards';
+import { checkedPaymentOrder } from './payment-order';
 
 /** A fresh copy of a types table, so a caller editing one typed data object reaches no other. */
 function copyTypes(types: TypedData['types']): TypedData['types'] {
@@ -62,15 +62,8 @@ function approvalParts(members: ApprovalMembers, place: number): { domain: Typed
   const shared = cancellationMessageOf(members, place);
 
   assertBytes(members.payload, 'payload');
-  assertObject(members.order, 'order');
 
-  const token = normalizeAddress(members.order.token, 'order.token');
-
-  assertUintBigint(members.order.amount, FORMATS_AMOUNT_BITS, 'order.amount');
-
-  const order = { token, amount: members.order.amount, payee: normalizeAddress(members.order.payee, 'order.payee') };
-
-  return { domain, message: { ...shared, payload: members.payload, order } };
+  return { domain, message: { ...shared, payload: members.payload, order: checkedPaymentOrder(members.order, 'order') } };
 }
 
 /** The checked domain and `Cancellation` message for one place, shared by the typed data and the digest. */

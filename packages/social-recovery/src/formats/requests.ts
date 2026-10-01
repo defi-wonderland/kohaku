@@ -14,7 +14,7 @@ import { checkedPaymentOrder } from './payment-order';
 import { fromAbiProofPlaces, sortedProofPlaces, toAbiProofPlace } from './proof-place';
 import { decodeStrictly } from './strict';
 
-/** The checked members both requests share, addresses checksummed and proofs sorted by place. */
+/** A checked copy of a cancel request, whose members an attempt request shares, addresses checksummed and proofs sorted by place. */
 function checkedCancelRequest(request: CancelRequest): CancelRequest {
   assertObject(request, 'request');
 
@@ -37,13 +37,26 @@ function checkedCancelRequest(request: CancelRequest): CancelRequest {
   };
 }
 
-/** Refuses calldata that does not open with the expected selector. */
-function assertSelector(calldata: Hex, selector: Hex, functionName: string): void {
+/** A checked copy of an attempt request, addresses checksummed and proofs sorted by place. */
+function checkedAttemptRequest(request: AttemptRequest): AttemptRequest {
+  const shared = checkedCancelRequest(request);
+
+  assertBytes(request.payload, 'payload');
+
+  return { ...shared, payload: request.payload, order: checkedPaymentOrder(request.order, 'order') };
+}
+
+/** The calldata lower-cased, since the function lookup compares selectors case-sensitively; a wrong selector throws a `RangeError`. */
+function lowerCaseCall(calldata: Hex, selector: Hex, functionName: string): Hex {
   assertBytes(calldata, 'calldata');
 
-  if (calldata.slice(0, selector.length).toLowerCase() !== selector) {
+  const lowered = calldata.toLowerCase() as Hex;
+
+  if (lowered.slice(0, selector.length) !== selector) {
     throw new RangeError(`calldata does not open with the ${functionName} selector ${selector}`);
   }
+
+  return lowered;
 }
 
 /**
@@ -51,28 +64,12 @@ function assertSelector(calldata: Hex, selector: Hex, functionName: string): voi
  * Proofs are encoded sorted by place, a repeated place throws a `RangeError`, and an empty proof array is accepted.
  */
 export function encodeAttemptRequest(request: AttemptRequest): Hex {
-  const shared = checkedCancelRequest(request);
-
-  assertBytes(request.payload, 'payload');
-
-  const order = checkedPaymentOrder(request.order, 'order');
+  const checked = checkedAttemptRequest(request);
 
   return encodeFunctionData({
     abi: FORMATS_START_ATTEMPT_ABI,
     functionName: 'startAttempt',
-    args: [
-      {
-        account: shared.account,
-        action: shared.action,
-        attemptId: shared.attemptId,
-        setupNonce: shared.setupNonce,
-        setupBody: shared.setupBody,
-        payload: request.payload,
-        order,
-        validUntil: shared.validUntil,
-        proofs: shared.proofs.map(toAbiProofPlace),
-      },
-    ],
+    args: [{ ...checked, proofs: checked.proofs.map(toAbiProofPlace) }],
   });
 }
 
@@ -95,11 +92,11 @@ export function encodeCancelRequest(request: CancelRequest): Hex {
  * and proofs whose places are not strictly increasing, so a decoded request re-encodes to its input.
  */
 export function decodeAttemptRequest(calldata: Hex): AttemptRequest {
-  assertSelector(calldata, FORMATS_START_ATTEMPT_SELECTOR, 'startAttempt');
+  const lowered = lowerCaseCall(calldata, FORMATS_START_ATTEMPT_SELECTOR, 'startAttempt');
 
-  return decodeStrictly(calldata, 'calldata', 'startAttempt(AttemptRequest)', {
+  return decodeStrictly(lowered, 'calldata', 'startAttempt(AttemptRequest)', {
     decode: (bytes) => decodeFunctionData({ abi: FORMATS_START_ATTEMPT_ABI, data: bytes }).args[0],
-    build: (raw) => ({ ...raw, order: { ...raw.order }, proofs: fromAbiProofPlaces(raw.proofs) }),
+    build: (raw) => checkedAttemptRequest({ ...raw, proofs: fromAbiProofPlaces(raw.proofs) }),
     encode: encodeAttemptRequest,
   });
 }
@@ -109,11 +106,11 @@ export function decodeAttemptRequest(calldata: Hex): AttemptRequest {
  * and proofs whose places are not strictly increasing, so a decoded request re-encodes to its input.
  */
 export function decodeCancelRequest(calldata: Hex): CancelRequest {
-  assertSelector(calldata, FORMATS_CANCEL_BY_PROOFS_SELECTOR, 'cancelByProofs');
+  const lowered = lowerCaseCall(calldata, FORMATS_CANCEL_BY_PROOFS_SELECTOR, 'cancelByProofs');
 
-  return decodeStrictly(calldata, 'calldata', 'cancelByProofs(CancelRequest)', {
+  return decodeStrictly(lowered, 'calldata', 'cancelByProofs(CancelRequest)', {
     decode: (bytes) => decodeFunctionData({ abi: FORMATS_CANCEL_BY_PROOFS_ABI, data: bytes }).args[0],
-    build: (raw) => ({ ...raw, proofs: fromAbiProofPlaces(raw.proofs) }),
+    build: (raw) => checkedCancelRequest({ ...raw, proofs: fromAbiProofPlaces(raw.proofs) }),
     encode: encodeCancelRequest,
   });
 }

@@ -112,6 +112,9 @@ describe('encodeSetupBody', () => {
   });
 });
 
+const NOT_CANONICAL = 'setupBody is not in the canonical encoding of (uint48, bool, (uint8, bytes32[])[])';
+const NOT_DECODED = 'setupBody does not decode as (uint48, bool, (uint8, bytes32[])[])';
+
 describe('decodeSetupBody', () => {
   it.each(ROWS)('decodes %s back to its three members', (_label, body, bytes) => {
     expect(decodeSetupBody(bytes)).toEqual(body);
@@ -143,6 +146,22 @@ describe('decodeSetupBody', () => {
 
   it('refuses trailing bytes (strict: the manager itself would accept them)', () => {
     expect(() => decodeSetupBody(`${handBody(0, false, [])}00`)).toThrow(RangeError);
+    expect(() => decodeSetupBody(`${handBody(0, false, [])}00`)).toThrow(new RangeError(NOT_CANONICAL));
+  });
+
+  it('refuses a clause list placed after a gap word with the canonical-encoding message', () => {
+    expect(decodeSetupBody(join(word(0), word(0), word(0x60), word(0)))).toEqual({ wait: 0, ignoresPause: false, clauses: [] });
+    expect(() => decodeSetupBody(join(word(0), word(0), word(0x80), word(0), word(0)))).toThrow(new RangeError(NOT_CANONICAL));
+  });
+
+  it('refuses bytes that do not decode with the layout-naming message', () => {
+    expect(() => decodeSetupBody(join(word(0), word(2), word(0x60), word(0)))).toThrow(new RangeError(NOT_DECODED));
+  });
+
+  it('refuses a wait word wider than uint48 with the encoder\'s own width message', () => {
+    expect(() => decodeSetupBody(join(word(2 ** 48), word(0), word(0x60), word(0)))).toThrow(
+      new RangeError('wait 281474976710656 does not fit uint48 as a safe integer'),
+    );
   });
 
   it('refuses a wait word wider than uint48', () => {

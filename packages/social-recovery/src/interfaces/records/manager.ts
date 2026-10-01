@@ -45,8 +45,22 @@ export type Domain = {
   readonly extensions: readonly bigint[];
 };
 
-/** The address a handover would remove, or the value saying no creation triple was given. */
-export type RemovedKey = Address | 'no-creation-triple';
+/** Why no address could be named for the key a handover would remove. */
+export const REMOVED_KEY_UNNAMED = [
+  /** No creation triple was given. */
+  'no-creation-triple',
+  /** The privilege replay leaves no entry holding a key. */
+  'no-key-entry',
+  /** The privilege replay leaves more than one entry holding a key. */
+  'several-key-entries',
+  /** A read the inference needs failed, or the creation triple does not produce the account. */
+  'unread',
+] as const;
+
+export type RemovedKeyUnnamed = (typeof REMOVED_KEY_UNNAMED)[number];
+
+/** The address a handover would remove, or why none could be named. */
+export type RemovedKey = Address | RemovedKeyUnnamed;
 
 /** The recovery-side reading of the bound account at one pinned block. */
 export type RecoveryState = {

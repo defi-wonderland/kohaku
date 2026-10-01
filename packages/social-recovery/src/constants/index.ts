@@ -7,3 +7,4 @@ export * from './event-manager';
 export * from './method-ecdsa';
 export * from './encryption';
 export * from './validation';
+export * from './gathering';

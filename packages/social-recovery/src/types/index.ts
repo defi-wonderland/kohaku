@@ -11,3 +11,4 @@ export type {
   SetupValidationContext,
   WindowFacts,
 } from './validation';
+export type * from './gathering';

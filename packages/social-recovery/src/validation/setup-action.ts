@@ -1,7 +1,7 @@
 import { assertBool, assertObject, normalizeAddress } from '../formats/guards';
 import type { Address, KitNotification } from '../interfaces';
-import type { SetupValidationContext } from '../types/validation';
-import { addError, addWarning, assertArray, normalizeAddresses, type Findings } from './common';
+import type { Findings, SetupEvent, SetupValidationContext } from '../types/validation';
+import { addError, addWarning, assertArray, normalizeAddresses } from './common';
 
 /** The action's fit and audit findings: `action.unsupported`, `action.fit-unchecked` and `action.unaudited`. */
 export function actionFindings(context: SetupValidationContext, findings: Findings): void {
@@ -45,8 +45,6 @@ export function actionFindings(context: SetupValidationContext, findings: Findin
     });
   }
 }
-
-type SetupEvent = Extract<KitNotification, { readonly kind: 'setup-committed' | 'setup-cleared' }>;
 
 const isSetupEvent = (event: KitNotification): event is SetupEvent =>
   event.kind === 'setup-committed' || event.kind === 'setup-cleared';

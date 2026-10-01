@@ -1,20 +1,6 @@
 import { normalizeAddress } from '../formats/guards';
-import type {
-  Address,
-  ErrorCode,
-  FindingSubject,
-  FindingValues,
-  ValidationError,
-  ValidationResult,
-  ValidationWarning,
-  WarningCode,
-} from '../interfaces';
-
-/** The findings one judgment collects, appended to as each check runs. */
-export type Findings = {
-  readonly errors: ValidationError[];
-  readonly warnings: ValidationWarning[];
-};
+import type { Address, ErrorCode, FindingSubject, FindingValues, ValidationResult, WarningCode } from '../interfaces';
+import type { Findings } from '../types/validation';
 
 /** An empty collection. */
 export const emptyFindings = (): Findings => ({ errors: [], warnings: [] });

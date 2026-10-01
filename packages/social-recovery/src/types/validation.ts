@@ -15,6 +15,8 @@ import type {
   PaymentOrder,
   ProofPlace,
   ReadResult,
+  ValidationError,
+  ValidationWarning,
 } from '../interfaces';
 import type { SetupBody } from './formats';
 
@@ -121,3 +123,12 @@ export type CheckedRequest = {
   | { readonly opening: true; readonly payload: Hex; readonly order: PaymentOrder }
   | { readonly opening: false }
 );
+
+/** The findings one judgment collects, appended to as each check runs. */
+export type Findings = {
+  readonly errors: ValidationError[];
+  readonly warnings: ValidationWarning[];
+};
+
+/** A manager notification that commits or clears a setup. */
+export type SetupEvent = Extract<KitNotification, { readonly kind: 'setup-committed' | 'setup-cleared' }>;

@@ -1,7 +1,7 @@
 import { setupCommitment } from '../formats/commitments';
 import type { ActionState } from '../interfaces';
-import type { CheckedRequest } from '../types/validation';
-import { addError, type Findings } from './common';
+import type { CheckedRequest, Findings } from '../types/validation';
+import { addError } from './common';
 
 /** The findings the stored setup and attempt reach: the id, a live or missing attempt, a moved nonce, the body's commitment. */
 export function stateFindings(request: CheckedRequest, state: ActionState, findings: Findings): void {

@@ -1,8 +1,8 @@
 import { zeroAddress } from 'viem';
 import { VALIDATION_UNKNOWN_TOKEN_SHAPES } from '../constants';
 import type { PaymentOrder } from '../interfaces';
-import type { RequestValidationContext } from '../types/validation';
-import { addWarning, normalizeAddresses, type Findings } from './common';
+import type { Findings, RequestValidationContext } from '../types/validation';
+import { addWarning, normalizeAddresses } from './common';
 
 /** The payment warnings an opening order with a nonzero amount reaches; a zero amount pays nobody and reaches none. */
 export function paymentFindings(order: PaymentOrder, context: RequestValidationContext, findings: Findings): void {

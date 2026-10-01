@@ -9,8 +9,8 @@ import {
 } from '../constants';
 import { assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import type { SetupDraft } from '../interfaces';
-import type { PlacedCredential, SetupValidationContext } from '../types/validation';
-import { addError, addWarning, type Findings } from './common';
+import type { Findings, PlacedCredential, SetupValidationContext } from '../types/validation';
+import { addError, addWarning } from './common';
 
 /** The wait's findings against the field width over the pinned block's time and the client's maximum and short wait. */
 export function waitFindings(draft: SetupDraft, context: SetupValidationContext, findings: Findings): void {

@@ -1,7 +1,7 @@
 import { zeroAddress } from 'viem';
 import { normalizeAddress } from '../formats/guards';
-import type { HandoverReads } from '../types/validation';
-import { addError, type Findings } from './common';
+import type { Findings, HandoverReads } from '../types/validation';
+import { addError } from './common';
 
 /** The handover's findings, the ones the action would revert on at the spend, judged from the record and the reads. */
 export function handoverFindings(reads: HandoverReads, findings: Findings): void {

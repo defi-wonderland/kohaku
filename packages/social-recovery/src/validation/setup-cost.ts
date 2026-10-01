@@ -1,8 +1,8 @@
 import { FORMATS_SAFE_INTEGER_BITS } from '../constants';
 import { assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import type { Address, SetupDraft } from '../interfaces';
-import type { MethodCost, PlacedCredential } from '../types/validation';
-import { addError, assertArray, type Findings } from './common';
+import type { Findings, MethodCost, PlacedCredential } from '../types/validation';
+import { addError, assertArray } from './common';
 
 /** The cost table by checksummed method address, refusing a malformed entry. */
 function costTable(costs: readonly MethodCost[]): Map<Address, number> {

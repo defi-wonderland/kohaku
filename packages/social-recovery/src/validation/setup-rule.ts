@@ -1,7 +1,7 @@
 import { VALIDATION_THRESHOLD_MAX } from '../constants';
 import type { Address, SetupDraft } from '../interfaces';
-import type { PlacedCredential } from '../types/validation';
-import { addError, addWarning, type Findings } from './common';
+import type { Findings, PlacedCredential } from '../types/validation';
+import { addError, addWarning } from './common';
 
 /** The errors the rule's own shape reaches: an empty rule or clause, and a threshold no clause can meet or hold. */
 export function ruleShapeFindings(draft: SetupDraft, findings: Findings): void {
@@ -50,7 +50,7 @@ export function clauseShapeFindings(draft: SetupDraft, credentials: readonly Pla
     const own = credentials.filter((credential) => credential.clause === clause);
     const count = own.length;
 
-    if (count > 0 && threshold === count) addWarning(findings, 'clause.single-point', 'clause', { clause, threshold, count });
+    if (count > 0 && (threshold === count || count === 1)) addWarning(findings, 'clause.single-point', 'clause', { clause, threshold, count });
 
     if (threshold === 0 && !allZero) {
       const otherClauses = clauses.map((_, index) => index).filter((index) => index !== clause);

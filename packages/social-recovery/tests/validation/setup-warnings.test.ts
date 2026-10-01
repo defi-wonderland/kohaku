@@ -35,6 +35,9 @@ const setupEvent = (kind: 'setup-committed' | 'setup-cleared', action: string, b
     : { kind, ...base };
 };
 
+/** The warnings ordered by code, so two codes on one clause compare whatever order they were raised in. */
+const sortedWarnings = (draft = DRAFT) => [...warningsOf(draft)].sort((left, right) => left.code.localeCompare(right.code));
+
 const replaceReads = (reads: ReturnType<typeof methodReads>): SetupValidationContext => ({
   ...SETUP_CONTEXT,
   methods: SETUP_CONTEXT.methods.map((entry) => (entry.module === reads.module ? reads : entry)),
@@ -55,8 +58,34 @@ describe('validateSetup warnings', () => {
       { threshold: 2, credentials: [credential(ECDSA, 2), credential(PASSKEY, 3), credential(PASSKEY, 4)] },
     ]);
 
-    expect(warningsOf(draft)).toEqual([{ code: 'clause.threshold-zero', subject: 'clause', values: { clause: 0, otherClauses: [1] } }]);
+    expect(findingsOf(validateSetup(draft, SETUP_CONTEXT), 'clause.threshold-zero')).toEqual([
+      { code: 'clause.threshold-zero', subject: 'clause', values: { clause: 0, otherClauses: [1] } },
+    ]);
     expect(codes()).not.toContain('clause.threshold-zero');
+  });
+
+  it('raises clause.single-point on one credential whatever the threshold, a 0-of-1 beside a healthy clause with clause.threshold-zero', () => {
+    const draft = withClauses([
+      { threshold: 0, credentials: [credential(ECDSA, 1)] },
+      { threshold: 2, credentials: [credential(ECDSA, 2), credential(PASSKEY, 3), credential(PASSKEY, 4)] },
+    ]);
+
+    expect(sortedWarnings(draft)).toEqual([
+      { code: 'clause.single-point', subject: 'clause', values: { clause: 0, threshold: 0, count: 1 } },
+      { code: 'clause.threshold-zero', subject: 'clause', values: { clause: 0, otherClauses: [1] } },
+    ]);
+  });
+
+  it('raises clause.single-point at 1-of-1 and 3-of-3 with threshold and count, and not at 1-of-2', () => {
+    const three = [credential(ECDSA, 1), credential(PASSKEY, 2), credential(ECDSA, 3)];
+
+    expect(warningsOf(withClauses([{ threshold: 1, credentials: [credential(PASSKEY, 1)] }]))).toEqual([
+      { code: 'clause.single-point', subject: 'clause', values: { clause: 0, threshold: 1, count: 1 } },
+    ]);
+    expect(warningsOf(withClauses([{ threshold: 3, credentials: three }]))).toEqual([
+      { code: 'clause.single-point', subject: 'clause', values: { clause: 0, threshold: 3, count: 3 } },
+    ]);
+    expect(codes(withClauses([{ threshold: 1, credentials: [credential(ECDSA, 1), credential(PASSKEY, 2)] }]))).toEqual([]);
   });
 
   it('raises clause.shared-failure where every credential of a clause shares one method, and not across two', () => {

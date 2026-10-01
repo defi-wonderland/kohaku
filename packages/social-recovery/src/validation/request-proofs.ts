@@ -1,7 +1,8 @@
 import { assertObject, normalizeAddress } from '../formats/guards';
 import type { Address, ReadResult } from '../interfaces';
 import type { CheckedRequest, RequestValidationContext, SetupBody } from '../types';
-import { addError, addWarning, normalizeAddresses, type Findings } from './common';
+import type { Findings } from '../types/validation';
+import { addError, addWarning, normalizeAddresses } from './common';
 
 /** `proof.places-unordered` for every proof whose place does not exceed the one before it. */
 export function placeOrderFindings(request: CheckedRequest, findings: Findings): void {

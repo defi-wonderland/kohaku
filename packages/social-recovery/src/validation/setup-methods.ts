@@ -1,7 +1,7 @@
 import { assertBool, assertObject, normalizeAddress } from '../formats/guards';
 import type { Address, SetupDraft } from '../interfaces';
-import type { MethodReads, PlacedCredential, SetupValidationContext } from '../types/validation';
-import { addWarning, assertArray, normalizeAddresses, type Findings } from './common';
+import type { Findings, MethodReads, PlacedCredential, SetupValidationContext } from '../types/validation';
+import { addWarning, assertArray, normalizeAddresses } from './common';
 
 /** The method reads by checksummed module address, refusing a malformed entry and a named method left unread. */
 function readsByMethod(methods: readonly MethodReads[], credentials: readonly PlacedCredential[]): Map<Address, MethodReads> {

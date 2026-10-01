@@ -67,10 +67,11 @@ function sharedMembers(record: Gathering): CancellationMembers {
     setupNonce: decimalBigint(request.setupNonce, FORMATS_SETUP_NONCE_BITS, 'setupNonce'),
     setupBodyHash: setupBodyHash(request.setupBody),
     validUntil: decimalNumber(request.validUntil, FORMATS_VALID_UNTIL_BITS, 'validUntil'),
+    digestVersion: decimalBigint(request.digestVersion, FORMATS_SAFE_INTEGER_BITS, 'digestVersion').toString(),
   };
 }
 
-/** The digest this gathering's own members produce for one place; throws on a malformed member. */
+/** The digest this gathering's own members produce for one place under the record's domain; throws on a malformed member. */
 export function digestFor(record: Gathering, place: number): Hex {
   const shared = sharedMembers(record);
 

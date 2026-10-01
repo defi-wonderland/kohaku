@@ -31,7 +31,7 @@ function domainOf(members: CancellationMembers): TypedDataDomain {
 
   const manager = normalizeAddress(members.manager, 'manager');
 
-  return { name: FORMATS_DIGEST_DOMAIN_NAME, version: DIGEST_VERSION, chainId: members.chainId, verifyingContract: manager };
+  return { name: FORMATS_DIGEST_DOMAIN_NAME, version: members.digestVersion ?? DIGEST_VERSION, chainId: members.chainId, verifyingContract: manager };
 }
 
 /** The members both messages share, each checked against its width, addresses checksummed. */

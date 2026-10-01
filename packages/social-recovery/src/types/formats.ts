@@ -24,6 +24,8 @@ export type CancellationMembers = {
   readonly setupNonce: bigint;
   readonly setupBodyHash: Hex;
   readonly validUntil: number;
+  /** The domain's version; absent where this build's `DIGEST_VERSION` applies. */
+  readonly digestVersion?: string;
 };
 
 /** The request members an `Approval` message closes over, plus its domain inputs. */

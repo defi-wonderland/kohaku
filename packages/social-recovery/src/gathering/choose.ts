@@ -1,4 +1,5 @@
-import type { FiledPlace, SetupBody } from '../types';
+import type { SetupBody } from '../types';
+import type { FiledPlace } from '../types/gathering';
 import { clausePlaces } from './edge';
 
 /** Every way to pick `size` items from `items`, in order. */

@@ -7,7 +7,7 @@ import {
 import { normalizeAddress } from '../formats/guards';
 import { decodeSetupBody } from '../formats/setup-body';
 import type { Gathering, Moment, ProofPlace, Reply, Selection } from '../interfaces';
-import type { FiledPlace } from '../types';
+import type { FiledPlace } from '../types/gathering';
 import { windowFindings } from '../validation/window';
 import { preferredSet } from './choose';
 import { assertGatheringRead, windowFactsOf } from './edge';

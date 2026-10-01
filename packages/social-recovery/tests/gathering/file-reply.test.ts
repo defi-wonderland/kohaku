@@ -77,6 +77,25 @@ describe('fileReply digest coverage', () => {
   });
 });
 
+describe('fileReply under the record\'s digest version', () => {
+  const v1 = approvalGathering();
+  const v2 = { ...v1, request: { ...v1.request, digestVersion: '2' } };
+
+  it('the two versions digest the same place differently', () => {
+    expect(digestOf(v2, 0)).not.toBe(digestOf(v1, 0));
+  });
+
+  it('a gathering at digest version 2 refuses a reply made under version 1 as digest-mismatch', () => {
+    expect(causeOf(fileReply(v2, replyFor(v1, 0)))).toBe('digest-mismatch');
+  });
+
+  it('a gathering at digest version 2 files a reply made under version 2', () => {
+    const reply = replyFor(v2, 0);
+
+    expect(filed(v2, reply).gathering.replies).toStrictEqual([reply]);
+  });
+});
+
 describe('fileReply refusals, one at a time', () => {
   const record = deepFreeze(approvalGathering());
   const good = deepFreeze(replyFor(record, 2));

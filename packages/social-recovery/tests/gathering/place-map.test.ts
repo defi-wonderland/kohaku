@@ -1,14 +1,24 @@
 import { encodeAbiParameters, getAddress, keccak256 } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { placeMap, seed, type Configuration, type GatheringPlace, type Hex, type SetupBody } from '../../src/index';
-import { ACCOUNT, approvalGathering, cancellationGathering, credentialOf, METHOD, OTHER_METHOD, TOKEN } from './support';
+import {
+  ACCOUNT,
+  approvalGathering,
+  cancellationGathering,
+  credentialOf,
+  DEFAULT_SALT_TEST_ABI,
+  encodeBody,
+  METHOD,
+  OTHER_METHOD,
+  TOKEN,
+} from './support';
 
 const LOWER_METHOD = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
 const EXPLICIT_SALT: Hex = `0x${'5a'.repeat(32)}`;
 
 /** The default salt by viem's encoder: keccak256(abi.encode(account, place)). */
 const defaultSaltOf = (place: number): Hex =>
-  keccak256(encodeAbiParameters([{ type: 'address' }, { type: 'uint256' }], [ACCOUNT, BigInt(place)]));
+  keccak256(encodeAbiParameters(DEFAULT_SALT_TEST_ABI, [ACCOUNT, BigInt(place)]));
 
 /** A configuration of two clauses: place 0 with an explicit salt and a label, places 1 and 2 with default salts. */
 const CONFIGURATION: Configuration = {
@@ -85,10 +95,7 @@ describe('placeMap', () => {
 
 describe('seed', () => {
   const places: GatheringPlace[] = placeMap(BODY, CONFIGURATION, STANDINGS, ACCOUNT);
-  const body = encodeAbiParameters(
-    [{ type: 'uint48' }, { type: 'bool' }, { type: 'tuple[]', components: [{ name: 'threshold', type: 'uint8' }, { name: 'credentials', type: 'bytes32[]' }] }],
-    [BODY.wait, BODY.ignoresPause, BODY.clauses.map((c) => ({ ...c, credentials: [...c.credentials] }))],
-  );
+  const body = encodeBody(BODY.clauses, BODY.wait, BODY.ignoresPause);
 
   it('starts an approval record with no replies at this build\'s version', () => {
     const { purpose, request } = approvalGathering(places, body);

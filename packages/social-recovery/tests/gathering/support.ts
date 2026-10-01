@@ -63,13 +63,19 @@ const CLAUSES_ABI = [
   { type: 'tuple[]', components: [{ name: 'threshold', type: 'uint8' }, { name: 'credentials', type: 'bytes32[]' }] },
 ] as const;
 
+/** The credential hash preimage's parameters, written out independently of the package. */
+export const CREDENTIAL_TEST_ABI = [{ type: 'address' }, { type: 'bytes' }, { type: 'bytes32' }] as const;
+
+/** The default salt preimage's parameters, written out independently of the package. */
+export const DEFAULT_SALT_TEST_ABI = [{ type: 'address' }, { type: 'uint256' }] as const;
+
 /** A setup body by viem's encoder. */
 export const encodeBody = (clauses: readonly { threshold: number; credentials: readonly Hex[] }[], wait = 172_800, ignoresPause = false): Hex =>
   encodeAbiParameters(CLAUSES_ABI, [wait, ignoresPause, clauses.map((c) => ({ ...c, credentials: [...c.credentials] }))]);
 
 /** A credential hash by viem's encoder. */
 export const credentialOf = (method: Address, config: Hex, salt: Hex): Hex =>
-  keccak256(encodeAbiParameters([{ type: 'address' }, { type: 'bytes' }, { type: 'bytes32' }], [method, config, salt]));
+  keccak256(encodeAbiParameters(CREDENTIAL_TEST_ABI, [method, config, salt]));
 
 /** A body over the given clauses of places, each credential hashed from the place-map entry at that place. */
 export function bodyOver(

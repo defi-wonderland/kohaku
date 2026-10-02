@@ -103,7 +103,7 @@ export function everyOpeningError(): [AttemptRequest, RequestValidationContext] 
   const second = OPENING.proofs[1]!;
 
   return [
-    { ...OPENING, attemptId: 9n, setupNonce: 4n, proofs: [second, second] },
+    { ...OPENING, attemptId: 9n, setupNonce: 4n, proofs: [second, second, { ...second, place: 5 }] },
     {
       ...REQUEST_CONTEXT,
       state: WAITING_STATE,

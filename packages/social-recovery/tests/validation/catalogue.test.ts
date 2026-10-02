@@ -113,6 +113,7 @@ describe('the finding catalogue', () => {
       'handover.new-holds-privilege',
       'handover.removed-not-authority',
       'handover.same-authority',
+      'proof.place-out-of-range',
       'proof.places-unordered',
       'request.attempt-active',
       'request.attempt-id',

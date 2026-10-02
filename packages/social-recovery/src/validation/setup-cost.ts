@@ -1,20 +1,21 @@
 import { FORMATS_SAFE_INTEGER_BITS } from '../constants';
-import { assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
+import { assertArray, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import type { Address, SetupDraft } from '../interfaces';
 import type { Findings, MethodCost, PlacedCredential } from '../types/validation';
-import { addError, assertArray } from './common';
+import { addError, methodTable } from './common';
 
-/** The cost table by checksummed method address, refusing a malformed entry. */
+/** The cost table by checksummed method address, refusing a malformed or repeated entry. */
 function costTable(costs: readonly MethodCost[]): Map<Address, number> {
   assertArray(costs, 'context.costs');
 
-  return new Map(
+  return methodTable(
     costs.map((entry, index) => {
       assertObject(entry, `context.costs[${index}]`);
       assertUintNumber(entry.gas, FORMATS_SAFE_INTEGER_BITS, `context.costs[${index}].gas`);
 
       return [normalizeAddress(entry.method, `context.costs[${index}].method`), entry.gas];
     }),
+    'context.costs',
   );
 }
 

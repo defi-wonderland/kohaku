@@ -20,7 +20,7 @@ export const requestWindowWidth = (facts: WindowFacts): number => facts.validUnt
 
 /**
  * The findings a request reaches at submission from its window and the moment alone:
- * `request.expired` once the moment is past `validUntil`, and `request.moment-skew` past
+ * `request.expired` once the moment or the pinned block's timestamp is past `validUntil`, and `request.moment-skew` past
  * `VALIDATION_MOMENT_SKEW_SECONDS` from the block's timestamp.
  * Throws a TypeError or RangeError on a malformed argument and never on a finding.
  */
@@ -31,8 +31,8 @@ export function submissionFindings(facts: WindowFacts, moment: Moment): Validati
   const warnings: ValidationWarning[] = [];
   const { validUntil, blockTimestamp } = facts;
 
-  if (moment > validUntil) {
-    errors.push({ code: 'request.expired', subject: 'request', values: { validUntil, moment } });
+  if (moment > validUntil || blockTimestamp > validUntil) {
+    errors.push({ code: 'request.expired', subject: 'request', values: { validUntil, moment, blockTimestamp } });
   }
 
   if (Math.abs(moment - blockTimestamp) > VALIDATION_MOMENT_SKEW_SECONDS) {

@@ -1,8 +1,8 @@
 import { assertObject, normalizeAddress } from '../formats/guards';
 import type { Address, ReadResult } from '../interfaces';
-import type { CheckedRequest, RequestValidationContext, SetupBody } from '../types';
-import type { Findings } from '../types/validation';
-import { addError, addWarning, normalizeAddresses } from './common';
+import type { CheckedRequest, Findings, RequestValidationContext } from '../types/validation';
+import { addError, addWarning, methodTable, normalizeAddresses } from './common';
+import { filledPerClause, satisfies } from './rule-count';
 
 /** `proof.places-unordered` for every proof whose place does not exceed the one before it. */
 export function placeOrderFindings(request: CheckedRequest, findings: Findings): void {
@@ -13,25 +13,24 @@ export function placeOrderFindings(request: CheckedRequest, findings: Findings):
   });
 }
 
-/** Per clause, the distinct filled places the proofs name inside that clause's run of places. */
-function filledPerClause(body: SetupBody, places: ReadonlySet<number>): number[] {
-  let start = 0;
-
-  return body.clauses.map(({ credentials }) => {
-    const end = start + credentials.length;
-    const filled = [...places].filter((place) => place >= start && place < end).length;
-
-    start = end;
-
-    return filled;
-  });
-}
-
-/** `request.rule-unsatisfied` per clause whose filled places miss its threshold, or once for a rule nothing satisfies. */
+/**
+ * `proof.place-out-of-range` per proof past the body's credential count, and `request.rule-unsatisfied`
+ * per clause whose filled places miss its threshold, or once for a rule nothing satisfies.
+ */
 export function ruleCountFindings(request: CheckedRequest, findings: Findings): void {
   const { body } = request;
 
   if (body === undefined) return;
+
+  const count = body.clauses.reduce((sum, { credentials }) => sum + credentials.length, 0);
+
+  for (const { place } of request.proofs) {
+    if (place >= count) addError(findings, 'proof.place-out-of-range', 'request', { place, count });
+  }
+
+  const places = request.proofs.map(({ place }) => place);
+
+  if (satisfies(body, places)) return;
 
   if (body.clauses.length === 0 || body.clauses.every(({ threshold }) => threshold === 0)) {
     addError(findings, 'request.rule-unsatisfied', 'request', {
@@ -42,24 +41,25 @@ export function ruleCountFindings(request: CheckedRequest, findings: Findings): 
     return;
   }
 
-  const filled = filledPerClause(body, new Set(request.proofs.map(({ place }) => place)));
+  const filled = filledPerClause(body, places);
 
   body.clauses.forEach(({ threshold }, clause) => {
-    const count = filled[clause] ?? 0;
+    const own = filled[clause] ?? 0;
 
-    if (count < threshold) addError(findings, 'request.rule-unsatisfied', 'request', { clause, threshold, filled: count });
+    if (own < threshold) addError(findings, 'request.rule-unsatisfied', 'request', { clause, threshold, filled: own });
   });
 }
 
-/** The pause reads by checksummed method, refusing a malformed entry. */
+/** The pause reads by checksummed method, refusing a malformed or repeated entry. */
 function pauseTable(context: RequestValidationContext): Map<Address, ReadResult<boolean>> {
-  return new Map(
+  return methodTable(
     context.paused.map((entry, index) => {
       assertObject(entry, `context.paused[${index}]`);
       assertObject(entry.paused, `context.paused[${index}].paused`);
 
       return [normalizeAddress(entry.method, `context.paused[${index}].method`), entry.paused];
     }),
+    'context.paused',
   );
 }
 

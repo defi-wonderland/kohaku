@@ -10,7 +10,7 @@ const SHARED = ['request.expired', 'request.window-short', 'request.moment-skew'
 function expectedCodes(validUntil: number, timestamp: number, moment: number, floor: number, consumableAfter?: number): string[] {
   const codes: string[] = [];
 
-  if (moment > validUntil) codes.push('request.expired');
+  if (moment > validUntil || timestamp > validUntil) codes.push('request.expired');
 
   if (validUntil - timestamp < floor) codes.push('request.window-short');
 

@@ -14,13 +14,13 @@ import {
   FORMATS_THRESHOLD_BITS,
   FORMATS_WAIT_BITS,
 } from '../constants';
-import { assertBool, assertBytes32, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
+import { assertArray, assertBool, assertBytes, assertBytes32, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import type { Clause, Configuration, Credential, Hex } from '../interfaces';
 import type { ClauseBytes, CredentialBytes } from '../types/encryption';
 import { bytesToHex, hexToBytes, writeUint } from './hex';
 
 function checkElements(items: unknown, what: string): readonly object[] {
-  if (!Array.isArray(items)) throw new TypeError(`${what} must be an array`);
+  assertArray(items, what);
 
   assertUintNumber(items.length, UINT16_BITS, `${what} count`);
 
@@ -57,6 +57,29 @@ function clauseBytes(clause: Clause, where: string): ClauseBytes {
 
 const credentialSize = (credential: CredentialBytes): number =>
   CREDENTIAL_FIXED_SIZE + credential.config.length + (credential.salt === undefined ? 0 : SALT_SIZE);
+
+/**
+ * The byte length `serializeConfigurationBytes` would produce, measured without refusing a field outside its width,
+ * so a config or a count past its length field is measured rather than refused.
+ */
+export function serializedConfigurationSize(configuration: Configuration): number {
+  assertObject(configuration, 'configuration');
+  assertArray(configuration.clauses, 'configuration.clauses');
+
+  return configuration.clauses.reduce((total: number, clause: Clause, index) => {
+    assertObject(clause, `configuration.clauses[${index}]`);
+    assertArray(clause.credentials, `configuration.clauses[${index}].credentials`);
+
+    return clause.credentials.reduce((sum: number, credential: Credential, position) => {
+      const where = `configuration.clauses[${index}].credentials[${position}]`;
+
+      assertObject(credential, where);
+      assertBytes(credential.config, `${where}.config`);
+
+      return sum + CREDENTIAL_FIXED_SIZE + (credential.config.length - 2) / 2 + (credential.salt === undefined ? 0 : SALT_SIZE);
+    }, total + CLAUSE_HEADER_SIZE);
+  }, HEADER_SIZE);
+}
 
 /** Writes the configuration's big-endian bytes; throws a TypeError or RangeError on a field outside its width. */
 export function serializeConfigurationBytes(configuration: Configuration): Uint8Array<ArrayBuffer> {

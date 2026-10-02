@@ -43,6 +43,7 @@ export const REQUEST_ERROR_CODES = [
   'request.rule-unsatisfied',
   'request.method-stopped',
   'proof.places-unordered',
+  'proof.place-out-of-range',
   'handover.removed-not-authority',
   'handover.new-holds-privilege',
   'handover.same-authority',

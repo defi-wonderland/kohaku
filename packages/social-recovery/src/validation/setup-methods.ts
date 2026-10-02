@@ -1,13 +1,13 @@
-import { assertBool, assertObject, normalizeAddress } from '../formats/guards';
+import { assertArray, assertBool, assertObject, normalizeAddress } from '../formats/guards';
 import type { Address, SetupDraft } from '../interfaces';
 import type { Findings, MethodReads, PlacedCredential, SetupValidationContext } from '../types/validation';
-import { addWarning, assertArray, normalizeAddresses } from './common';
+import { addWarning, methodTable, normalizeAddresses } from './common';
 
-/** The method reads by checksummed module address, refusing a malformed entry and a named method left unread. */
+/** The method reads by checksummed module address, refusing a malformed or repeated entry and a named method left unread. */
 function readsByMethod(methods: readonly MethodReads[], credentials: readonly PlacedCredential[]): Map<Address, MethodReads> {
   assertArray(methods, 'context.methods');
 
-  const table = new Map(
+  const table = methodTable(
     methods.map((reads, index): [Address, MethodReads] => {
       assertObject(reads, `context.methods[${index}]`);
       assertObject(reads.moduleInfo, `context.methods[${index}].moduleInfo`);
@@ -17,6 +17,7 @@ function readsByMethod(methods: readonly MethodReads[], credentials: readonly Pl
 
       return [normalizeAddress(reads.module, `context.methods[${index}].module`), reads];
     }),
+    'context.methods',
   );
 
   for (const { method } of credentials) {

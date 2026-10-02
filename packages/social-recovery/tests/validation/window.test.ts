@@ -20,7 +20,7 @@ describe('the shared window helper', () => {
     const result = windowFindings({ validUntil: T + 4_000, blockTimestamp: T }, T + 4_001, BOUNDS);
 
     expect(result.errors).toEqual([
-      { code: 'request.expired', subject: 'request', values: { validUntil: T + 4_000, moment: T + 4_001 } },
+      { code: 'request.expired', subject: 'request', values: { validUntil: T + 4_000, moment: T + 4_001, blockTimestamp: T } },
     ]);
   });
 
@@ -91,7 +91,7 @@ describe('the submission window helper', () => {
     const facts = { validUntil: T + 4_000, blockTimestamp: T };
 
     expect(submissionFindings(facts, T + 4_001)).toEqual({
-      errors: [{ code: 'request.expired', subject: 'request', values: { validUntil: T + 4_000, moment: T + 4_001 } }],
+      errors: [{ code: 'request.expired', subject: 'request', values: { validUntil: T + 4_000, moment: T + 4_001, blockTimestamp: T } }],
       warnings: [{ code: 'request.moment-skew', subject: 'request', values: { moment: T + 4_001, blockTimestamp: T, span: 900 } }],
     });
     expect(submissionFindings(facts, T + 900)).toEqual({ errors: [], warnings: [] });

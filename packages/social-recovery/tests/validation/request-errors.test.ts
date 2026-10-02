@@ -60,7 +60,7 @@ describe('validateRequest errors', () => {
     const onTime = { ...late, moment: T + 86_400 };
 
     expect(findingsOf(validateRequest(OPENING, late), 'request.expired')).toEqual([
-      { code: 'request.expired', subject: 'request', values: { validUntil: T + 86_400, moment: T + 86_401 } },
+      { code: 'request.expired', subject: 'request', values: { validUntil: T + 86_400, moment: T + 86_401, blockTimestamp: T + 86_000 } },
     ]);
     expect(errorCodes(OPENING, onTime)).toEqual([]);
   });

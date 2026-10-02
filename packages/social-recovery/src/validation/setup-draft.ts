@@ -1,8 +1,7 @@
 import { FORMATS_SAFE_INTEGER_BITS } from '../constants';
-import { assertBool, assertBytes, assertBytes32, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
+import { assertArray, assertBool, assertBytes, assertBytes32, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import { BACKUP_CHOICES, type Clause, type Credential, type Hex, type SetupDraft } from '../interfaces';
 import type { PlacedCredential } from '../types/validation';
-import { assertArray } from './common';
 
 /** Refuses a credential whose members are not the shapes the record declares, and returns it with its place. */
 function placed(value: unknown, clause: number, place: number, name: string): PlacedCredential {

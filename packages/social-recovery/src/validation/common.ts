@@ -1,4 +1,4 @@
-import { normalizeAddress } from '../formats/guards';
+import { assertArray, normalizeAddress } from '../formats/guards';
 import type { Address, ErrorCode, FindingSubject, FindingValues, ValidationResult, WarningCode } from '../interfaces';
 import type { Findings } from '../types/validation';
 
@@ -21,9 +21,17 @@ export function addAll(findings: Findings, result: ValidationResult): void {
   findings.warnings.push(...result.warnings);
 }
 
-/** Refuses anything but an array. */
-export function assertArray(value: unknown, name: string): asserts value is readonly unknown[] {
-  if (!Array.isArray(value)) throw new TypeError(`${name} must be an array`);
+/** A table keyed by method address, refusing a method that appears twice since one entry would silently replace the other. */
+export function methodTable<Value>(entries: readonly (readonly [Address, Value])[], name: string): Map<Address, Value> {
+  const table = new Map<Address, Value>();
+
+  for (const [method, value] of entries) {
+    if (table.has(method)) throw new TypeError(`${name} holds ${method} more than once`);
+
+    table.set(method, value);
+  }
+
+  return table;
 }
 
 /** The checksummed spellings of a list of addresses, refusing a malformed entry. */

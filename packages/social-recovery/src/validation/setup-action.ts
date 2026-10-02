@@ -1,7 +1,7 @@
-import { assertBool, assertObject, normalizeAddress } from '../formats/guards';
+import { assertArray, assertBool, assertObject, normalizeAddress } from '../formats/guards';
 import type { Address, KitNotification } from '../interfaces';
 import type { Findings, SetupEvent, SetupValidationContext } from '../types/validation';
-import { addError, addWarning, assertArray, normalizeAddresses } from './common';
+import { addError, addWarning, normalizeAddresses } from './common';
 
 /** The action's fit and audit findings: `action.unsupported`, `action.fit-unchecked` and `action.unaudited`. */
 export function actionFindings(context: SetupValidationContext, findings: Findings): void {

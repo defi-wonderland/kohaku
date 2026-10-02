@@ -5,18 +5,19 @@ import {
   FORMATS_SETUP_NONCE_BITS,
   FORMATS_VALID_UNTIL_BITS,
 } from '../constants';
-import { assertBool, assertBytes, assertObject, assertUintBigint, assertUintNumber, normalizeAddress } from '../formats/guards';
+import { assertArray, assertBool, assertBytes, assertBytes32, assertObject, assertUintBigint, assertUintNumber, normalizeAddress } from '../formats/guards';
 import { checkedPaymentOrder } from '../formats/payment-order';
 import { decodeSetupBody } from '../formats/setup-body';
 import type { AttemptRequest, CancelRequest, ProofPlace } from '../interfaces';
-import type { CheckedRequest, RequestValidationContext, SetupBody } from '../types';
-import { assertArray } from './common';
+import type { SetupBody } from '../types';
+import type { CheckedRequest, RequestValidationContext } from '../types/validation';
 
 /** One proof's place and method checked and the method checksummed; the order of places is judged, not refused. */
 function checkedProof(proof: ProofPlace, name: string): ProofPlace {
   assertObject(proof, name);
   assertUintNumber(proof.place, FORMATS_PLACE_BITS, `${name}.place`);
   assertBytes(proof.config, `${name}.config`);
+  assertBytes32(proof.salt, `${name}.salt`);
   assertBytes(proof.proof, `${name}.proof`);
 
   return { ...proof, method: normalizeAddress(proof.method, `${name}.method`) };

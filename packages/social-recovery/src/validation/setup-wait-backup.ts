@@ -1,12 +1,5 @@
-import {
-  BACKUP_CLAUSE_HEADER_SIZE,
-  BACKUP_CREDENTIAL_FIXED_SIZE,
-  BACKUP_HEADER_SIZE,
-  BACKUP_PADDING_SIZE,
-  BACKUP_SALT_SIZE,
-  FORMATS_SAFE_INTEGER_BITS,
-  VALIDATION_TIMESTAMP_MAX,
-} from '../constants';
+import { BACKUP_PADDING_SIZE, FORMATS_SAFE_INTEGER_BITS, VALIDATION_TIMESTAMP_MAX } from '../constants';
+import { serializedConfigurationSize } from '../encryption/serialize';
 import { assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import type { SetupDraft } from '../interfaces';
 import type { Findings, PlacedCredential, SetupValidationContext } from '../types/validation';
@@ -29,16 +22,6 @@ export function waitFindings(draft: SetupDraft, context: SetupValidationContext,
   else if (wait < shortWait) addWarning(findings, 'setup.wait-short', 'setup', { wait, shortWait, alertingOperated: false });
 }
 
-/** The plaintext size the draft's serialization would take, counted from the field sizes so that no width refuses it. */
-function plaintextSize(draft: SetupDraft, credentials: readonly PlacedCredential[]): number {
-  const credentialSizes = credentials.reduce(
-    (sum, { config, salt }) => sum + BACKUP_CREDENTIAL_FIXED_SIZE + (config.length - 2) / 2 + (salt === undefined ? 0 : BACKUP_SALT_SIZE),
-    0,
-  );
-
-  return BACKUP_HEADER_SIZE + draft.clauses.length * BACKUP_CLAUSE_HEADER_SIZE + credentialSizes;
-}
-
 /** The backup choice's findings: an encrypted plaintext past the padding size, a clear form, or no backup at all. */
 export function backupFindings(
   draft: SetupDraft,
@@ -50,7 +33,7 @@ export function backupFindings(
   const suppliedSaltPlaces = credentials.filter((credential) => credential.salt !== undefined).map(({ place }) => place);
 
   if (backup === 'encrypted') {
-    const size = plaintextSize(draft, credentials);
+    const size = serializedConfigurationSize(draft);
 
     if (size > BACKUP_PADDING_SIZE) {
       addError(findings, 'backup.too-wide', 'setup', { plaintextSize: size, paddingSize: BACKUP_PADDING_SIZE });

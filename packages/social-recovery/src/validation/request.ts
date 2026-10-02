@@ -1,5 +1,5 @@
 import type { AttemptRequest, CancelRequest, ValidationResult } from '../interfaces';
-import type { RequestValidationContext } from '../types/validation';
+import type { HandoverReads, RequestValidationContext } from '../types/validation';
 import { addAll, emptyFindings } from './common';
 import { handoverFindings } from './request-handover';
 import { assertRequestContext, checkedRequest } from './request-parse';
@@ -26,9 +26,10 @@ export function validateRequest(request: AttemptRequest | CancelRequest, context
   stoppedFindings(checked, context, findings);
   placeOrderFindings(checked, findings);
 
-  if (checked.opening && context.handover !== undefined) handoverFindings(context.handover, findings);
-
-  if (checked.opening) paymentFindings(checked.order, context, findings);
+  if (checked.opening) {
+    handoverFindings(context.handover as HandoverReads, findings);
+    paymentFindings(checked.order, context, findings);
+  }
 
   unservedFindings(checked, context, findings);
 

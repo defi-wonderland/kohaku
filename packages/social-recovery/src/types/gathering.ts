@@ -1,4 +1,4 @@
-import type { Gathering, GatheringPlace, Standing } from '../interfaces';
+import type { Gathering, GatheringPlace, Reply, Standing } from '../interfaces';
 
 /** What the init read for one place: its method's stop and pause holder and whether its config address holds code. */
 export type PlaceStanding = {
@@ -14,8 +14,9 @@ export type GatheringMembers = Gathering extends infer Record
     : never
   : never;
 
-/** One filled place: its map entry and the position its reply holds in the filing order. */
+/** One filled place: its map entry, its reply and the position that reply holds in the filing order. */
 export type FiledPlace = {
   readonly entry: GatheringPlace;
+  readonly reply: Reply;
   readonly filedAt: number;
 };

@@ -32,7 +32,8 @@
             "code": "request.expired",
             "values": {
               "validUntil": 1800000000,
-              "moment": 1800000001
+              "moment": 1800000001,
+              "blockTimestamp": 1799999700
             }
           }
         ]
@@ -229,7 +230,8 @@
             "code": "request.expired",
             "values": {
               "validUntil": 1800000000,
-              "moment": 1800001000
+              "moment": 1800001000,
+              "blockTimestamp": 1799999900
             }
           },
           {

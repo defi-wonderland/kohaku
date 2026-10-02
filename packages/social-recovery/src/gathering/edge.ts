@@ -2,10 +2,10 @@ import {
   FORMATS_AMOUNT_BITS,
   FORMATS_ATTEMPT_ID_BITS,
   FORMATS_CHAIN_ID_BITS,
+  FORMATS_DECIMAL_PATTERN,
   FORMATS_SAFE_INTEGER_BITS,
   FORMATS_SETUP_NONCE_BITS,
   FORMATS_VALID_UNTIL_BITS,
-  GATHERING_DECIMAL_PATTERN,
   GATHERING_KIND,
   GATHERING_UNREAD_RECORD_MESSAGE,
   GATHERING_VERSION,
@@ -16,10 +16,11 @@ import { assertUintBigint, assertUintNumber } from '../formats/guards';
 import type { Gathering, Hex } from '../interfaces';
 import type { WindowFacts } from '../types/validation';
 import type { CancellationMembers, SetupBody } from '../types';
+import type { FiledPlace } from '../types/gathering';
 
 /** A record decimal string as a bigint, refusing another spelling and a value outside [0, 2^bits). */
 export function decimalBigint(value: unknown, bits: number, name: string): bigint {
-  if (typeof value !== 'string' || !GATHERING_DECIMAL_PATTERN.test(value)) {
+  if (typeof value !== 'string' || !FORMATS_DECIMAL_PATTERN.test(value)) {
     throw new TypeError(`${name} must be a decimal string`);
   }
 
@@ -40,18 +41,39 @@ export function decimalNumber(value: unknown, bits: number, name: string): numbe
   return converted;
 }
 
+/** Whether the record is of the kind and version this build reads. */
+export function isGatheringRead(record: unknown): record is Gathering {
+  return (
+    typeof record === 'object' &&
+    record !== null &&
+    (record as Gathering).kind === GATHERING_KIND &&
+    (record as Gathering).version === GATHERING_VERSION
+  );
+}
+
 /** Throws where the record's kind or version is not the one this build reads. */
 export function assertGatheringRead(record: Gathering): void {
-  if (typeof record !== 'object' || record === null || record.kind !== GATHERING_KIND || record.version !== GATHERING_VERSION) {
+  if (!isGatheringRead(record)) {
     throw new TypeError(GATHERING_UNREAD_RECORD_MESSAGE);
   }
 }
 
-/** Each clause's threshold and places, a place being the flat index of a credential across the clauses in body order. */
-export function clausePlaces(body: SetupBody): readonly { readonly threshold: number; readonly places: readonly number[] }[] {
-  let next = 0;
+/** How many places the body names, one per credential across its clauses. */
+export const placeCount = (body: SetupBody): number => body.clauses.reduce((total, clause) => total + clause.credentials.length, 0);
 
-  return body.clauses.map((clause) => ({ threshold: clause.threshold, places: clause.credentials.map(() => next++) }));
+/** The places a filed reply fills, keyed by place: only places of the map, each at its first reply in filing order. */
+export function filedPlaces(record: Gathering): Map<number, FiledPlace> {
+  const filed = new Map<number, FiledPlace>();
+
+  record.replies.forEach((reply, filedAt) => {
+    const entry = record.places.find((candidate) => candidate.place === reply.place);
+
+    if (entry !== undefined && !filed.has(reply.place)) {
+      filed.set(reply.place, { entry, reply, filedAt });
+    }
+  });
+
+  return filed;
 }
 
 /** The members both digests share, converted from the record's decimal strings. */

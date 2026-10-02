@@ -1,6 +1,12 @@
 import type { SetupBody } from '../types';
 import type { FiledPlace } from '../types/gathering';
-import { clausePlaces } from './edge';
+import { clausePlaces } from '../validation';
+
+/** One clause's threshold beside its filled places, earliest filed first. */
+type ClausePool = {
+  readonly threshold: number;
+  readonly pool: readonly FiledPlace[];
+};
 
 /** Every way to pick `size` items from `items`, in order. */
 function combinations<T>(items: readonly T[], size: number): T[][] {
@@ -11,15 +17,23 @@ function combinations<T>(items: readonly T[], size: number): T[][] {
   return items.flatMap((item, index) => combinations(items.slice(index + 1), size - 1).map((rest) => [item, ...rest]));
 }
 
+/** Each clause's threshold and filled places in filing order, computed once per choice. */
+function clausePools(body: SetupBody, filled: ReadonlyMap<number, FiledPlace>): ClausePool[] {
+  return clausePlaces(body).map((places, clause) => ({
+    threshold: body.clauses[clause]?.threshold ?? 0,
+    pool: places
+      .map((place) => filled.get(place))
+      .filter((entry): entry is FiledPlace => entry !== undefined)
+      .sort((left, right) => left.filedAt - right.filedAt),
+  }));
+}
+
 /** Per clause the earliest-filed places among the allowed ones, as many as its threshold; undefined where a clause falls short. */
-function earliest(body: SetupBody, filled: ReadonlyMap<number, FiledPlace>, allowed: (entry: FiledPlace) => boolean): FiledPlace[] | undefined {
+function earliest(clauses: readonly ClausePool[], allowed: (entry: FiledPlace) => boolean): FiledPlace[] | undefined {
   const chosen: FiledPlace[] = [];
 
-  for (const { threshold, places } of clausePlaces(body)) {
-    const pool = places
-      .map((place) => filled.get(place))
-      .filter((entry): entry is FiledPlace => entry !== undefined && allowed(entry))
-      .sort((left, right) => left.filedAt - right.filedAt);
+  for (const { threshold, pool: all } of clauses) {
+    const pool = all.filter(allowed);
 
     if (pool.length < threshold) {
       return undefined;
@@ -47,7 +61,8 @@ function filedEarlier(left: readonly FiledPlace[], right: readonly FiledPlace[])
  */
 export function preferredSet(body: SetupBody, filled: ReadonlyMap<number, FiledPlace>): FiledPlace[] | undefined {
   const avoidsStopped = (entry: FiledPlace): boolean => body.ignoresPause || entry.entry.standing !== 'stopped';
-  const unstopped = earliest(body, filled, avoidsStopped) !== undefined;
+  const clauses = clausePools(body, filled);
+  const unstopped = earliest(clauses, avoidsStopped) !== undefined;
   const inPool = (entry: FiledPlace): boolean => !unstopped || avoidsStopped(entry);
   const stoppable = [
     ...new Set([...filled.values()].filter((entry) => inPool(entry) && entry.entry.stoppable).map((entry) => entry.entry.method.toLowerCase())),
@@ -59,8 +74,7 @@ export function preferredSet(body: SetupBody, filled: ReadonlyMap<number, FiledP
     for (const methods of combinations(stoppable, size)) {
       const named = new Set(methods);
       const candidate = earliest(
-        body,
-        filled,
+        clauses,
         (entry) => inPool(entry) && (!entry.entry.stoppable || named.has(entry.entry.method.toLowerCase())),
       );
 

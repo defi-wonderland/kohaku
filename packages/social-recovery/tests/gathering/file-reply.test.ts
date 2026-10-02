@@ -153,6 +153,26 @@ describe('fileReply refusals, one at a time', () => {
   });
 });
 
+describe('fileReply on a malformed proof or digest', () => {
+  const record = approvalGathering();
+
+  it.each([
+    ['an undefined proof', { proof: undefined }],
+    ['an odd-length proof', { proof: '0xabc' }],
+    ['a proof without its prefix', { proof: 'deadbeef' }],
+    ['a proof that is a number', { proof: 42 }],
+    ['an undefined digest', { digest: undefined }],
+    ['an odd-length digest', { digest: '0xabc' }],
+    ['a digest that is not hex', { digest: '0xzz' }],
+  ] as [string, Record<string, unknown>][])('throws a TypeError on %s rather than refusing', (_label, change) => {
+    expect(() => fileReply(record, { ...replyFor(record, 0), ...change } as Reply)).toThrow(TypeError);
+  });
+
+  it('files an empty proof, which is hex of whole bytes', () => {
+    expect(fileReply(record, replyFor(record, 0, { proof: '0x' })).outcome).toBe('filed');
+  });
+});
+
 describe('fileReply replacement', () => {
   it('a second reply at one place replaces the first in place and names it as displaced', () => {
     const record = approvalGathering();

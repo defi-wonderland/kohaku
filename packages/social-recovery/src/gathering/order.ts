@@ -1,17 +1,11 @@
-import {
-  GATHERING_EXPIRY_ONLY_BOUNDS,
-  GATHERING_RULE_UNSATISFIED_MESSAGE,
-  GATHERING_SELECTION_UNFILLED_MESSAGE,
-  GATHERING_WINDOW_PASSED_MESSAGE,
-} from '../constants';
+import { GATHERING_RULE_UNSATISFIED_MESSAGE, GATHERING_SELECTION_UNFILLED_MESSAGE, GATHERING_WINDOW_PASSED_MESSAGE } from '../constants';
 import { normalizeAddress } from '../formats/guards';
 import { decodeSetupBody } from '../formats/setup-body';
 import type { Gathering, Moment, ProofPlace, Reply, Selection } from '../interfaces';
 import type { FiledPlace } from '../types/gathering';
-import { windowFindings } from '../validation/window';
+import { satisfies, submissionFindings } from '../validation';
 import { preferredSet } from './choose';
-import { assertGatheringRead, windowFactsOf } from './edge';
-import { clauseCounts, satisfies } from './rule';
+import { assertGatheringRead, filedPlaces, windowFactsOf } from './edge';
 
 /** The filed place's reply as the proof it submits. */
 const proofOf = (reply: Reply): ProofPlace => ({
@@ -25,33 +19,24 @@ const proofOf = (reply: Reply): ProofPlace => ({
 /**
  * The proof places a completion submits, strictly increasing by place: the selection where one is given,
  * otherwise the preferred satisfying set among the filed replies.
+ * A selection is taken as given: the preference against stopped methods is not applied to it.
  * Throws where the window has passed at `now`, where the replies or the selection do not satisfy the rule,
  * and where the selection names a place no reply fills.
  */
 export function order(record: Gathering, selection: Selection | undefined, now: Moment): ProofPlace[] {
   assertGatheringRead(record);
 
-  if (windowFindings(windowFactsOf(record), now, GATHERING_EXPIRY_ONLY_BOUNDS).errors.length > 0) {
+  if (submissionFindings(windowFactsOf(record), now).errors.length > 0) {
     throw new RangeError(GATHERING_WINDOW_PASSED_MESSAGE);
   }
 
   const body = decodeSetupBody(record.request.setupBody);
-  const replies = new Map<number, Reply>();
-  const filled = new Map<number, FiledPlace>();
-
-  record.replies.forEach((reply, filedAt) => {
-    const entry = record.places.find((candidate) => candidate.place === reply.place);
-
-    if (entry !== undefined && !filled.has(reply.place)) {
-      replies.set(reply.place, reply);
-      filled.set(reply.place, { entry, filedAt });
-    }
-  });
+  const filled = filedPlaces(record);
 
   let chosen: number[];
 
   if (selection === undefined) {
-    const preferred = satisfies(clauseCounts(body, new Set(filled.keys()))) ? preferredSet(body, filled) : undefined;
+    const preferred = satisfies(body, filled.keys()) ? preferredSet(body, filled) : undefined;
 
     if (preferred === undefined) {
       throw new RangeError(GATHERING_RULE_UNSATISFIED_MESSAGE);
@@ -65,12 +50,12 @@ export function order(record: Gathering, selection: Selection | undefined, now: 
       throw new RangeError(GATHERING_SELECTION_UNFILLED_MESSAGE);
     }
 
-    if (!satisfies(clauseCounts(body, new Set(chosen)))) {
+    if (!satisfies(body, chosen)) {
       throw new RangeError(GATHERING_RULE_UNSATISFIED_MESSAGE);
     }
   }
 
   return chosen
     .sort((left, right) => left - right)
-    .map((place) => proofOf(replies.get(place) as Reply));
+    .map((place) => proofOf((filled.get(place) as FiledPlace).reply));
 }

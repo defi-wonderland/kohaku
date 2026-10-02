@@ -4,7 +4,7 @@ import { STANDINGS } from '../interfaces';
 import type { Address, Configuration, Credential, GatheringPlace, Hex } from '../interfaces';
 import { defaultSalt } from '../salts';
 import type { PlaceStanding, SetupBody } from '../types';
-import { clausePlaces } from './edge';
+import { placeCount } from './edge';
 
 /** Refuses a standing reading that is not one of the place's three facts. */
 function checkedStanding(reading: PlaceStanding | undefined, place: number): PlaceStanding {
@@ -34,7 +34,7 @@ export function placeMap(
   assertObject(body, 'body');
   assertObject(configuration, 'configuration');
 
-  const total = clausePlaces(body).flatMap((clause) => clause.places).length;
+  const total = placeCount(body);
 
   if (!Array.isArray(standings) || standings.length !== total) {
     throw new RangeError(`standings must hold one reading per place, ${total}`);

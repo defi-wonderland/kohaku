@@ -110,6 +110,14 @@ describe('order: the selection', () => {
     expect(order(stopped, [0, 1, 2], NOW).map((p) => p.place)).toStrictEqual([0, 1, 2]);
   });
 
+  it('a selection naming a stopped place is accepted while stops reach the setup', () => {
+    const places = [placeEntry(0, { standing: 'stopped', stoppable: true }), placeEntry(1)];
+    const stopped = withReplies(approvalGathering(places, bodyOver([{ threshold: 1, places: [0, 1] }], places, false)), [0, 1]);
+
+    expect(order(stopped, undefined, NOW).map((p) => p.place)).toStrictEqual([1]);
+    expect(order(stopped, [0], NOW).map((p) => p.place)).toStrictEqual([0]);
+  });
+
   it('a selection naming a place no reply fills is refused, even when its filled part satisfies', () => {
     const partial = withReplies(approvalGathering(), [0, 1, 2]);
 

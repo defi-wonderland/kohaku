@@ -1,7 +1,7 @@
-import { FORMATS_ATTEMPT_ID_BITS, FORMATS_CHAIN_ID_BITS, GATHERING_KIND, GATHERING_REPLY_KIND, GATHERING_REPLY_VERSION, GATHERING_VERSION } from '../constants';
-import { normalizeAddress } from '../formats/guards';
+import { FORMATS_ATTEMPT_ID_BITS, FORMATS_CHAIN_ID_BITS, GATHERING_REPLY_KIND, GATHERING_REPLY_VERSION } from '../constants';
+import { assertBytes, normalizeAddress } from '../formats/guards';
 import type { AddRefusalCause, AddResult, Gathering, GatheringPlace, Reply } from '../interfaces';
-import { decimalBigint, digestFor } from './edge';
+import { decimalBigint, digestFor, isGatheringRead } from './edge';
 
 /** Whether a check holds, a malformed value counting as a failed one rather than a thrown error. */
 function holds(check: () => boolean): boolean {
@@ -34,15 +34,21 @@ function bindingMatches(record: Gathering, reply: Reply): boolean {
   );
 }
 
-/** The first reason the reply cannot be filed, or none. */
+/**
+ * The first reason the reply cannot be filed, or none.
+ * Throws a TypeError where a readable reply's proof or digest is not hex of whole bytes.
+ */
 function refusalOf(record: Gathering, reply: Reply): { cause: AddRefusalCause } | { place: GatheringPlace } {
   const readable =
-    typeof record === 'object' && record !== null && record.kind === GATHERING_KIND && record.version === GATHERING_VERSION &&
+    isGatheringRead(record) &&
     typeof reply === 'object' && reply !== null && reply.kind === GATHERING_REPLY_KIND && reply.version === GATHERING_REPLY_VERSION;
 
   if (!readable) {
     return { cause: 'kind-or-version-unread' };
   }
+
+  assertBytes(reply.proof, 'reply.proof');
+  assertBytes(reply.digest, 'reply.digest');
 
   if (!bindingMatches(record, reply)) {
     return { cause: 'binding-mismatch' };
@@ -68,6 +74,7 @@ function refusalOf(record: Gathering, reply: Reply): { cause: AddRefusalCause } 
 /**
  * Files a reply into a new record, replacing in place a reply already filed for its place and naming it as displaced.
  * A refusal comes back as the typed result with an unchanged copy of the record; the proof itself is not judged.
+ * Throws a TypeError where the reply's proof or digest is not hex of whole bytes.
  */
 export function fileReply(record: Gathering, reply: Reply): AddResult {
   const verdict = refusalOf(record, reply);

@@ -3,12 +3,14 @@ import { count, fileReply, order, placeMap, requests, seed, type Configuration, 
 import {
   ACCOUNT,
   approvalGathering,
+  bodyOver,
   cancellationGathering,
   credentialOf,
   deepFreeze,
   FLOOR,
   METHOD,
   PINNED_AT,
+  placeEntry,
   replyFor,
   sharedObjects,
 } from './support';
@@ -83,14 +85,15 @@ describe.each([
   });
 
   it('seed mutates neither argument and shares no object with them', () => {
-    const { record } = frozenCase(make);
+    const places = deepFreeze([0, 1, 2].map((p) => placeEntry(p)));
+    const record = make(places, bodyOver([{ threshold: 1, places: [0] }, { threshold: 2, places: [1, 2] }], places));
     const members = deepFreeze({ purpose: record.purpose, request: record.request } as Parameters<typeof seed>[0]);
-    const snapshot = structuredClone(members);
-    const seeded = seed(members, record.places);
+    const snapshot = structuredClone({ members, places });
+    const seeded = seed(members, places);
 
-    expect(members).toStrictEqual(snapshot);
+    expect({ members, places }).toStrictEqual(snapshot);
     expect(seeded.replies).toStrictEqual([]);
-    expect(sharedObjects(seeded, [members, record.places])).toStrictEqual([]);
+    expect(sharedObjects(seeded, [members, places])).toStrictEqual([]);
   });
 });
 

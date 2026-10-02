@@ -1,5 +1,3 @@
-import type { RequestWindowBounds } from '../interfaces/records';
-
 /** The gathering record's kind. */
 export const GATHERING_KIND = 'gathering';
 
@@ -17,12 +15,6 @@ export const GATHERING_REPLY_KIND = 'recovery-proof-reply';
 
 /** The approver reply's version this build reads. */
 export const GATHERING_REPLY_VERSION = 1;
-
-/** A non-negative decimal integer without leading zeros, the spelling of a record's large numbers. */
-export const GATHERING_DECIMAL_PATTERN = /^(?:0|[1-9][0-9]*)$/;
-
-/** Window bounds with a zero floor, for reading only whether a window has passed. */
-export const GATHERING_EXPIRY_ONLY_BOUNDS: RequestWindowBounds = { default: 0, floor: 0 };
 
 /** Thrown where a gathering record's kind or version is not the one this build reads. */
 export const GATHERING_UNREAD_RECORD_MESSAGE = 'gathering record: kind or version this build does not read';

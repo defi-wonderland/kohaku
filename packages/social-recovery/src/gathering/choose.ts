@@ -2,13 +2,19 @@ import type { SetupBody } from '../types';
 import type { ClausePool, FiledPlace } from '../types/gathering';
 import { clausePlaces } from '../validation';
 
-/** Every way to pick `size` items from `items`, in order. */
-function combinations<T>(items: readonly T[], size: number): T[][] {
-  if (size === 0) {
-    return [[]];
+/** Every way to pick `size` items from `items`, in order, yielded one at a time so memory stays linear in `items`. */
+export function* combinations<T>(items: readonly T[], size: number, start = 0, prefix: T[] = []): Generator<T[]> {
+  if (prefix.length === size) {
+    yield [...prefix];
+
+    return;
   }
 
-  return items.flatMap((item, index) => combinations(items.slice(index + 1), size - 1).map((rest) => [item, ...rest]));
+  for (let index = start; index < items.length; index++) {
+    prefix.push(items[index] as T);
+    yield* combinations(items, size, index + 1, prefix);
+    prefix.pop();
+  }
 }
 
 /** Each clause's threshold and filled places in filing order, computed once per choice. */

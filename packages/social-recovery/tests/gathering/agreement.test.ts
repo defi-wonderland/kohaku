@@ -60,6 +60,7 @@ describe('order\'s expiry refusal', () => {
     expect(Object.keys(entry)).not.toContain('GATHERING_EXPIRY_ONLY_BOUNDS');
     expect(Object.keys(entry)).not.toContain('GATHERING_DECIMAL_PATTERN');
     expect(Object.keys(entry)).toContain('FORMATS_DECIMAL_PATTERN');
+    expect(Object.keys(entry)).not.toContain('combinations');
   });
 });
 

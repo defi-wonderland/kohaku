@@ -20,3 +20,9 @@ export type FiledPlace = {
   readonly reply: Reply;
   readonly filedAt: number;
 };
+
+/** One clause's threshold beside its filled places, earliest filed first. */
+export type ClausePool = {
+  readonly threshold: number;
+  readonly pool: readonly FiledPlace[];
+};

@@ -1,12 +1,6 @@
 import type { SetupBody } from '../types';
-import type { FiledPlace } from '../types/gathering';
+import type { ClausePool, FiledPlace } from '../types/gathering';
 import { clausePlaces } from '../validation';
-
-/** One clause's threshold beside its filled places, earliest filed first. */
-type ClausePool = {
-  readonly threshold: number;
-  readonly pool: readonly FiledPlace[];
-};
 
 /** Every way to pick `size` items from `items`, in order. */
 function combinations<T>(items: readonly T[], size: number): T[][] {

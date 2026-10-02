@@ -6,6 +6,7 @@ import {
   FORMATS_CANCELLATION_PRIMARY_TYPE,
   FORMATS_CANCELLATION_TYPED_DATA_TYPES,
   FORMATS_CHAIN_ID_BITS,
+  FORMATS_DECIMAL_PATTERN,
   FORMATS_DIGEST_DOMAIN_NAME,
   DIGEST_VERSION,
   FORMATS_PLACE_BITS,
@@ -31,7 +32,11 @@ function domainOf(members: CancellationMembers): TypedDataDomain {
 
   const manager = normalizeAddress(members.manager, 'manager');
 
-  return { name: FORMATS_DIGEST_DOMAIN_NAME, version: DIGEST_VERSION, chainId: members.chainId, verifyingContract: manager };
+  if (members.digestVersion !== undefined && (typeof members.digestVersion !== 'string' || !FORMATS_DECIMAL_PATTERN.test(members.digestVersion))) {
+    throw new TypeError('digestVersion must be a non-empty decimal string');
+  }
+
+  return { name: FORMATS_DIGEST_DOMAIN_NAME, version: members.digestVersion ?? DIGEST_VERSION, chainId: members.chainId, verifyingContract: manager };
 }
 
 /** The members both messages share, each checked against its width, addresses checksummed. */

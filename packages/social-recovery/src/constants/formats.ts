@@ -95,6 +95,9 @@ export const FORMATS_AMOUNT_BITS = 256;
 /** Whole bytes as 0x-prefixed hex, any length including zero. */
 export const FORMATS_HEX_BYTES_PATTERN = /^0x(?:[0-9a-fA-F]{2})*$/;
 
+/** A non-negative decimal integer without leading zeros, the spelling of a record's large numbers and of a digest version. */
+export const FORMATS_DECIMAL_PATTERN = /^(?:0|[1-9][0-9]*)$/;
+
 /** Exactly 32 bytes as 0x-prefixed hex. */
 export const FORMATS_HEX_BYTES32_PATTERN = /^0x[0-9a-fA-F]{64}$/;
 

@@ -55,6 +55,11 @@ export function assertBool(value: unknown, name: string): asserts value is boole
   }
 }
 
+/** Refuses anything but an array. */
+export function assertArray(value: unknown, name: string): asserts value is readonly unknown[] {
+  if (!Array.isArray(value)) throw new TypeError(`${name} must be an array`);
+}
+
 /** Refuses a non-integer with a `TypeError`, and a value outside [0, 2^bits) or the safe-integer range with a `RangeError`. */
 export function assertUintNumber(value: unknown, bits: number, name: string): asserts value is number {
   if (typeof value !== 'number' || !Number.isInteger(value)) {

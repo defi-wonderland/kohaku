@@ -154,6 +154,7 @@ const REQUEST_ERRORS = [
   'request.rule-unsatisfied',
   'request.method-stopped',
   'proof.places-unordered',
+  'proof.place-out-of-range',
   'handover.removed-not-authority',
   'handover.new-holds-privilege',
   'handover.same-authority',
@@ -166,7 +167,6 @@ const REQUEST_WARNINGS = [
   'method.unshipped', // also a setup warning, so the ValidationWarning union holds it once
   'payment.open-payee',
   'payment.token-unknown',
-  'request.window-wide',
   'request.window-short',
   'request.moment-skew',
   'cancel.window-late',
@@ -304,24 +304,24 @@ describe('the finding codes', () => {
   it.each([
     ['setup errors', SETUP_ERROR_CODES, SETUP_ERRORS, 11],
     ['setup warnings', SETUP_WARNING_CODES, SETUP_WARNINGS, 15],
-    ['request errors', REQUEST_ERROR_CODES, REQUEST_ERRORS, 14],
-    ['request warnings', REQUEST_WARNING_CODES, REQUEST_WARNINGS, 9],
+    ['request errors', REQUEST_ERROR_CODES, REQUEST_ERRORS, 15],
+    ['request warnings', REQUEST_WARNING_CODES, REQUEST_WARNINGS, 8],
   ] as const)('the %s tuple is the table, in its order', (_label, tuple, table, count) => {
     expect(table).toHaveLength(count);
     expect([...tuple]).toEqual(table);
   });
 
-  it("ValidationError's code is the setup and request errors together, twenty-five codes", () => {
+  it("ValidationError's code is the setup and request errors together, twenty-six codes", () => {
     const expected = sorted([...new Set([...SETUP_ERRORS, ...REQUEST_ERRORS])]);
 
-    expect(expected).toHaveLength(25);
+    expect(expected).toHaveLength(26);
     expect(literalsOf('ValidationError', 'code')).toEqual(expected);
   });
 
   it("ValidationWarning's code is the setup and request warnings together, method.unshipped once", () => {
     const expected = sorted([...new Set([...SETUP_WARNINGS, ...REQUEST_WARNINGS])]);
 
-    expect(expected).toHaveLength(23);
+    expect(expected).toHaveLength(22);
     expect(literalsOf('ValidationWarning', 'code')).toEqual(expected);
   });
 

@@ -1,7 +1,7 @@
 import { decodeAbiParameters, encodeAbiParameters } from 'viem';
 import { FORMATS_SETUP_BODY_ABI, FORMATS_THRESHOLD_BITS, FORMATS_WAIT_BITS } from '../constants';
 import type { Hex } from '../interfaces';
-import { assertBool, assertBytes32, assertObject, assertUintNumber } from './guards';
+import { assertArray, assertBool, assertBytes32, assertObject, assertUintNumber } from './guards';
 import { decodeStrictly } from './strict';
 import type { BodyClause, SetupBody } from '../types';
 
@@ -11,16 +11,12 @@ function assertSetupBody(body: SetupBody): void {
   assertUintNumber(body.wait, FORMATS_WAIT_BITS, 'wait');
   assertBool(body.ignoresPause, 'ignoresPause');
 
-  if (!Array.isArray(body.clauses)) {
-    throw new TypeError('clauses must be an array');
-  }
+  assertArray(body.clauses, 'clauses');
 
   body.clauses.forEach((clause: BodyClause, index) => {
     assertUintNumber(clause.threshold, FORMATS_THRESHOLD_BITS, `clauses[${index}].threshold`);
 
-    if (!Array.isArray(clause.credentials)) {
-      throw new TypeError(`clauses[${index}].credentials must be an array`);
-    }
+    assertArray(clause.credentials, `clauses[${index}].credentials`);
 
     clause.credentials.forEach((credential, position) => {
       assertBytes32(credential, `clauses[${index}].credentials[${position}]`);

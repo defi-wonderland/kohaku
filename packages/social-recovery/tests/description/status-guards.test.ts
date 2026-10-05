@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { describeStatus, type KitNotification, type RecoveryState, type SetupState } from '../../src/index';
-import { at, paused, METHOD_A, RECOVERY_STATE, SCOPE, SETUP_STATE } from './status-fixtures';
+import { at, paused, METHOD_A, PAYLOAD, RECOVERY_STATE, SCOPE, SETUP_STATE, started } from './status-fixtures';
 
 const call = (setup: unknown, recovery: unknown, latest: readonly unknown[]) => () =>
   describeStatus(setup as SetupState, recovery as RecoveryState, latest as KitNotification[], SCOPE);
@@ -39,6 +39,20 @@ describe('describeStatus refuses records missing what it reads, naming the membe
     ['that is not an object', 'method-paused', 'latest[1]'],
   ])('throws a TypeError for a notification %s', (_case, notification, member) => {
     const latest = [paused(METHOD_A, at(90)), notification];
+
+    expect(call(SETUP_STATE, RECOVERY_STATE, latest)).toThrow(TypeError);
+    expect(call(SETUP_STATE, RECOVERY_STATE, latest)).toThrow(naming(member));
+  });
+
+  it.each<readonly [string, Record<string, unknown>, string]>([
+    ['without a payload', { payload: undefined }, 'latest[1].payload'],
+    ['with a non-hex payload', { payload: '0xzz' }, 'latest[1].payload'],
+    ['without usedPlaces', { usedPlaces: undefined }, 'latest[1].usedPlaces'],
+    ['with a number among usedPlaces', { usedPlaces: [0n, 2] }, 'latest[1].usedPlaces[1]'],
+    ['with a non-address account', { account: 'alice' }, 'latest[1].account'],
+    ['with a number attempt id', { attemptId: 5 }, 'latest[1].attemptId'],
+  ])('throws a TypeError for an opening notification %s', (_case, change, member) => {
+    const latest = [paused(METHOD_A, at(90)), { ...started(5n, [0n, 2n], PAYLOAD, at(91)), ...change }];
 
     expect(call(SETUP_STATE, RECOVERY_STATE, latest)).toThrow(TypeError);
     expect(call(SETUP_STATE, RECOVERY_STATE, latest)).toThrow(naming(member));

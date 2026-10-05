@@ -1,4 +1,13 @@
-import { assertArray, assertBool, assertBytes32, assertObject, normalizeAddress, sameAddress } from '../formats/guards';
+import {
+  assertAddress,
+  assertArray,
+  assertBool,
+  assertBytes,
+  assertBytes32,
+  assertObject,
+  normalizeAddress,
+  sameAddress,
+} from '../formats/guards';
 import type {
   KitNotification,
   MethodStopNotification,
@@ -69,6 +78,19 @@ function assertCount(value: unknown, name: string): void {
   }
 }
 
+/** Refuses an opening notification whose members the attempt reads are not the shapes they declare. */
+function assertOpening(opening: OpeningNotification, name: string): void {
+  if (typeof opening.attemptId !== 'bigint') throw new TypeError(`${name}.attemptId must be a bigint`);
+
+  assertAddress(opening.account, `${name}.account`);
+  assertAddress(opening.action, `${name}.action`);
+  assertArray(opening.usedPlaces, `${name}.usedPlaces`);
+  opening.usedPlaces.forEach((place, position) => {
+    if (typeof place !== 'bigint') throw new TypeError(`${name}.usedPlaces[${position}] must be a bigint`);
+  });
+  assertBytes(opening.payload, `${name}.payload`);
+}
+
 /** Refuses records and notifications whose members this description reads are not the shapes they declare. */
 function assertStatusInputs(setupState: SetupState, recoveryState: RecoveryState, latest: readonly KitNotification[]): void {
   assertObject(setupState, 'setupState');
@@ -95,6 +117,8 @@ function assertStatusInputs(setupState: SetupState, recoveryState: RecoveryState
     assertCount(notification.at.blockNumber, `latest[${index}].at.blockNumber`);
     assertCount(notification.at.logIndex, `latest[${index}].at.logIndex`);
     assertBool(notification.at.removed, `latest[${index}].at.removed`);
+
+    if (isOpening(notification)) assertOpening(notification, `latest[${index}]`);
   });
 }
 

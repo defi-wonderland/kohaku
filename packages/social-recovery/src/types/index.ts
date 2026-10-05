@@ -12,3 +12,10 @@ export type {
   WindowFacts,
 } from './validation';
 export type { GatheringMembers, PlaceStanding } from './gathering';
+export type {
+  ActionCodecRegistry,
+  CandidateKeyAuthority,
+  MethodDescriptionReads,
+  SetupDescriptionContext,
+  StatusScope,
+} from './description';

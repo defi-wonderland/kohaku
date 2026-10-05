@@ -4,11 +4,11 @@ import type { Findings, MethodReads, PlacedCredential, SetupValidationContext } 
 import { addWarning, methodTable, normalizeAddresses } from './common';
 
 /** The method reads by checksummed module address, refusing a malformed or repeated entry and a named method left unread. */
-function readsByMethod(methods: readonly MethodReads[], credentials: readonly PlacedCredential[]): Map<Address, MethodReads> {
+export function readsByMethod(methods: readonly MethodReads[], credentials: readonly PlacedCredential[]): Map<Address, MethodReads> {
   assertArray(methods, 'context.methods');
 
   const table = methodTable(
-    methods.map((reads, index): [Address, MethodReads] => {
+    Array.from(methods, (reads, index): [Address, MethodReads] => {
       assertObject(reads, `context.methods[${index}]`);
       assertObject(reads.moduleInfo, `context.methods[${index}].moduleInfo`);
       assertObject(reads.trustedParties, `context.methods[${index}].trustedParties`);

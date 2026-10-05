@@ -9,6 +9,7 @@ import {
   MANAGER_ROWS,
   PANIC_SELECTOR,
   revertData,
+  rowNamed,
   samplesFor,
 } from './rows';
 
@@ -21,9 +22,9 @@ describe('decodeRevert names every declared error with its arguments', () => {
     expect(result).toEqual({ known: true, source: entry.source, name: entry.name, selector: entry.selector, args });
   });
 
-  it('attributes the twenty-one manager rows to the manager and the four action rows to the action', () => {
+  it('attributes the twenty-one manager rows to the manager and the five action rows to the action', () => {
     expect(MANAGER_ROWS).toHaveLength(21);
-    expect(ACTION_ROWS).toHaveLength(4);
+    expect(ACTION_ROWS).toHaveLength(5);
 
     for (const entry of KIT_ROWS) {
       const result = decodeRevert(revertData(entry, samplesFor(entry, 3)));
@@ -55,9 +56,7 @@ describe('decodeRevert names every declared error with its arguments', () => {
   });
 
   it('reads NotConsumable\'s attempt state as the enum\'s integer', () => {
-    const notConsumable = ACTION_ROWS.find((entry) => entry.name === 'NotConsumable');
-
-    if (notConsumable === undefined) throw new Error('fixture lacks NotConsumable');
+    const notConsumable = rowNamed('RecoveryAction_NotConsumable');
 
     const account: Hex = '0x1111111111111111111111111111111111111111';
     const hash: Hex = `0x${'ef'.repeat(32)}`;
@@ -67,12 +66,54 @@ describe('decodeRevert names every declared error with its arguments', () => {
   });
 
   it('returns the bytes argument of MalformedHandover as lower-case hex, empty bytes included', () => {
-    const malformed = ACTION_ROWS.find((entry) => entry.name === 'MalformedHandover');
-
-    if (malformed === undefined) throw new Error('fixture lacks MalformedHandover');
+    const malformed = rowNamed('RecoveryAction_MalformedHandover');
 
     expect(decodeRevert(revertData(malformed, ['0xABCDEF']))).toMatchObject({ args: { payload: '0xabcdef' } });
     expect(decodeRevert(revertData(malformed, ['0x']))).toMatchObject({ known: true, args: { payload: '0x' } });
+  });
+});
+
+describe('decodeRevert names each error under the prefix its contract declares', () => {
+  it('names every manager row PolicyManager_ and every action row RecoveryAction_', () => {
+    for (const entry of MANAGER_ROWS) expect(decodeRevert(revertData(entry, samplesFor(entry, 6)))).toMatchObject({ name: entry.name });
+
+    expect(MANAGER_ROWS.every((entry) => entry.name.startsWith('PolicyManager_'))).toBe(true);
+    expect(ACTION_ROWS.every((entry) => entry.name.startsWith('RecoveryAction_'))).toBe(true);
+  });
+
+  it('decodes PolicyManager_NoSetup under its pinned selector 0x912e69d3 with both addresses checksummed', () => {
+    const account: Hex = '0x52908400098527886e0f7030069857d2e4169ee7';
+    const action: Hex = '0x8617e340b3d01fa5f11f306f4090fd50e238070d';
+    const data: Hex = `0x912e69d3${'00'.repeat(12)}${account.slice(2)}${'00'.repeat(12)}${action.slice(2)}`;
+
+    expect(decodeRevert(data)).toEqual({
+      known: true,
+      source: 'manager',
+      name: 'PolicyManager_NoSetup',
+      selector: '0x912e69d3',
+      args: { account: '0x52908400098527886E0F7030069857D2E4169EE7', action: '0x8617E340B3D01FA5F11F306F4090FD50E238070D' },
+    });
+  });
+
+  it.each([
+    ['RecoveryAction_NotAKey', '0x63add869'],
+    ['RecoveryAction_AlreadyPrivileged', '0xd2221b55'],
+  ] as const)('decodes the action\'s %s under %s', (name, selector) => {
+    // An address whose EIP-55 checksum is all lower case, so it comes back unchanged.
+    const authority: Hex = '0xde709f2102306220921060314715629080e2fb77';
+    const result = decodeRevert(`${selector}${'00'.repeat(12)}${authority.slice(2)}`);
+
+    expect(result).toEqual({
+      known: true,
+      source: 'action',
+      name,
+      selector,
+      args: { authority },
+    });
+  });
+
+  it('no longer names the retired ReservedAuthority(address) selector', () => {
+    expect(decodeRevert(`0x58c9302f${'00'.repeat(12)}${'11'.repeat(20)}`)).toMatchObject({ known: false, selector: '0x58c9302f' });
   });
 });
 

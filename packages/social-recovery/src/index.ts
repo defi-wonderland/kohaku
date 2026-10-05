@@ -11,3 +11,4 @@ export * from './gathering';
 export * from './description';
 export * from './errors';
 export * from './recovery-action';
+export * from './policy-manager';

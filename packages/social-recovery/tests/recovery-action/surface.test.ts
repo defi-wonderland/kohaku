@@ -1,7 +1,7 @@
 import { encodeFunctionData } from 'viem';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import * as entry from '../../src/index';
-import type { IActionCodec, IRecoveryActionArming, IRecoveryActionInteractor, PreparedCall } from '../../src/index';
+import type { IActionCodec, IRecoveryActionArming, IRecoveryActionInteractor, PinnedBlock, PreparedCall } from '../../src/index';
 import { ACCOUNT, ACTION, partOver, SELECTORS, word } from './fixtures';
 import { providerDouble } from './provider-double';
 
@@ -27,8 +27,8 @@ describe('the core entry', () => {
 describe('the arming seam', () => {
   it('keeps armingCall off the interactor interface and disarmingCall on it', () => {
     expectTypeOf<IRecoveryActionInteractor>().not.toHaveProperty('armingCall');
-    expectTypeOf<IRecoveryActionInteractor>().toHaveProperty('disarmingCall').toEqualTypeOf<() => Promise<PreparedCall>>();
-    expectTypeOf<IRecoveryActionArming>().toHaveProperty('armingCall').toEqualTypeOf<() => Promise<PreparedCall>>();
+    expectTypeOf<IRecoveryActionInteractor>().toHaveProperty('disarmingCall').toEqualTypeOf<(block?: PinnedBlock) => Promise<PreparedCall>>();
+    expectTypeOf<IRecoveryActionArming>().toHaveProperty('armingCall').toEqualTypeOf<(block?: PinnedBlock) => Promise<PreparedCall>>();
   });
 
   it('hides armingCall from a value typed as the interactor', () => {
@@ -45,14 +45,17 @@ describe('the arming seam', () => {
 });
 
 describe('the members of the action part', () => {
-  it('take no account: the views over the bound account take at most the key or candidate', () => {
-    expectTypeOf<entry.AmbireRecoveryAction['supportsAccount']>().parameters.toEqualTypeOf<[]>();
-    expectTypeOf<entry.AmbireRecoveryAction['isAuthorized']>().parameters.toEqualTypeOf<[]>();
-    expectTypeOf<entry.AmbireRecoveryAction['isAuthority']>().parameters.toEqualTypeOf<[key: entry.Address]>();
-    expectTypeOf<entry.AmbireRecoveryAction['holdsAnyPrivilege']>().parameters.toEqualTypeOf<[candidate: entry.Address]>();
-    expectTypeOf<entry.AmbireRecoveryAction['actionInfo']>().parameters.toEqualTypeOf<[]>();
-    expectTypeOf<entry.AmbireRecoveryAction['armingCall']>().parameters.toEqualTypeOf<[]>();
-    expectTypeOf<entry.AmbireRecoveryAction['disarmingCall']>().parameters.toEqualTypeOf<[]>();
+  it('take no account: each takes at most the key or candidate, then an optional block', () => {
+    expectTypeOf<entry.AmbireRecoveryAction['supportsAccount']>().parameters.toEqualTypeOf<[block?: PinnedBlock]>();
+    expectTypeOf<entry.AmbireRecoveryAction['isAuthorized']>().parameters.toEqualTypeOf<[block?: PinnedBlock]>();
+    expectTypeOf<entry.AmbireRecoveryAction['isAuthority']>().parameters.toEqualTypeOf<[key: entry.Address, block?: PinnedBlock]>();
+    expectTypeOf<entry.AmbireRecoveryAction['holdsAnyPrivilege']>().parameters.toEqualTypeOf<[candidate: entry.Address, block?: PinnedBlock]>();
+    expectTypeOf<entry.AmbireRecoveryAction['actionInfo']>().parameters.toEqualTypeOf<[block?: PinnedBlock]>();
+    expectTypeOf<entry.AmbireRecoveryAction['armingCall']>().parameters.toEqualTypeOf<[block?: PinnedBlock]>();
+    expectTypeOf<entry.AmbireRecoveryAction['disarmingCall']>().parameters.toEqualTypeOf<[block?: PinnedBlock]>();
+    expectTypeOf<entry.AmbireRecoveryAction['prepareSetAddrPrivilege']>().parameters.toEqualTypeOf<[value: entry.Hex, block?: PinnedBlock]>();
+    expectTypeOf<IRecoveryActionInteractor['isAuthority']>().parameters.toEqualTypeOf<[key: entry.Address, block?: PinnedBlock]>();
+    expectTypeOf<IRecoveryActionInteractor['actionInfo']>().parameters.toEqualTypeOf<[block?: PinnedBlock]>();
   });
 
   it('prepare no spend: no executeHandover or validateSig member', () => {

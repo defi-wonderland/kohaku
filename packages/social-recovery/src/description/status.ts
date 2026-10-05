@@ -85,9 +85,11 @@ function assertOpening(opening: OpeningNotification, name: string): void {
   assertAddress(opening.account, `${name}.account`);
   assertAddress(opening.action, `${name}.action`);
   assertArray(opening.usedPlaces, `${name}.usedPlaces`);
-  opening.usedPlaces.forEach((place, position) => {
-    if (typeof place !== 'bigint') throw new TypeError(`${name}.usedPlaces[${position}] must be a bigint`);
-  });
+
+  for (let position = 0; position < opening.usedPlaces.length; position += 1) {
+    if (typeof opening.usedPlaces[position] !== 'bigint') throw new TypeError(`${name}.usedPlaces[${position}] must be a bigint`);
+  }
+
   assertBytes(opening.payload, `${name}.payload`);
 }
 
@@ -108,7 +110,10 @@ function assertStatusInputs(setupState: SetupState, recoveryState: RecoveryState
   assertCount(recoveryState.block.timestamp, 'recoveryState.block.timestamp');
   assertObject(recoveryState.attempt, 'recoveryState.attempt');
   assertArray(latest, 'latest');
-  latest.forEach((notification, index) => {
+
+  for (let index = 0; index < latest.length; index += 1) {
+    const notification = latest[index];
+
     assertObject(notification, `latest[${index}]`);
 
     if (typeof notification.kind !== 'string') throw new TypeError(`latest[${index}].kind must be a string`);
@@ -118,8 +123,8 @@ function assertStatusInputs(setupState: SetupState, recoveryState: RecoveryState
     assertCount(notification.at.logIndex, `latest[${index}].at.logIndex`);
     assertBool(notification.at.removed, `latest[${index}].at.removed`);
 
-    if (isOpening(notification)) assertOpening(notification, `latest[${index}]`);
-  });
+    if (isOpening(notification as KitNotification)) assertOpening(notification as OpeningNotification, `latest[${index}]`);
+  }
 }
 
 /**

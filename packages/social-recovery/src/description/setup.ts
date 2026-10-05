@@ -28,11 +28,15 @@ function assertDescriptionContext(context: SetupDescriptionContext): void {
 
 /** Refuses a method's tier that is present and not one of the tiers. */
 function assertTiers(methods: readonly MethodDescriptionReads[]): void {
-  methods.forEach(({ tier }, index) => {
-    if (tier !== undefined && !(METHOD_TIERS as readonly unknown[]).includes(tier)) {
+  for (let index = 0; index < methods.length; index += 1) {
+    const reads = methods[index];
+
+    assertObject(reads, `context.methods[${index}]`);
+
+    if (reads.tier !== undefined && !(METHOD_TIERS as readonly unknown[]).includes(reads.tier)) {
       throw new TypeError(`context.methods[${index}].tier must be primary or secondary`);
     }
-  });
+  }
 }
 
 /** The removed key as given: a checksummed address or one of the reasons none could be named. */
@@ -48,7 +52,9 @@ function candidateKeysOf(context: SetupDescriptionContext): SetupDescription['ca
 
   const answers = new Map<Address, boolean>();
 
-  context.candidateKeys.forEach((entry: CandidateKeyAuthority, index) => {
+  for (let index = 0; index < context.candidateKeys.length; index += 1) {
+    const entry: CandidateKeyAuthority | undefined = context.candidateKeys[index];
+
     assertObject(entry, `context.candidateKeys[${index}]`);
     assertBool(entry.isAuthority, `context.candidateKeys[${index}].isAuthority`);
     const key = normalizeAddress(entry.key, `context.candidateKeys[${index}].key`);
@@ -56,7 +62,7 @@ function candidateKeysOf(context: SetupDescriptionContext): SetupDescription['ca
     if (answers.has(key)) throw new TypeError(`context.candidateKeys[${index}].key repeats ${key}`);
 
     answers.set(key, entry.isAuthority);
-  });
+  }
 
   return normalizeAddresses(context.configuration.candidateKeys, 'context.configuration.candidateKeys').map((key) => {
     const isAuthority = answers.get(key);

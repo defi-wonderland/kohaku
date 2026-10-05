@@ -25,6 +25,33 @@ describe('describeSetup refuses a candidate key answered twice', () => {
   });
 });
 
+describe('describeSetup refuses sparse context lists, naming the hole', () => {
+  it('throws a TypeError naming context.methods[1] for a hole in the method reads', () => {
+    const [first, , ...rest] = CONTEXT.methods;
+    // eslint-disable-next-line no-sparse-arrays
+    const context = { ...CONTEXT, methods: [first, , ...rest] } as unknown as typeof CONTEXT;
+
+    expect(() => describeSetup(DRAFT, context)).toThrow(TypeError);
+    expect(() => describeSetup(DRAFT, context)).toThrow(/^context\.methods\[1\] /);
+  });
+
+  it('throws a TypeError naming context.methods[0] for a one-slot empty list', () => {
+    const context = { ...CONTEXT, methods: new Array<unknown>(1) } as unknown as typeof CONTEXT;
+
+    expect(() => describeSetup(DRAFT, context)).toThrow(TypeError);
+    expect(() => describeSetup(DRAFT, context)).toThrow(/^context\.methods\[0\] /);
+  });
+
+  it('throws a TypeError naming context.candidateKeys[1] for a hole in the candidate keys', () => {
+    const [first, second] = CONTEXT.candidateKeys;
+    // eslint-disable-next-line no-sparse-arrays
+    const context = { ...CONTEXT, candidateKeys: [first, , second] } as unknown as typeof CONTEXT;
+
+    expect(() => describeSetup(DRAFT, context)).toThrow(TypeError);
+    expect(() => describeSetup(DRAFT, context)).toThrow(/^context\.candidateKeys\[1\] /);
+  });
+});
+
 describe('describeSetup refuses a tier outside the closed set', () => {
   it('throws a TypeError naming the method\'s tier for tertiary', () => {
     const context = withMethod(ZKPASSPORT, { tier: 'tertiary' } as unknown as Partial<MethodDescriptionReads>);

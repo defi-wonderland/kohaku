@@ -58,6 +58,25 @@ describe('describeStatus refuses records missing what it reads, naming the membe
     expect(call(SETUP_STATE, RECOVERY_STATE, latest)).toThrow(naming(member));
   });
 
+  it.each<readonly [string, () => unknown[], string]>([
+    ['a one-slot empty usedPlaces', () => new Array<unknown>(1), 'latest[1].usedPlaces[0]'],
+    // eslint-disable-next-line no-sparse-arrays
+    ['a hole in the middle of usedPlaces', () => [0n, , 2n], 'latest[1].usedPlaces[1]'],
+  ])('throws a TypeError for an opening notification with %s', (_case, usedPlaces, member) => {
+    const latest = [paused(METHOD_A, at(90)), { ...started(5n, [], PAYLOAD, at(91)), usedPlaces: usedPlaces() }];
+
+    expect(call(SETUP_STATE, RECOVERY_STATE, latest)).toThrow(TypeError);
+    expect(call(SETUP_STATE, RECOVERY_STATE, latest)).toThrow(naming(member));
+  });
+
+  it('throws a TypeError naming the hole in a sparse notification list', () => {
+    // eslint-disable-next-line no-sparse-arrays
+    const latest = [started(5n, [0n], PAYLOAD, at(90)), , paused(METHOD_A, at(91))];
+
+    expect(call(SETUP_STATE, RECOVERY_STATE, latest)).toThrow(TypeError);
+    expect(call(SETUP_STATE, RECOVERY_STATE, latest)).toThrow(naming('latest[1]'));
+  });
+
   it('describes the well-formed fixtures', () => {
     expect(call(SETUP_STATE, RECOVERY_STATE, [paused(METHOD_A, at(90))])).not.toThrow();
   });

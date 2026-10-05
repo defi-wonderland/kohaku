@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { describeRequest, describeSetup, describeStatus } from '../../src/index';
 import { approvalFromVector, cancellationFromVector, codecRegistry, describingMethod, handoverRows, methodRegistry, strictCodec } from './request-fixtures';
 import { CONTEXT, DRAFT, serialize, SUPPLIED_SALT } from './setup-fixtures';
-import { at, METHOD_A, paused, PAYLOAD, RECOVERY_STATE, SETUP_STATE, started } from './status-fixtures';
+import { at, METHOD_A, paused, PAYLOAD, RECOVERY_STATE, SCOPE, SETUP_STATE, started } from './status-fixtures';
 
 /** Keys whose string values are the holder's or a module's own words rather than codes. */
 const FREE_TEXT_KEYS = new Set(['label', 'methodName', 'app']);
@@ -39,7 +39,7 @@ const descriptions = {
   setup: () => describeSetup(DRAFT, CONTEXT),
   approval: () => describeRequest(approval, codecs, methods),
   cancellation: () => describeRequest(cancellation, codecs, methods),
-  status: () => describeStatus(SETUP_STATE, RECOVERY_STATE, [started(5n, [0n, 2n], PAYLOAD, at(96)), paused(METHOD_A, at(97))]),
+  status: () => describeStatus(SETUP_STATE, RECOVERY_STATE, [started(5n, [0n, 2n], PAYLOAD, at(96)), paused(METHOD_A, at(97))], SCOPE),
 };
 
 describe('every description is a closed record of values and codes', () => {
@@ -79,7 +79,7 @@ describe('every description is pure', () => {
     const setup = frozen(structuredClone(SETUP_STATE));
     const recovery = frozen(structuredClone(RECOVERY_STATE));
 
-    expect(describeStatus(setup, recovery, latest)).toEqual(describeStatus(SETUP_STATE, RECOVERY_STATE, latest));
+    expect(describeStatus(setup, recovery, latest, SCOPE)).toEqual(describeStatus(SETUP_STATE, RECOVERY_STATE, latest, SCOPE));
   });
 
   it('describeRequest reads a frozen request', () => {

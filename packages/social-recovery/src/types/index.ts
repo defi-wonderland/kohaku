@@ -17,4 +17,5 @@ export type {
   CandidateKeyAuthority,
   MethodDescriptionReads,
   SetupDescriptionContext,
+  StatusScope,
 } from './description';

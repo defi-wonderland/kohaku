@@ -1,10 +1,16 @@
-import type { Address, Attempt, Hex, KitNotification, LogPosition, RecoveryState, SetupState } from '../../src/index';
+import type { Address, Attempt, Hex, KitNotification, LogPosition, RecoveryState, SetupState, StatusScope } from '../../src/index';
 
-export const ACCOUNT: Address = '0x1111111111111111111111111111111111111111';
-export const ACTION: Address = '0x2000000000000000000000000000000000000001';
+export const ACCOUNT: Address = '0xabc0000000000000000000000000000000000abc';
+export const ACTION: Address = '0xdef0000000000000000000000000000000000def';
 export const METHOD_A: Address = '0x3000000000000000000000000000000000000001';
 export const METHOD_B: Address = '0x3000000000000000000000000000000000000002';
 export const METHOD_C: Address = '0x3000000000000000000000000000000000000003';
+export const OTHER_ACCOUNT: Address = '0x1111111111111111111111111111111111111119';
+export const OTHER_ACTION: Address = '0x2000000000000000000000000000000000000009';
+
+/** The account and action the status is read for. */
+export const SCOPE: StatusScope = { account: ACCOUNT, action: ACTION };
+
 export const HOLDER: Address = '0x6000000000000000000000000000000000000003';
 export const TOKEN: Address = '0x5000000000000000000000000000000000000001';
 export const ZERO: Address = '0x0000000000000000000000000000000000000000';

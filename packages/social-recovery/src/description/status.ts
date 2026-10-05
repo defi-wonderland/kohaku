@@ -1,4 +1,4 @@
-import { assertArray, assertObject } from '../formats/guards';
+import { assertArray, assertObject, normalizeAddress } from '../formats/guards';
 import type {
   Address,
   KitNotification,
@@ -8,7 +8,7 @@ import type {
   StatusAttempt,
   StatusDescription,
 } from '../interfaces';
-import type { OpeningNotification } from '../types/description';
+import type { OpeningNotification, StatusScope } from '../types/description';
 
 /** Orders notifications by block, then by log index; a tie keeps its arrival order. */
 const byPosition = (left: KitNotification, right: KitNotification): number =>
@@ -37,13 +37,20 @@ function blockOf(setupState: SetupState, recoveryState: RecoveryState): StatusDe
   return { sameBlock: false, setupHash, recoveryHash };
 }
 
-/** The attempt beside the latest opening event of the same id, absent where the manager holds none. */
-function attemptOf(recoveryState: RecoveryState, latest: readonly KitNotification[]): StatusAttempt | undefined {
+/** The attempt beside its own latest opening event, of the same id, account and action, absent where the manager holds none. */
+function attemptOf(recoveryState: RecoveryState, latest: readonly KitNotification[], scope: StatusScope): StatusAttempt | undefined {
   const { attempt } = recoveryState;
 
   if (attempt.state === 'None') return undefined;
 
-  const opening = latestOf(latest.filter(isOpening).filter((event) => event.attemptId === attempt.attemptId));
+  const opening = latestOf(
+    latest
+      .filter(isOpening)
+      .filter(
+        (event) =>
+          event.attemptId === attempt.attemptId && sameAddress(event.account, scope.account) && sameAddress(event.action, scope.action),
+      ),
+  );
 
   return {
     state: attempt.state,
@@ -60,12 +67,14 @@ function attemptOf(recoveryState: RecoveryState, latest: readonly KitNotificatio
 
 /**
  * What a holder's status screen reads, composed from the two state records and the latest notifications with no read.
- * Throws a TypeError where a record or the notification list is not an object or an array.
+ * Only an opening event of the scope's account and action describes the attempt.
+ * Throws a TypeError where a record or the notification list is not an object or an array, or a scope address is malformed.
  */
 export function describeStatus(
   setupState: SetupState,
   recoveryState: RecoveryState,
   latest: readonly KitNotification[],
+  scope: StatusScope,
 ): StatusDescription {
   assertObject(setupState, 'setupState');
   assertObject(setupState.block, 'setupState.block');
@@ -73,8 +82,13 @@ export function describeStatus(
   assertObject(recoveryState.block, 'recoveryState.block');
   assertObject(recoveryState.attempt, 'recoveryState.attempt');
   assertArray(latest, 'latest');
+  assertObject(scope, 'scope');
 
-  const attempt = attemptOf(recoveryState, latest);
+  const scoped: StatusScope = {
+    account: normalizeAddress(scope.account, 'scope.account'),
+    action: normalizeAddress(scope.action, 'scope.action'),
+  };
+  const attempt = attemptOf(recoveryState, latest, scoped);
   const stops = latest.filter(isStop);
 
   return {

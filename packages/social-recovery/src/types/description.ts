@@ -35,3 +35,9 @@ export type SetupDescriptionContext = {
 
 /** A manager notification that opens an attempt. */
 export type OpeningNotification = Extract<KitNotification, { readonly kind: 'attempt-started' }>;
+
+/** The account and action whose status is described. */
+export type StatusScope = {
+  readonly account: Address;
+  readonly action: Address;
+};

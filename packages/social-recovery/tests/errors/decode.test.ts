@@ -85,14 +85,14 @@ describe('decodeRevert names the language pair', () => {
     const result = decodeRevert(errorString('not allowed'));
 
     expect(result).toMatchObject({ known: true, source: 'language', name: 'Error', selector: ERROR_STRING_SELECTOR });
-    expect(result.known && Object.values(result.args)).toEqual(['not allowed']);
+    expect(result.known && result.args).toEqual({ message: 'not allowed' });
   });
 
   it('decodes the arithmetic overflow Panic(uint256) code 0x11 as a bigint', () => {
     const result = decodeRevert(panic(0x11n));
 
     expect(result).toMatchObject({ known: true, source: 'language', name: 'Panic', selector: PANIC_SELECTOR });
-    expect(result.known && Object.values(result.args)).toEqual([0x11n]);
+    expect(result.known && result.args).toEqual({ reason: 0x11n });
   });
 
   it('decodes an empty Error(string) message', () => {

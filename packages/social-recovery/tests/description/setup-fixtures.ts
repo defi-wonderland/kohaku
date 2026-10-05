@@ -23,6 +23,8 @@ export const ADMIN: Address = '0x6000000000000000000000000000000000000001';
 export const PENDING_ADMIN: Address = '0x6000000000000000000000000000000000000002';
 export const PAUSE_HOLDER: Address = '0x6000000000000000000000000000000000000003';
 export const PENDING_PAUSE_HOLDER: Address = '0x6000000000000000000000000000000000000004';
+export const OTHER_PAUSE_HOLDER: Address = '0x6000000000000000000000000000000000000005';
+export const AUDITED_ONLY_ACTION: Address = '0x2000000000000000000000000000000000000003';
 export const CANDIDATE_A: Address = '0x7000000000000000000000000000000000000001';
 export const CANDIDATE_B: Address = '0x7000000000000000000000000000000000000002';
 export const SUPPLIED_SALT: Hex = '0x5a17ed5a17ed5a17ed5a17ed5a17ed5a17ed5a17ed5a17ed5a17ed5a17ed5a17';
@@ -86,6 +88,9 @@ export const PARTIES: Parties = {
   pendingPauseHolder: PENDING_PAUSE_HOLDER,
 };
 
+/** The identity method's own declaration, its stop held by another address. */
+export const ZKPASSPORT_PARTIES: Parties = { ...PARTIES, pauseHolder: OTHER_PAUSE_HOLDER };
+
 /** One method's reads, every one answered unless overridden. */
 export const reads = (module: Address, name: string, extra: Partial<MethodDescriptionReads> = {}): MethodDescriptionReads => ({
   module,
@@ -94,7 +99,6 @@ export const reads = (module: Address, name: string, extra: Partial<MethodDescri
   paused: { answered: true, value: false },
   implemented: true,
   tier: 'primary',
-  pauseHolder: { answered: true, value: PAUSE_HOLDER },
   ...extra,
 });
 
@@ -111,7 +115,7 @@ export const DESCRIPTOR: DeploymentDescriptor = {
   digestVersion: '1',
   managerVersion: '1.0.0',
   shippedMethods: [ECDSA, PASSKEY, AADHAAR, ZKPASSPORT],
-  auditedActions: [ACTION],
+  auditedActions: [ACTION, AUDITED_ONLY_ACTION],
 };
 
 export const CONFIGURATION: ClientConfiguration = {
@@ -131,7 +135,11 @@ export const CONFIGURATION: ClientConfiguration = {
 export const METHOD_READS: readonly MethodDescriptionReads[] = [
   reads(ECDSA, 'method-ecdsa'),
   reads(PASSKEY, 'method-passkey', { trustedParties: { answered: true, value: { ...PARTIES, trustedKeys: [] } } }),
-  reads(ZKPASSPORT, 'method-zkpassport', { tier: 'secondary', paused: { answered: true, value: true } }),
+  reads(ZKPASSPORT, 'method-zkpassport', {
+    tier: 'secondary',
+    paused: { answered: true, value: true },
+    trustedParties: { answered: true, value: ZKPASSPORT_PARTIES },
+  }),
   reads(THIRD_PARTY, 'their-method', { implemented: false, tier: undefined }),
 ];
 

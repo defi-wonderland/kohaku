@@ -150,6 +150,18 @@ describe('describeRequest reads the device facts from the method registry', () =
     expect(seen[0]?.place).toBe(approval.place);
   });
 
+  it('builds the ctx itself: a 32-byte digest and typed data whose primary type follows the purpose', () => {
+    for (const [request, primaryType] of [[approval, 'Approval'], [cancellation, 'Cancellation']] as const) {
+      const { method, seen } = registered();
+
+      describeRequest(request, codecRegistry(), methodRegistry([[request.method, method]]));
+
+      expect(seen[0]?.digest).toMatch(/^0x[0-9a-f]{64}$/);
+      expect(seen[0]?.typedData.primaryType).toBe(primaryType);
+      expect(seen[0]?.typedData.domain).toMatchObject({ name: 'PolicyManager', chainId: 11_155_111, verifyingContract: getAddress(MANAGER) });
+    }
+  });
+
   it('answers no-implementation when no implementation serves the method', () => {
     const elsewhere: Address = '0x3333333333333333333333333333333333333339';
 

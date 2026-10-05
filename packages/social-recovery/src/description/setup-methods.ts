@@ -2,7 +2,7 @@ import { decodeAbiParameters, encodeAbiParameters } from 'viem';
 import { DESCRIPTION_PASSKEY_CONFIG_ABI } from '../constants';
 import { assertArray, assertBool, assertObject, normalizeAddress } from '../formats/guards';
 import type { Address, DescribedParties, Hex, MethodStanding, SetupDescription } from '../interfaces';
-import { decodeSigner } from '../method-ecdsa/codec';
+import { decodeSigner, isGuardianAddress } from '../method-ecdsa/codec';
 import type { MethodDescriptionReads } from '../types/description';
 import type { PlacedCredential } from '../types/validation';
 import { methodTable } from '../validation/common';
@@ -22,7 +22,6 @@ export function readsByMethod(
       assertObject(reads.moduleInfo, `${name}.moduleInfo`);
       assertObject(reads.trustedParties, `${name}.trustedParties`);
       assertObject(reads.paused, `${name}.paused`);
-      assertObject(reads.pauseHolder, `${name}.pauseHolder`);
       assertBool(reads.implemented, `${name}.implemented`);
 
       return [normalizeAddress(reads.module, `${name}.module`), reads];
@@ -42,13 +41,42 @@ export const distinctMethods = (credentials: readonly PlacedCredential[]): Addre
   ...new Set(credentials.map(({ method }) => method)),
 ];
 
-const tryOr = <Value>(read: () => Value): Value | undefined => {
+/** The name a credential's config carries in a refusal, by its clause and its position there. */
+function configName(credentials: readonly PlacedCredential[], { clause, place }: PlacedCredential): string {
+  const position = credentials.filter((credential) => credential.clause === clause && credential.place < place).length;
+
+  return `draft.clauses[${clause}].credentials[${position}].config`;
+}
+
+/** The guardian a wallet config holds; throws a TypeError unless it is one address word naming a nonzero address. */
+function guardianOf(credentials: readonly PlacedCredential[], credential: PlacedCredential): Address {
+  let guardian: Address | undefined;
+
   try {
-    return read();
+    guardian = decodeSigner(credential.config);
   } catch {
-    return undefined;
+    guardian = undefined;
   }
-};
+
+  if (guardian === undefined || !isGuardianAddress(guardian)) {
+    throw new TypeError(`${configName(credentials, credential)} must hold one nonzero guardian address`);
+  }
+
+  return guardian;
+}
+
+/** The relying-party id hash a passkey config holds; throws a TypeError unless the config is exactly that layout. */
+function relyingPartyIdHashOf(credentials: readonly PlacedCredential[], credential: PlacedCredential): Hex {
+  try {
+    const fields = decodeAbiParameters(DESCRIPTION_PASSKEY_CONFIG_ABI, credential.config);
+
+    if (encodeAbiParameters(DESCRIPTION_PASSKEY_CONFIG_ABI, fields) === credential.config) return fields[2].toLowerCase() as Hex;
+  } catch {
+    // Refused below with the credential's name.
+  }
+
+  throw new TypeError(`${configName(credentials, credential)} must be the passkey layout of x, y and the relying-party id hash`);
+}
 
 /** Per method its declared parties, per wallet guardian the address its config holds. */
 export function describedParties(
@@ -56,11 +84,9 @@ export function describedParties(
   table: ReadonlyMap<Address, MethodDescriptionReads>,
   walletMethod: Address,
 ): DescribedParties {
-  const walletGuardians = credentials.flatMap(({ place, method, config }) => {
-    const address = method === walletMethod ? tryOr(() => decodeSigner(config)) : undefined;
-
-    return address === undefined ? [] : [{ place, address }];
-  });
+  const walletGuardians = credentials
+    .filter(({ method }) => method === walletMethod)
+    .map((credential) => ({ place: credential.place, address: guardianOf(credentials, credential) }));
 
   return {
     methods: distinctMethods(credentials).map((method) => ({
@@ -92,20 +118,14 @@ export function methodStanding(
   });
 }
 
-/** Per passkey credential the relying-party id hash its config holds; a config outside the layout names none. */
+/** Per passkey credential the relying-party id hash its config holds. */
 export function passkeyDomains(credentials: readonly PlacedCredential[], passkeyMethod: Address): SetupDescription['passkeyDomains'] {
-  return credentials.flatMap(({ place, method, config }) => {
-    if (method !== passkeyMethod) return [];
-
-    const fields = tryOr(() => decodeAbiParameters(DESCRIPTION_PASSKEY_CONFIG_ABI, config));
-
-    if (fields === undefined || encodeAbiParameters(DESCRIPTION_PASSKEY_CONFIG_ABI, fields) !== config) return [];
-
-    return [{ place, relyingPartyIdHash: fields[2].toLowerCase() as Hex }];
-  });
+  return credentials
+    .filter(({ method }) => method === passkeyMethod)
+    .map((credential) => ({ place: credential.place, relyingPartyIdHash: relyingPartyIdHashOf(credentials, credential) }));
 }
 
-/** Per method its stop and pause holder, beside this setup's own choice. */
+/** Per method its stop and the pause holder its declared parties name, beside this setup's own choice. */
 export function pauseOf(
   credentials: readonly PlacedCredential[],
   table: ReadonlyMap<Address, MethodDescriptionReads>,
@@ -114,9 +134,10 @@ export function pauseOf(
   return {
     ignoresPause,
     methods: distinctMethods(credentials).map((method) => {
-      const reads = table.get(method) as MethodDescriptionReads;
+      const { paused, trustedParties } = table.get(method) as MethodDescriptionReads;
+      const pauseHolder = trustedParties.answered ? { answered: true, value: trustedParties.value.pauseHolder } as const : { answered: false } as const;
 
-      return { method, paused: reads.paused, pauseHolder: reads.pauseHolder };
+      return { method, paused, pauseHolder };
     }),
   };
 }

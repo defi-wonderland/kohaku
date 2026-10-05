@@ -58,7 +58,7 @@ describe('decodeRevert on data it cannot name', () => {
 
   it.each(['0x123', 'not hex', '0xzzzzzzzz', ''])('never throws on input %j that is not even hex bytes', (data) => {
     expect(() => decodeRevert(data as Hex)).not.toThrow();
-    expect(decodeRevert(data as Hex).known).toBe(false);
+    expect(decodeRevert(data as Hex)).toEqual({ known: false, data });
   });
 });
 

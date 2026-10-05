@@ -87,15 +87,12 @@ function failureDomainsOf(draft: SetupDraft, credentials: readonly PlacedCredent
   });
 }
 
-/** False where the action is one the descriptor ships, whose account cannot be upgraded in place; absent otherwise. */
+/** False where the action is the descriptor's own, whose account cannot be upgraded in place; absent otherwise. */
 function upgradeOf(context: SetupDescriptionContext): SetupDescription['upgrade'] {
   const action = normalizeAddress(context.action.address, 'context.action.address');
-  const shipped = [
-    normalizeAddress(context.descriptor.action, 'context.descriptor.action'),
-    ...normalizeAddresses(context.descriptor.auditedActions, 'context.descriptor.auditedActions'),
-  ];
+  const shipped = normalizeAddress(context.descriptor.action, 'context.descriptor.action');
 
-  return shipped.includes(action) ? { upgradeableInPlace: false } : {};
+  return action === shipped ? { upgradeableInPlace: false } : {};
 }
 
 /**

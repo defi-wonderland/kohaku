@@ -1,6 +1,6 @@
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { describeSetup, REMOVED_KEY_UNNAMED, type RemovedKey, type SetupDraft } from '../../src/index';
+import { describeSetup, REMOVED_KEY_UNNAMED, type Address, type RemovedKey, type SetupDraft } from '../../src/index';
 import {
   byMethod,
   CANDIDATE_A,
@@ -11,6 +11,10 @@ import {
   ECDSA,
   GUARDIAN,
   OTHER_ACTION,
+  OTHER_PAUSE_HOLDER,
+  ACTION,
+  AUDITED_ONLY_ACTION,
+  ZKPASSPORT_PARTIES,
   PARTIES,
   PASSKEY,
   PASSKEY_CONFIG,
@@ -81,7 +85,7 @@ describe('describeSetup: the parties', () => {
       byMethod([
         { method: ECDSA, parties: { answered: true, value: PARTIES } },
         { method: PASSKEY, parties: { answered: true, value: { ...PARTIES, trustedKeys: [] } } },
-        { method: ZKPASSPORT, parties: { answered: true, value: PARTIES } },
+        { method: ZKPASSPORT, parties: { answered: true, value: ZKPASSPORT_PARTIES } },
         { method: THIRD_PARTY, parties: { answered: true, value: PARTIES } },
       ]),
     );
@@ -105,15 +109,6 @@ describe('describeSetup: the parties', () => {
     const description = describeSetup(DRAFT, withMethod(ZKPASSPORT, { trustedParties: { answered: true, value: declared } }));
 
     expect(description.parties.methods.find((method) => method.method === ZKPASSPORT)?.parties).toEqual({ answered: true, value: declared });
-  });
-
-  it('still shows a wallet credential whose config names no address at its place in the rule and its method among the parties', () => {
-    const zeroGuardian = `0x${'0'.repeat(64)}` as const;
-    const draft: SetupDraft = { ...DRAFT, clauses: [{ threshold: 1, credentials: [{ method: ECDSA, config: zeroGuardian }] }] };
-    const description = describeSetup(draft, { ...CONTEXT, methods: CONTEXT.methods.filter((entry) => entry.module === ECDSA) });
-
-    expect(description.rule.clauses[0]?.credentials).toEqual([{ place: 0, method: ECDSA, methodName: 'method-ecdsa' }]);
-    expect(description.parties.methods.map((entry) => entry.method)).toEqual([ECDSA]);
   });
 
   it('names a method with no wallet credentials no guardian', () => {
@@ -222,6 +217,19 @@ describe('describeSetup: upgrade and pause', () => {
     expect(full.upgrade).toEqual({ upgradeableInPlace: false });
   });
 
+  it('says so for the descriptor\'s action in any case spelling', () => {
+    const context = { ...CONTEXT, action: { ...CONTEXT.action, address: ACTION.toUpperCase().replace('0X', '0x') as Address } };
+
+    expect(describeSetup(DRAFT, context).upgrade).toEqual({ upgradeableInPlace: false });
+  });
+
+  it('leaves upgradeability unstated for an action that is audited but not the descriptor\'s own', () => {
+    const context = { ...CONTEXT, action: { ...CONTEXT.action, address: AUDITED_ONLY_ACTION } };
+
+    expect(describeSetup(DRAFT, context).upgrade).toEqual({});
+    expect('upgradeableInPlace' in describeSetup(DRAFT, context).upgrade).toBe(false);
+  });
+
   it('leaves upgradeability unstated for a third-party action', () => {
     const context = { ...CONTEXT, action: { ...CONTEXT.action, address: OTHER_ACTION } };
 
@@ -234,17 +242,31 @@ describe('describeSetup: upgrade and pause', () => {
       byMethod([
         { method: ECDSA, paused: { answered: true, value: false }, pauseHolder: { answered: true, value: PAUSE_HOLDER } },
         { method: PASSKEY, paused: { answered: true, value: false }, pauseHolder: { answered: true, value: PAUSE_HOLDER } },
-        { method: ZKPASSPORT, paused: { answered: true, value: true }, pauseHolder: { answered: true, value: PAUSE_HOLDER } },
+        { method: ZKPASSPORT, paused: { answered: true, value: true }, pauseHolder: { answered: true, value: OTHER_PAUSE_HOLDER } },
         { method: THIRD_PARTY, paused: { answered: true, value: false }, pauseHolder: { answered: true, value: PAUSE_HOLDER } },
       ]),
     );
     expect(describeSetup({ ...DRAFT, ignoresPause: true }, CONTEXT).pause.ignoresPause).toBe(true);
   });
 
-  it('carries unanswered paused and pause-holder reads as unanswered', () => {
-    const context = withMethod(PASSKEY, { paused: { answered: false }, pauseHolder: { answered: false } });
-    const entry = describeSetup(DRAFT, context).pause.methods.find((method) => method.method === PASSKEY);
+  it('carries an unanswered paused read as unanswered while the pause holder still follows trustedParties', () => {
+    const entry = describeSetup(DRAFT, withMethod(PASSKEY, { paused: { answered: false } })).pause.methods.find((method) => method.method === PASSKEY);
 
-    expect(entry).toEqual({ method: PASSKEY, paused: { answered: false }, pauseHolder: { answered: false } });
+    expect(entry).toEqual({ method: PASSKEY, paused: { answered: false }, pauseHolder: { answered: true, value: PAUSE_HOLDER } });
+  });
+
+  it('carries the pause holder as unanswered where trustedParties was not answered, the paused read unaffected', () => {
+    const entry = describeSetup(DRAFT, withMethod(ZKPASSPORT, { trustedParties: { answered: false } })).pause.methods.find(
+      (method) => method.method === ZKPASSPORT,
+    );
+
+    expect(entry).toEqual({ method: ZKPASSPORT, paused: { answered: true, value: true }, pauseHolder: { answered: false } });
+  });
+
+  it('takes each method\'s pause holder from that method\'s own declaration', () => {
+    const holders = describeSetup(DRAFT, CONTEXT).pause.methods.map((entry) => [entry.method, entry.pauseHolder]);
+
+    expect(holders).toContainEqual([ZKPASSPORT, { answered: true, value: OTHER_PAUSE_HOLDER }]);
+    expect(holders).toContainEqual([ECDSA, { answered: true, value: PAUSE_HOLDER }]);
   });
 });

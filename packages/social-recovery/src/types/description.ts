@@ -3,7 +3,6 @@ import type {
   ClientConfiguration,
   DeploymentDescriptor,
   IActionCodec,
-  ReadResult,
   RemovedKey,
 } from '../interfaces';
 import type { ActionReads, MethodReads } from './validation';
@@ -11,10 +10,8 @@ import type { ActionReads, MethodReads } from './validation';
 /** Action codec implementations, keyed by the action address each serves. */
 export type ActionCodecRegistry = ReadonlyMap<Address, IActionCodec>;
 
-/** One named method module's reads at the pinned block, with its pause holder beside them. */
-export type MethodDescriptionReads = MethodReads & {
-  readonly pauseHolder: ReadResult<Address>;
-};
+/** One named method module's reads at the pinned block; its pause holder is the one its declared parties name. */
+export type MethodDescriptionReads = MethodReads;
 
 /** The action's `isAuthority` answer for one of the configuration's candidate keys. */
 export type CandidateKeyAuthority = {

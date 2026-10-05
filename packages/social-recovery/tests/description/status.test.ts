@@ -79,6 +79,13 @@ describe('describeStatus: the attempt', () => {
     expect(describeStatus(SETUP_STATE, RECOVERY_STATE, latest).attempt).toMatchObject({ usedPlaces: [0n, 2n], payload: PAYLOAD });
   });
 
+  it('matches the opening by attempt id alone, whatever account or action it names', () => {
+    const elsewhere = { ...started(5n, [1n], '0xbeef', at(97)), account: METHOD_C, action: METHOD_C } as KitNotification;
+    const otherId = started(6n, [3n], '0xdead', at(98));
+
+    expect(describeStatus(SETUP_STATE, RECOVERY_STATE, [elsewhere, otherId]).attempt).toMatchObject({ usedPlaces: [1n], payload: '0xbeef' });
+  });
+
   it.each(ATTEMPT_STATES.filter((state) => state !== 'None'))('shows a %s attempt with its state', (state) => {
     const recovery = { ...RECOVERY_STATE, attempt: { ...WAITING, state } };
 

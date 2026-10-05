@@ -1,5 +1,7 @@
 import {
   DESCRIPTION_OPEN_PAYEE,
+  DESCRIPTION_ROUND_TRIP_FAILED,
+  DESCRIPTION_UNREAD_PURPOSE_MESSAGE,
   DESCRIPTION_UNREAD_REQUEST_MESSAGE,
   FORMATS_AMOUNT_BITS,
   FORMATS_ATTEMPT_ID_BITS,
@@ -25,8 +27,6 @@ import type {
 } from '../interfaces';
 import type { ActionCodecRegistry, CancellationMembers, MethodRegistry } from '../types';
 import { entryFor } from './lookup';
-
-const ROUND_TRIP_FAILED: DescribedHandover = { decoded: false, cause: 'round-trip-failed' };
 
 /** The members a digest closes over, converted from the request's decimal strings, addresses checksummed. */
 function membersOf(request: ApproverRequest): CancellationMembers {
@@ -63,9 +63,9 @@ function describedHandover(payload: Hex, codec: IActionCodec | undefined): Descr
   try {
     const handover = codec.decode(payload);
 
-    if (handover.removedAuthority === undefined) return ROUND_TRIP_FAILED;
+    if (handover.removedAuthority === undefined) return DESCRIPTION_ROUND_TRIP_FAILED;
 
-    if (codec.encode(handover).toLowerCase() !== payload.toLowerCase()) return ROUND_TRIP_FAILED;
+    if (codec.encode(handover).toLowerCase() !== payload.toLowerCase()) return DESCRIPTION_ROUND_TRIP_FAILED;
 
     return {
       decoded: true,
@@ -73,7 +73,7 @@ function describedHandover(payload: Hex, codec: IActionCodec | undefined): Descr
       removedAuthority: normalizeAddress(handover.removedAuthority, 'handover.removedAuthority'),
     };
   } catch {
-    return ROUND_TRIP_FAILED;
+    return DESCRIPTION_ROUND_TRIP_FAILED;
   }
 }
 
@@ -112,7 +112,7 @@ export function describeRequest(
   }
 
   if (request.purpose !== 'approval' && request.purpose !== 'cancellation') {
-    throw new TypeError('request.purpose must be approval or cancellation');
+    throw new TypeError(DESCRIPTION_UNREAD_PURPOSE_MESSAGE);
   }
 
   assertUintNumber(request.place, FORMATS_PLACE_BITS, 'request.place');

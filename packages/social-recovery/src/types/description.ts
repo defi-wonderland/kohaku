@@ -3,6 +3,7 @@ import type {
   ClientConfiguration,
   DeploymentDescriptor,
   IActionCodec,
+  KitNotification,
   RemovedKey,
 } from '../interfaces';
 import type { ActionReads, MethodReads } from './validation';
@@ -31,3 +32,6 @@ export type SetupDescriptionContext = {
   /** As the client computed it; `describeSetup` copies it and infers nothing. */
   readonly removedKey: RemovedKey;
 };
+
+/** A manager notification that opens an attempt. */
+export type OpeningNotification = Extract<KitNotification, { readonly kind: 'attempt-started' }>;

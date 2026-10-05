@@ -1,21 +1,15 @@
 import { decodeAbiParameters, encodeAbiParameters, toFunctionSelector } from 'viem';
-import { ERRORS_ABI_BY_SOURCE, ERRORS_SELECTOR_SIZE, FORMATS_HEX_BYTES_PATTERN } from '../constants';
-import { KIT_ERROR_SOURCES, type AbiErrorItem, type AbiParameter, type Hex, type KitError, type KitErrorSource, type KitErrorValue } from '../interfaces';
-
-type SourcedError = {
-  readonly source: KitErrorSource;
-  readonly item: AbiErrorItem;
-};
-
-const TUPLE = 'tuple';
+import { ERRORS_ABI_BY_SOURCE, ERRORS_SELECTOR_SIZE, ERRORS_TUPLE_TYPE, FORMATS_HEX_BYTES_PATTERN } from '../constants';
+import { KIT_ERROR_SOURCES, type AbiErrorItem, type AbiParameter, type Hex, type KitError, type KitErrorValue } from '../interfaces';
+import type { SourcedError } from '../types/errors';
 
 /** A parameter's canonical type, a tuple spelled out as its components. */
 function canonicalType(parameter: AbiParameter): string {
-  if (!parameter.type.startsWith(TUPLE)) return parameter.type;
+  if (!parameter.type.startsWith(ERRORS_TUPLE_TYPE)) return parameter.type;
 
   const components = (parameter.components ?? []).map(canonicalType).join(',');
 
-  return `(${components})${parameter.type.slice(TUPLE.length)}`;
+  return `(${components})${parameter.type.slice(ERRORS_TUPLE_TYPE.length)}`;
 }
 
 /** The error's four-byte selector over its canonical signature, lower case. */

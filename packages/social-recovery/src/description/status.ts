@@ -8,8 +8,7 @@ import type {
   StatusAttempt,
   StatusDescription,
 } from '../interfaces';
-
-type OpeningNotification = Extract<KitNotification, { readonly kind: 'attempt-started' }>;
+import type { OpeningNotification } from '../types/description';
 
 /** Orders notifications by block, then by log index; a tie keeps its arrival order. */
 const byPosition = (left: KitNotification, right: KitNotification): number =>

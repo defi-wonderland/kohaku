@@ -31,10 +31,12 @@ describe('the exported error ABI set', () => {
     expect(selectorOf('Panic(uint256)')).toBe(PANIC_SELECTOR);
   });
 
-  it('has no two entries sharing a selector, the language pair included', () => {
-    const selectors = [...exported.map(signatureOf), ...LANGUAGE_PAIR].map(selectorOf);
+  it('has as many distinct selectors as entries, so no entry repeats or collides', () => {
+    expect(new Set(exported.map((item) => selectorOf(signatureOf(item)))).size).toBe(exported.length);
+  });
 
-    expect(new Set(selectors).size).toBe(new Set([...exported.map(signatureOf), ...LANGUAGE_PAIR]).size);
+  it.each(LANGUAGE_PAIR)('holds %s exactly once', (signature) => {
+    expect(exported.filter((item) => signatureOf(item) === signature)).toHaveLength(1);
   });
 
   it('decodes every entry it exports, none of them under the reserved account source', () => {

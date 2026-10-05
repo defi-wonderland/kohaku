@@ -62,3 +62,6 @@ export const ERRORS_ABI: ErrorAbi = [...ERRORS_MANAGER_ABI, ...ERRORS_ACTION_ABI
 
 /** The width of an error selector, in bytes. */
 export const ERRORS_SELECTOR_SIZE = 4;
+
+/** The ABI type prefix of a tuple, spelled out as its components in a canonical signature. */
+export const ERRORS_TUPLE_TYPE = 'tuple';

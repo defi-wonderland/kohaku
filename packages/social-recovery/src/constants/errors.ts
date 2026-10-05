@@ -65,3 +65,9 @@ export const ERRORS_SELECTOR_SIZE = 4;
 
 /** The ABI type prefix of a tuple, spelled out as its components in a canonical signature. */
 export const ERRORS_TUPLE_TYPE = 'tuple';
+
+/** The ABI type whose decoded text may not carry its bytes back, so its round trip is checked as `bytes`. */
+export const ERRORS_STRING_TYPE = 'string';
+
+/** The ABI type a `string` argument is read as for its byte-level round trip. */
+export const ERRORS_BYTES_TYPE = 'bytes';

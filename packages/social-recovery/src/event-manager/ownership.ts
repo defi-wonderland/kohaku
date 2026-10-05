@@ -1,8 +1,7 @@
 import type { Address, DeploymentDescriptor } from '../interfaces';
 import type { MethodRegistry } from '../types';
 
-/** The same address, compared without regard to case. */
-export const sameAddress = (left: Address, right: Address): boolean => left.toLowerCase() === right.toLowerCase();
+export { sameAddress } from '../formats/guards';
 
 /** The addresses without case-insensitive duplicates, each kept in its first spelling. */
 const distinct = (addresses: readonly Address[]): readonly Address[] => {

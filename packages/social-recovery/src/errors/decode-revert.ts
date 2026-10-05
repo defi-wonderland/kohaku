@@ -1,5 +1,12 @@
 import { decodeAbiParameters, encodeAbiParameters, toFunctionSelector } from 'viem';
-import { ERRORS_ABI_BY_SOURCE, ERRORS_SELECTOR_SIZE, ERRORS_TUPLE_TYPE, FORMATS_HEX_BYTES_PATTERN } from '../constants';
+import {
+  ERRORS_ABI_BY_SOURCE,
+  ERRORS_BYTES_TYPE,
+  ERRORS_SELECTOR_SIZE,
+  ERRORS_STRING_TYPE,
+  ERRORS_TUPLE_TYPE,
+  FORMATS_HEX_BYTES_PATTERN,
+} from '../constants';
 import { KIT_ERROR_SOURCES, type AbiErrorItem, type AbiParameter, type Hex, type KitError, type KitErrorValue } from '../interfaces';
 import type { SourcedError } from '../types/errors';
 
@@ -48,12 +55,27 @@ function asKitValue(value: unknown): KitErrorValue {
   return Object.values(value as object).map(asKitValue);
 }
 
+/** The parameters with every `string`, nested ones included, read as `bytes`, so a round trip compares bytes rather than text. */
+function asByteParameters(parameters: readonly AbiParameter[]): AbiParameter[] {
+  return parameters.map((parameter) => ({
+    ...parameter,
+    type: parameter.type.startsWith(ERRORS_STRING_TYPE)
+      ? `${ERRORS_BYTES_TYPE}${parameter.type.slice(ERRORS_STRING_TYPE.length)}`
+      : parameter.type,
+    ...(parameter.components === undefined ? {} : { components: asByteParameters(parameter.components) }),
+  }));
+}
+
 /** The named arguments, or undefined where the bytes are not the canonical encoding of the error's inputs. */
 function decodeArguments(item: AbiErrorItem, encoded: Hex): Extract<KitError, { readonly known: true }>['args'] | undefined {
   try {
-    const values = decodeAbiParameters(item.inputs, encoded);
+    const byteInputs = asByteParameters(item.inputs);
 
-    if (encodeAbiParameters(item.inputs, values).toLowerCase() !== encoded.toLowerCase()) return undefined;
+    if (encodeAbiParameters(byteInputs, decodeAbiParameters(byteInputs, encoded)).toLowerCase() !== encoded.toLowerCase()) {
+      return undefined;
+    }
+
+    const values = decodeAbiParameters(item.inputs, encoded);
 
     return Object.fromEntries(
       item.inputs.map((parameter, index) => [parameter.name === '' ? String(index) : parameter.name, asKitValue(values[index])]),

@@ -1,6 +1,5 @@
-import { assertArray, assertObject, normalizeAddress } from '../formats/guards';
+import { assertArray, assertBool, assertBytes32, assertObject, normalizeAddress, sameAddress } from '../formats/guards';
 import type {
-  Address,
   KitNotification,
   MethodStopNotification,
   RecoveryState,
@@ -18,8 +17,6 @@ const byPosition = (left: KitNotification, right: KitNotification): number =>
 function latestOf<Notification extends KitNotification>(notifications: readonly Notification[]): Notification | undefined {
   return notifications.filter((notification) => !notification.at.removed).sort(byPosition).at(-1);
 }
-
-const sameAddress = (left: Address, right: Address): boolean => left.toLowerCase() === right.toLowerCase();
 
 const isStop = (notification: KitNotification): notification is MethodStopNotification =>
   notification.kind === 'method-paused' || notification.kind === 'method-unpaused';
@@ -65,10 +62,46 @@ function attemptOf(recoveryState: RecoveryState, latest: readonly KitNotificatio
   };
 }
 
+/** Refuses anything but a non-negative safe integer with a `TypeError`. */
+function assertCount(value: unknown, name: string): void {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    throw new TypeError(`${name} must be a non-negative safe integer`);
+  }
+}
+
+/** Refuses records and notifications whose members this description reads are not the shapes they declare. */
+function assertStatusInputs(setupState: SetupState, recoveryState: RecoveryState, latest: readonly KitNotification[]): void {
+  assertObject(setupState, 'setupState');
+  assertBool(setupState.isAuthorized, 'setupState.isAuthorized');
+  assertBytes32(setupState.setupCommitment, 'setupState.setupCommitment');
+
+  if (typeof setupState.setupNonce !== 'bigint') throw new TypeError('setupState.setupNonce must be a bigint');
+
+  assertCount(setupState.setupCommittedAtBlock, 'setupState.setupCommittedAtBlock');
+  assertObject(setupState.block, 'setupState.block');
+  assertBytes32(setupState.block.hash, 'setupState.block.hash');
+  assertObject(recoveryState, 'recoveryState');
+  assertObject(recoveryState.block, 'recoveryState.block');
+  assertBytes32(recoveryState.block.hash, 'recoveryState.block.hash');
+  assertCount(recoveryState.block.timestamp, 'recoveryState.block.timestamp');
+  assertObject(recoveryState.attempt, 'recoveryState.attempt');
+  assertArray(latest, 'latest');
+  latest.forEach((notification, index) => {
+    assertObject(notification, `latest[${index}]`);
+
+    if (typeof notification.kind !== 'string') throw new TypeError(`latest[${index}].kind must be a string`);
+
+    assertObject(notification.at, `latest[${index}].at`);
+    assertCount(notification.at.blockNumber, `latest[${index}].at.blockNumber`);
+    assertCount(notification.at.logIndex, `latest[${index}].at.logIndex`);
+    assertBool(notification.at.removed, `latest[${index}].at.removed`);
+  });
+}
+
 /**
  * What a holder's status screen reads, composed from the two state records and the latest notifications with no read.
  * Only an opening event of the scope's account and action describes the attempt.
- * Throws a TypeError where a record or the notification list is not an object or an array, or a scope address is malformed.
+ * Throws a TypeError where a record or notification member it reads is malformed, or a scope address is.
  */
 export function describeStatus(
   setupState: SetupState,
@@ -76,12 +109,7 @@ export function describeStatus(
   latest: readonly KitNotification[],
   scope: StatusScope,
 ): StatusDescription {
-  assertObject(setupState, 'setupState');
-  assertObject(setupState.block, 'setupState.block');
-  assertObject(recoveryState, 'recoveryState');
-  assertObject(recoveryState.block, 'recoveryState.block');
-  assertObject(recoveryState.attempt, 'recoveryState.attempt');
-  assertArray(latest, 'latest');
+  assertStatusInputs(setupState, recoveryState, latest);
   assertObject(scope, 'scope');
 
   const scoped: StatusScope = {

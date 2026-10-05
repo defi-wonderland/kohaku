@@ -1,40 +1,9 @@
 import { decodeAbiParameters, encodeAbiParameters } from 'viem';
 import { DESCRIPTION_PASSKEY_CONFIG_ABI } from '../constants';
-import { assertArray, assertBool, assertObject, normalizeAddress } from '../formats/guards';
 import type { Address, DescribedParties, Hex, MethodStanding, SetupDescription } from '../interfaces';
 import { decodeSigner, isGuardianAddress } from '../method-ecdsa/codec';
 import type { MethodDescriptionReads } from '../types/description';
 import type { PlacedCredential } from '../types/validation';
-import { methodTable } from '../validation/common';
-
-/** The method reads by checksummed module address, refusing a malformed or repeated entry and a named method left unread. */
-export function readsByMethod(
-  methods: readonly MethodDescriptionReads[],
-  credentials: readonly PlacedCredential[],
-): Map<Address, MethodDescriptionReads> {
-  assertArray(methods, 'context.methods');
-
-  const table = methodTable(
-    methods.map((reads, index): [Address, MethodDescriptionReads] => {
-      const name = `context.methods[${index}]`;
-
-      assertObject(reads, name);
-      assertObject(reads.moduleInfo, `${name}.moduleInfo`);
-      assertObject(reads.trustedParties, `${name}.trustedParties`);
-      assertObject(reads.paused, `${name}.paused`);
-      assertBool(reads.implemented, `${name}.implemented`);
-
-      return [normalizeAddress(reads.module, `${name}.module`), reads];
-    }),
-    'context.methods',
-  );
-
-  for (const { method } of credentials) {
-    if (!table.has(method)) throw new TypeError(`context.methods holds no reads for ${method}`);
-  }
-
-  return table;
-}
 
 /** Each method the credentials name, once, in the order of its first place. */
 export const distinctMethods = (credentials: readonly PlacedCredential[]): Address[] => [

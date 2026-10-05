@@ -7,13 +7,14 @@ import {
   FORMATS_ATTEMPT_ID_BITS,
   FORMATS_CHAIN_ID_BITS,
   FORMATS_PLACE_BITS,
+  FORMATS_SAFE_INTEGER_BITS,
   FORMATS_SETUP_NONCE_BITS,
   FORMATS_VALID_UNTIL_BITS,
   GATHERING_REQUEST_KIND,
   GATHERING_REQUEST_VERSION,
 } from '../constants';
 import { approvalDigest, approvalTypedData, cancellationDigest, cancellationTypedData } from '../formats/digests';
-import { assertBytes, assertBytes32, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
+import { assertBool, assertBytes, assertBytes32, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import { decimalBigint, decimalNumber } from '../gathering/edge';
 import type {
   ApproverRequest,
@@ -41,7 +42,7 @@ function membersOf(request: ApproverRequest): CancellationMembers {
     setupNonce: decimalBigint(request.setupNonce, FORMATS_SETUP_NONCE_BITS, 'request.setupNonce'),
     setupBodyHash: request.setupBodyHash,
     validUntil: decimalNumber(request.validUntil, FORMATS_VALID_UNTIL_BITS, 'request.validUntil'),
-    digestVersion: request.digestVersion,
+    digestVersion: decimalBigint(request.digestVersion, FORMATS_SAFE_INTEGER_BITS, 'request.digestVersion').toString(),
   };
 }
 
@@ -117,6 +118,8 @@ export function describeRequest(
 
   assertUintNumber(request.place, FORMATS_PLACE_BITS, 'request.place');
   assertBytes(request.config, 'request.config');
+  assertBytes32(request.salt, 'request.salt');
+  assertBool(request.credentialHoldsCode, 'request.credentialHoldsCode');
 
   const members = membersOf(request);
   const method = normalizeAddress(request.method, 'request.method');

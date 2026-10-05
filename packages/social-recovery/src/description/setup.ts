@@ -1,6 +1,7 @@
 import { FORMATS_SAFE_INTEGER_BITS } from '../constants';
 import { assertArray, assertBool, assertBytes, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import {
+  METHOD_TIERS,
   REMOVED_KEY_UNNAMED,
   type Address,
   type DescribedClause,
@@ -13,7 +14,8 @@ import type { CandidateKeyAuthority, MethodDescriptionReads, SetupDescriptionCon
 import type { PlacedCredential } from '../types/validation';
 import { normalizeAddresses } from '../validation/common';
 import { placedCredentials } from '../validation/setup-draft';
-import { describedParties, distinctMethods, methodStanding, passkeyDomains, pauseOf, readsByMethod } from './setup-methods';
+import { readsByMethod } from '../validation/setup-methods';
+import { describedParties, distinctMethods, methodStanding, passkeyDomains, pauseOf } from './setup-methods';
 
 /** Refuses a context whose records are not the shapes they declare. */
 function assertDescriptionContext(context: SetupDescriptionContext): void {
@@ -24,6 +26,15 @@ function assertDescriptionContext(context: SetupDescriptionContext): void {
   assertUintNumber(context.configuration.defaultWait, FORMATS_SAFE_INTEGER_BITS, 'context.configuration.defaultWait');
 }
 
+/** Refuses a method's tier that is present and not one of the tiers. */
+function assertTiers(methods: readonly MethodDescriptionReads[]): void {
+  methods.forEach(({ tier }, index) => {
+    if (tier !== undefined && !(METHOD_TIERS as readonly unknown[]).includes(tier)) {
+      throw new TypeError(`context.methods[${index}].tier must be primary or secondary`);
+    }
+  });
+}
+
 /** The removed key as given: a checksummed address or one of the reasons none could be named. */
 function removedKeyOf(value: RemovedKey): RemovedKey {
   if ((REMOVED_KEY_UNNAMED as readonly unknown[]).includes(value)) return value;
@@ -31,7 +42,7 @@ function removedKeyOf(value: RemovedKey): RemovedKey {
   return normalizeAddress(value, 'context.removedKey');
 }
 
-/** Per configured candidate key its `isAuthority` answer, refusing a key the context holds no answer for. */
+/** Per configured candidate key its `isAuthority` answer, refusing a repeated answer and a key the context holds no answer for. */
 function candidateKeysOf(context: SetupDescriptionContext): SetupDescription['candidateKeys'] {
   assertArray(context.candidateKeys, 'context.candidateKeys');
 
@@ -40,7 +51,11 @@ function candidateKeysOf(context: SetupDescriptionContext): SetupDescription['ca
   context.candidateKeys.forEach((entry: CandidateKeyAuthority, index) => {
     assertObject(entry, `context.candidateKeys[${index}]`);
     assertBool(entry.isAuthority, `context.candidateKeys[${index}].isAuthority`);
-    answers.set(normalizeAddress(entry.key, `context.candidateKeys[${index}].key`), entry.isAuthority);
+    const key = normalizeAddress(entry.key, `context.candidateKeys[${index}].key`);
+
+    if (answers.has(key)) throw new TypeError(`context.candidateKeys[${index}].key repeats ${key}`);
+
+    answers.set(key, entry.isAuthority);
   });
 
   return normalizeAddresses(context.configuration.candidateKeys, 'context.configuration.candidateKeys').map((key) => {
@@ -106,6 +121,9 @@ export function describeSetup(draft: SetupDraft, context: SetupDescriptionContex
   assertDescriptionContext(context);
 
   const table = readsByMethod(context.methods, credentials);
+
+  assertTiers(context.methods);
+
   const { descriptor } = context;
   const suppliedSaltPlaces = credentials.filter(({ salt }) => salt !== undefined).map(({ place }) => place);
 

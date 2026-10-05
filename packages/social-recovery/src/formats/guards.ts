@@ -81,3 +81,6 @@ export function assertUintBigint(value: unknown, bits: number, name: string): as
     throw new RangeError(`${name} ${value} does not fit uint${bits}`);
   }
 }
+
+/** The same address, compared without regard to case. */
+export const sameAddress = (left: Address, right: Address): boolean => left.toLowerCase() === right.toLowerCase();

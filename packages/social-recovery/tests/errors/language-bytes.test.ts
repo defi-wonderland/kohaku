@@ -27,6 +27,16 @@ describe('decodeRevert reads Error(string) at the byte level', () => {
     expect(decodeRevert(errorWithBytes(text))).toMatchObject({ known: true, args: { message: 'déjà vu ✓' } });
   });
 
+  it('names a canonical Error(string) that opens with a byte-order mark, the mark dropped from its text', () => {
+    expect(decodeRevert(errorWithBytes('efbbbf41'))).toEqual({
+      known: true,
+      source: 'language',
+      name: 'Error',
+      selector: ERROR_STRING_SELECTOR,
+      args: { message: 'A' },
+    });
+  });
+
   it('keeps a message with a nonzero byte in its padding unknown', () => {
     const data = errorWithBytes('fffe0041', `fffe0041${'0'.repeat(54)}01`);
 

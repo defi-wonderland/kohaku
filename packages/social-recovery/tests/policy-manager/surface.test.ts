@@ -1,22 +1,10 @@
-import { encodeAbiParameters } from 'viem';
 import { describe, expect, it } from 'vitest';
 import * as entry from '../../src/index';
 import type { IMethodModuleReads, IPolicyManagerInteractor } from '../../src/index';
 import { selectorOf } from '../helpers/keccak';
-import { always, bySelector, type Answer } from './double';
-import {
-  ACCOUNT,
-  ACTION,
-  ACTION_STATE_PARAMS,
-  DOMAIN_PARAMS,
-  METHOD,
-  PARTIES_PARAMS,
-  POLICY_METHOD_ID_LITERAL,
-  STRING_PARAMS,
-  TRUE_WORD,
-  partFor,
-  sel,
-} from './fixtures';
+import { always } from './double';
+import { answeringAll } from './members';
+import { ACCOUNT, ACTION, METHOD, POLICY_METHOD_ID_LITERAL, TRUE_WORD, partFor } from './fixtures';
 
 /** The five functions `IPolicyMethod` declares, written by hand. */
 const POLICY_METHOD_FUNCTIONS = ['verify(bytes,bytes32,bytes)', 'trustedParties()', 'supportsInterface(bytes4)', 'name()', 'version()'];
@@ -54,39 +42,6 @@ describe('the public surface', () => {
     expect(reads).toBe(interactor);
   });
 });
-
-const stateReturn = encodeAbiParameters(ACTION_STATE_PARAMS, [
-  {
-    setupCommitment: `0x${'11'.repeat(32)}`,
-    setupNonce: 1n,
-    nextAttemptId: 1n,
-    setupCommittedAtBlock: 1,
-    attempt: {
-      attemptId: 0n,
-      setupNonce: 0n,
-      consumableAfter: 0,
-      state: 0,
-      ignoresPause: false,
-      payloadHash: `0x${'00'.repeat(32)}`,
-      order: { token: ACCOUNT, amount: 0n, payee: ACCOUNT },
-      usedMethods: [],
-    },
-  },
-]);
-
-/** A double that answers every view of the manager and of a module well. */
-const answeringAll = () =>
-  bySelector({
-    [sel('stateOf')]: { returns: stateReturn },
-    [sel('eip712Domain')]: {
-      returns: encodeAbiParameters(DOMAIN_PARAMS, ['0x0f', 'n', 'v', 1n, ACCOUNT, `0x${'00'.repeat(32)}`, []]),
-    },
-    [sel('name')]: { returns: encodeAbiParameters(STRING_PARAMS, ['n']) },
-    [sel('version')]: { returns: encodeAbiParameters(STRING_PARAMS, ['v']) },
-    [sel('supportsInterface')]: { returns: TRUE_WORD },
-    [sel('paused')]: { returns: TRUE_WORD },
-    [sel('trustedParties')]: { returns: encodeAbiParameters(PARTIES_PARAMS, [ACCOUNT, ACCOUNT, [], ACCOUNT, ACCOUNT]) },
-  } as Record<string, Answer>);
 
 describe('what the part reads, over every member', () => {
   it('makes one call per manager view and per module view it answers, one block read per member, and never code, logs or verify', async () => {

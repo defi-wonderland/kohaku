@@ -27,12 +27,13 @@ import {
   type ModuleInfo,
   type NamedBlockTag,
   type Parties,
+  type PinnedBlock,
   type PreparedCall,
   type ReadResult,
   type Sender,
 } from '../interfaces';
 import { assertBoundRequest, boundAddress, cancelByVetoData, commitSetupData, hashApprovalData, hashCancelData, ownerCallData } from './calldata';
-import { decodeReturn, pinBlock, readCall } from './chain';
+import { decodeReturn, readCall, resolveBlock } from './chain';
 import { readModuleInfo, readPaused, readTrustedParties } from './module-reads';
 import { actionStateFrom, domainFrom } from './records';
 
@@ -49,8 +50,8 @@ function checkReadTag(blockTags: BlockTags): NamedBlockTag {
 
 /**
  * The shipped `IPolicyManagerInteractor`, bound to one manager, one account and one action.
- * Every read and every prepare reads the configured read tag's block once and pins to it; a prepare
- * carries no simulation, and an argument naming another account or action throws a `TypeError`.
+ * Every read and every prepare pins to the block passed, or else reads the configured read tag's block once;
+ * a prepare carries no simulation, and an argument naming another account or action throws a `TypeError`.
  */
 export class PolicyManager implements IPolicyManagerInteractor, IMethodModuleReads {
   private readonly provider: IProvider;
@@ -75,81 +76,90 @@ export class PolicyManager implements IPolicyManagerInteractor, IMethodModuleRea
     nonce: bigint,
     publicMetadata: Hex,
     privateMetadata: Hex,
+    block?: PinnedBlock,
   ): Promise<PreparedCall> {
     const bound = boundAddress(action, this.action, 'action', 'action');
 
-    return this.prepared(commitSetupData(bound, setupCommitment, nonce, publicMetadata, privateMetadata), 'account');
+    return this.prepared(commitSetupData(bound, setupCommitment, nonce, publicMetadata, privateMetadata), 'account', block);
   }
 
-  async prepareClearSetup(action: Address): Promise<PreparedCall> {
-    return this.prepared(ownerCallData('clearSetup', boundAddress(action, this.action, 'action', 'action')), 'account');
+  async prepareClearSetup(action: Address, block?: PinnedBlock): Promise<PreparedCall> {
+    return this.prepared(ownerCallData('clearSetup', boundAddress(action, this.action, 'action', 'action')), 'account', block);
   }
 
-  async prepareCancelByOwner(action: Address): Promise<PreparedCall> {
-    return this.prepared(ownerCallData('cancelByOwner', boundAddress(action, this.action, 'action', 'action')), 'account');
+  async prepareCancelByOwner(action: Address, block?: PinnedBlock): Promise<PreparedCall> {
+    return this.prepared(ownerCallData('cancelByOwner', boundAddress(action, this.action, 'action', 'action')), 'account', block);
   }
 
-  async prepareStartAttempt(request: AttemptRequest): Promise<PreparedCall> {
+  async prepareStartAttempt(request: AttemptRequest, block?: PinnedBlock): Promise<PreparedCall> {
     assertBoundRequest(request, this.account, this.action);
 
-    return this.prepared(encodeAttemptRequest(request), 'anyone');
+    return this.prepared(encodeAttemptRequest(request), 'anyone', block);
   }
 
-  async prepareCancelByProofs(request: CancelRequest): Promise<PreparedCall> {
+  async prepareCancelByProofs(request: CancelRequest, block?: PinnedBlock): Promise<PreparedCall> {
     assertBoundRequest(request, this.account, this.action);
 
-    return this.prepared(encodeCancelRequest(request), 'anyone');
+    return this.prepared(encodeCancelRequest(request), 'anyone', block);
   }
 
-  async prepareCancelByVeto(account: Address, action: Address, attemptId: bigint, method: Address): Promise<PreparedCall> {
+  async prepareCancelByVeto(
+    account: Address,
+    action: Address,
+    attemptId: bigint,
+    method: Address,
+    block?: PinnedBlock,
+  ): Promise<PreparedCall> {
     const boundAccount = boundAddress(account, this.account, 'account', 'account');
     const boundAction = boundAddress(action, this.action, 'action', 'action');
 
-    return this.prepared(cancelByVetoData(boundAccount, boundAction, attemptId, method), 'anyone');
+    return this.prepared(cancelByVetoData(boundAccount, boundAction, attemptId, method), 'anyone', block);
   }
 
   /** The bound pair's state; a revert rejects with the provider's `ProviderRevert`, a return that does not decode with a `TypeError`. */
-  async stateOf(): Promise<ActionState> {
-    return actionStateFrom(await this.read(encodeFunctionData({ abi: POLICY_MANAGER_STATE_OF_ABI, args: [this.account, this.action] })));
+  async stateOf(block?: PinnedBlock): Promise<ActionState> {
+    const data = encodeFunctionData({ abi: POLICY_MANAGER_STATE_OF_ABI, args: [this.account, this.action] });
+
+    return actionStateFrom(await this.read(data, block));
   }
 
-  async hashApproval(request: AttemptRequest, place: number): Promise<Hex> {
+  async hashApproval(request: AttemptRequest, place: number, block?: PinnedBlock): Promise<Hex> {
     assertBoundRequest(request, this.account, this.action);
 
-    const returned = await this.read(hashApprovalData(request, place));
+    const returned = await this.read(hashApprovalData(request, place), block);
     const [digest] = decodeReturn(POLICY_MANAGER_HASH_APPROVAL_ABI[0].outputs, returned, 'hashApproval');
 
     return digest.toLowerCase() as Hex;
   }
 
-  async hashCancel(request: CancelRequest, place: number): Promise<Hex> {
+  async hashCancel(request: CancelRequest, place: number, block?: PinnedBlock): Promise<Hex> {
     assertBoundRequest(request, this.account, this.action);
 
-    const returned = await this.read(hashCancelData(request, place));
+    const returned = await this.read(hashCancelData(request, place), block);
     const [digest] = decodeReturn(POLICY_MANAGER_HASH_CANCEL_ABI[0].outputs, returned, 'hashCancel');
 
     return digest.toLowerCase() as Hex;
   }
 
-  async eip712Domain(): Promise<Domain> {
-    return domainFrom(await this.read(encodeFunctionData({ abi: POLICY_MANAGER_EIP712_DOMAIN_ABI })));
+  async eip712Domain(block?: PinnedBlock): Promise<Domain> {
+    return domainFrom(await this.read(encodeFunctionData({ abi: POLICY_MANAGER_EIP712_DOMAIN_ABI }), block));
   }
 
-  async name(): Promise<string> {
-    const returned = await this.read(encodeFunctionData({ abi: POLICY_MANAGER_NAME_ABI }));
+  async name(block?: PinnedBlock): Promise<string> {
+    const returned = await this.read(encodeFunctionData({ abi: POLICY_MANAGER_NAME_ABI }), block);
     const [name] = decodeReturn(POLICY_MANAGER_NAME_ABI[0].outputs, returned, 'name');
 
     return name;
   }
 
-  async version(): Promise<string> {
-    const returned = await this.read(encodeFunctionData({ abi: POLICY_MANAGER_VERSION_ABI }));
+  async version(block?: PinnedBlock): Promise<string> {
+    const returned = await this.read(encodeFunctionData({ abi: POLICY_MANAGER_VERSION_ABI }), block);
     const [version] = decodeReturn(POLICY_MANAGER_VERSION_ABI[0].outputs, returned, 'version');
 
     return version;
   }
 
-  async supportsInterface(interfaceId: Hex): Promise<boolean> {
+  async supportsInterface(interfaceId: Hex, block?: PinnedBlock): Promise<boolean> {
     assertBytes(interfaceId, 'interfaceId');
 
     if (size(interfaceId) !== POLICY_MANAGER_INTERFACE_ID_SIZE) {
@@ -157,33 +167,33 @@ export class PolicyManager implements IPolicyManagerInteractor, IMethodModuleRea
     }
 
     const data = encodeFunctionData({ abi: POLICY_MANAGER_SUPPORTS_INTERFACE_ABI, args: [interfaceId.toLowerCase() as Hex] });
-    const [supported] = decodeReturn(POLICY_MANAGER_SUPPORTS_INTERFACE_ABI[0].outputs, await this.read(data), 'supportsInterface');
+    const returned = await this.read(data, block);
+    const [supported] = decodeReturn(POLICY_MANAGER_SUPPORTS_INTERFACE_ABI[0].outputs, returned, 'supportsInterface');
 
     return supported;
   }
 
-  moduleInfo(module: Address): Promise<ReadResult<ModuleInfo>> {
-    return readModuleInfo(this.provider, module, this.readTag);
+  moduleInfo(module: Address, block?: PinnedBlock): Promise<ReadResult<ModuleInfo>> {
+    return readModuleInfo(this.provider, module, this.readTag, block);
   }
 
-  paused(module: Address): Promise<ReadResult<boolean>> {
-    return readPaused(this.provider, module, this.readTag);
+  paused(module: Address, block?: PinnedBlock): Promise<ReadResult<boolean>> {
+    return readPaused(this.provider, module, this.readTag, block);
   }
 
-  trustedParties(module: Address): Promise<ReadResult<Parties>> {
-    return readTrustedParties(this.provider, module, this.readTag);
+  trustedParties(module: Address, block?: PinnedBlock): Promise<ReadResult<Parties>> {
+    return readTrustedParties(this.provider, module, this.readTag, block);
   }
 
-  /** A call to the manager from the given sender, pinned to the read tag's block. */
-  private async prepared(data: Hex, sender: Sender): Promise<PreparedCall> {
-    const block = await pinBlock(this.provider, this.readTag);
+  /** A call to the manager from the given sender, pinned to the passed block or else the read tag's. */
+  private async prepared(data: Hex, sender: Sender, block: PinnedBlock | undefined): Promise<PreparedCall> {
+    const pinned = await resolveBlock(this.provider, this.readTag, block);
 
-    return { kind: 'call', target: this.manager, value: 0n, data, sender, block };
+    return { kind: 'call', target: this.manager, value: 0n, data, sender, block: pinned };
   }
 
-  /** One view call to the manager at the read tag's block. */
-  private async read(data: Hex): Promise<Hex> {
-    return readCall(this.provider, this.manager, data, await pinBlock(this.provider, this.readTag));
+  /** One view call to the manager at the passed block, or else at the read tag's. */
+  private async read(data: Hex, block: PinnedBlock | undefined): Promise<Hex> {
+    return readCall(this.provider, this.manager, data, await resolveBlock(this.provider, this.readTag, block));
   }
-
 }

@@ -1,5 +1,5 @@
 import { decodeAbiParameters, encodeAbiParameters, type AbiParameter, type DecodeAbiParametersReturnType } from 'viem';
-import { FORMATS_HEX_BYTES_PATTERN, FORMATS_SAFE_INTEGER_BITS, POLICY_MANAGER_READ_FROM } from '../constants';
+import { FORMATS_HEX_BYTES32_PATTERN, FORMATS_HEX_BYTES_PATTERN, FORMATS_SAFE_INTEGER_BITS, POLICY_MANAGER_READ_FROM } from '../constants';
 import { assertBytes32, assertObject, assertUintNumber } from '../formats/guards';
 import { isProviderRevert, type Address, type BlockTag, type Hex, type IProvider, type PinnedBlock } from '../interfaces';
 import type { CallOutcome } from '../types/policy-manager';
@@ -17,6 +17,27 @@ export async function pinBlock(provider: IProvider, tag: BlockTag): Promise<Pinn
 
   return { number, hash: hash.toLowerCase() as Hex };
 }
+
+/** The caller's block, checked before any provider call: anything but a safe block number and a 32-byte hash throws a `TypeError`. */
+export function passedBlock(block: unknown): PinnedBlock {
+  if (typeof block !== 'object' || block === null) throw new TypeError('block must be an object with a number and a hash');
+
+  const { number, hash } = block as Partial<PinnedBlock>;
+
+  if (typeof number !== 'number' || !Number.isSafeInteger(number) || number < 0) {
+    throw new TypeError('block.number must be a non-negative safe integer');
+  }
+
+  if (typeof hash !== 'string' || !FORMATS_HEX_BYTES32_PATTERN.test(hash)) {
+    throw new TypeError('block.hash must be exactly 32 bytes of 0x-prefixed hex');
+  }
+
+  return { number, hash: hash.toLowerCase() as Hex };
+}
+
+/** The passed block where one was passed, else the read tag's block read once. */
+export const resolveBlock = (provider: IProvider, tag: BlockTag, block: PinnedBlock | undefined): Promise<PinnedBlock> =>
+  block === undefined ? pinBlock(provider, tag) : Promise.resolve(passedBlock(block));
 
 /** One view call at the pinned block; a revert and a transport failure reject as the provider rejected. */
 export const readCall = (provider: IProvider, to: Address, data: Hex, block: PinnedBlock): Promise<Hex> =>

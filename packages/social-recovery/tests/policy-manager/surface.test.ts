@@ -42,6 +42,10 @@ describe('the public surface', () => {
     expect(typeof entry.POLICY_METHOD_INTERFACE_ID).toBe('string');
   });
 
+  it('exports the unanswered module read as POLICY_MANAGER_UNANSWERED', () => {
+    expect(entry.POLICY_MANAGER_UNANSWERED).toEqual({ answered: false });
+  });
+
   it('hands one instance out through both interfaces', () => {
     const part = partFor(always({ returns: TRUE_WORD }));
     const interactor: IPolicyManagerInteractor = part;

@@ -166,3 +166,6 @@ export const POLICY_MANAGER_INTERFACE_ID_SIZE = 4;
 
 /** The address every view is read from, since no view of the manager or a module depends on its caller. */
 export const POLICY_MANAGER_READ_FROM: Address = '0x0000000000000000000000000000000000000000';
+
+/** The result of a module read that answered nothing. */
+export const POLICY_MANAGER_UNANSWERED = { answered: false } as const;

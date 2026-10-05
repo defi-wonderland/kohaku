@@ -4,6 +4,7 @@ import {
   POLICY_MANAGER_PAUSED_ABI,
   POLICY_MANAGER_SUPPORTS_INTERFACE_ABI,
   POLICY_MANAGER_TRUE_WORD,
+  POLICY_MANAGER_UNANSWERED,
   POLICY_MANAGER_TRUSTED_PARTIES_ABI,
   POLICY_MANAGER_VERSION_ABI,
   POLICY_METHOD_INTERFACE_ID,
@@ -13,8 +14,6 @@ import type { BlockTag, Hex, IProvider, ModuleInfo, Parties, PinnedBlock, ReadRe
 import type { CallOutcome } from '../types/policy-manager';
 import { decodeModuleReturn, moduleCall, pinBlock } from './chain';
 import { partiesFrom } from './records';
-
-const UNANSWERED = { answered: false } as const;
 
 /** The block the tag names, or nothing where the provider failed to name one. */
 async function tryPinBlock(provider: IProvider, tag: BlockTag): Promise<PinnedBlock | undefined> {
@@ -48,7 +47,7 @@ export async function readPaused(provider: IProvider, module: unknown, tag: Bloc
   const outcomes = await moduleCalls(provider, module, tag, [encodeFunctionData({ abi: POLICY_MANAGER_PAUSED_ABI })]);
   const outcome = outcomes?.[0];
 
-  if (outcome === undefined || outcome.kind === 'failed') return UNANSWERED;
+  if (outcome === undefined || outcome.kind === 'failed') return POLICY_MANAGER_UNANSWERED;
 
   return { answered: true, value: isExactlyTrue(outcome) };
 }
@@ -58,12 +57,12 @@ export async function readTrustedParties(provider: IProvider, module: unknown, t
   const outcomes = await moduleCalls(provider, module, tag, [encodeFunctionData({ abi: POLICY_MANAGER_TRUSTED_PARTIES_ABI })]);
   const outcome = outcomes?.[0];
 
-  if (outcome === undefined || outcome.kind !== 'returned') return UNANSWERED;
+  if (outcome === undefined || outcome.kind !== 'returned') return POLICY_MANAGER_UNANSWERED;
 
   try {
     return { answered: true, value: partiesFrom(outcome.data) };
   } catch {
-    return UNANSWERED;
+    return POLICY_MANAGER_UNANSWERED;
   }
 }
 
@@ -79,13 +78,13 @@ export async function readModuleInfo(provider: IProvider, module: unknown, tag: 
     encodeFunctionData({ abi: POLICY_MANAGER_SUPPORTS_INTERFACE_ABI, args: [POLICY_METHOD_INTERFACE_ID] }),
   ]);
 
-  if (outcomes === undefined) return UNANSWERED;
+  if (outcomes === undefined) return POLICY_MANAGER_UNANSWERED;
 
   const [nameOutcome, versionOutcome, probeOutcome] = outcomes as [CallOutcome, CallOutcome, CallOutcome];
   const name = decodeModuleReturn(POLICY_MANAGER_NAME_ABI[0].outputs, nameOutcome, 'name');
   const version = decodeModuleReturn(POLICY_MANAGER_VERSION_ABI[0].outputs, versionOutcome, 'version');
 
-  if (name === undefined || version === undefined || probeOutcome.kind === 'failed') return UNANSWERED;
+  if (name === undefined || version === undefined || probeOutcome.kind === 'failed') return POLICY_MANAGER_UNANSWERED;
 
   return { answered: true, value: { name: name[0], version: version[0], supportsInterface: isExactlyTrue(probeOutcome) } };
 }

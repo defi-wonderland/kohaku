@@ -1,17 +1,18 @@
-import { decodeFunctionData, encodeFunctionData } from 'viem';
+import { decodeAbiParameters, decodeFunctionData, encodeFunctionData } from 'viem';
 import {
   FORMATS_ATTEMPT_ID_BITS,
   FORMATS_CANCEL_BY_PROOFS_ABI,
   FORMATS_PLACE_BITS,
+  FORMATS_PROOF_PLACE_ABI,
   FORMATS_SETUP_NONCE_BITS,
   FORMATS_START_ATTEMPT_ABI,
   POLICY_MANAGER_HASH_APPROVAL_ABI,
   POLICY_MANAGER_HASH_CANCEL_ABI,
   POLICY_MANAGER_WRITES_ABI,
 } from '../constants';
-import { encodeAttemptRequest, encodeCancelRequest } from '../formats';
-import { assertBytes, assertBytes32, assertObject, assertUintBigint, assertUintNumber, normalizeAddress } from '../formats/guards';
-import type { Address, AttemptRequest, CancelRequest, Hex } from '../interfaces';
+import { encodeAttemptRequest, encodeCancelRequest, encodeProofPlace } from '../formats';
+import { assertArray, assertBytes, assertBytes32, assertObject, assertUintBigint, assertUintNumber, normalizeAddress } from '../formats/guards';
+import type { Address, AttemptRequest, CancelRequest, Hex, ProofPlace } from '../interfaces';
 
 const lower = (value: Hex): Hex => value.toLowerCase() as Hex;
 
@@ -60,20 +61,36 @@ export function cancelByVetoData(account: Address, action: Address, attemptId: b
   });
 }
 
-/** `hashApproval(request, place)` calldata, the request checked and normalized by the `startAttempt` codec. */
-export function hashApprovalData(request: AttemptRequest, place: number): Hex {
-  const { args } = decodeFunctionData({ abi: FORMATS_START_ATTEMPT_ABI, data: encodeAttemptRequest(request) });
+/**
+ * The proofs in the order given, each checked and normalized by the proof place codec;
+ * the submission-only rules, sorting and strictly increasing places, are not applied.
+ */
+function proofsAsGiven(proofs: readonly ProofPlace[]) {
+  assertArray(proofs, 'request.proofs');
 
-  assertUintNumber(place, FORMATS_PLACE_BITS, 'place');
-
-  return encodeFunctionData({ abi: POLICY_MANAGER_HASH_APPROVAL_ABI, args: [args[0], BigInt(place)] });
+  return proofs.map((proof) => decodeAbiParameters(FORMATS_PROOF_PLACE_ABI, encodeProofPlace(proof))[0]);
 }
 
-/** `hashCancel(request, place)` calldata, the request checked and normalized by the `cancelByProofs` codec. */
-export function hashCancelData(request: CancelRequest, place: number): Hex {
-  const { args } = decodeFunctionData({ abi: FORMATS_CANCEL_BY_PROOFS_ABI, data: encodeCancelRequest(request) });
+/** `hashApproval(request, place)` calldata, every member checked by the `startAttempt` codec and the proofs kept in the order given. */
+export function hashApprovalData(request: AttemptRequest, place: number): Hex {
+  assertObject(request, 'request');
+
+  const { args } = decodeFunctionData({ abi: FORMATS_START_ATTEMPT_ABI, data: encodeAttemptRequest({ ...request, proofs: [] }) });
+  const proofs = proofsAsGiven(request.proofs);
 
   assertUintNumber(place, FORMATS_PLACE_BITS, 'place');
 
-  return encodeFunctionData({ abi: POLICY_MANAGER_HASH_CANCEL_ABI, args: [args[0], BigInt(place)] });
+  return encodeFunctionData({ abi: POLICY_MANAGER_HASH_APPROVAL_ABI, args: [{ ...args[0], proofs }, BigInt(place)] });
+}
+
+/** `hashCancel(request, place)` calldata, every member checked by the `cancelByProofs` codec and the proofs kept in the order given. */
+export function hashCancelData(request: CancelRequest, place: number): Hex {
+  assertObject(request, 'request');
+
+  const { args } = decodeFunctionData({ abi: FORMATS_CANCEL_BY_PROOFS_ABI, data: encodeCancelRequest({ ...request, proofs: [] }) });
+  const proofs = proofsAsGiven(request.proofs);
+
+  assertUintNumber(place, FORMATS_PLACE_BITS, 'place');
+
+  return encodeFunctionData({ abi: POLICY_MANAGER_HASH_CANCEL_ABI, args: [{ ...args[0], proofs }, BigInt(place)] });
 }

@@ -1,3 +1,5 @@
+import type { Address } from '../interfaces';
+
 /** The ABI parameters of the credential commitment's preimage. */
 export const FORMATS_CREDENTIAL_HASH_ABI = [{ type: 'address' }, { type: 'bytes' }, { type: 'bytes32' }] as const;
 
@@ -106,3 +108,6 @@ export const FORMATS_HEX_ADDRESS_PATTERN = /^0x[0-9a-fA-F]{40}$/;
 
 /** The width below which every unsigned value fits a safe integer. */
 export const FORMATS_SAFE_INTEGER_BITS = 53;
+
+/** The zero address. */
+export const FORMATS_ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000';

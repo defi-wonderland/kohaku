@@ -26,6 +26,11 @@ export type PinnedBlock = {
   readonly hash: Hex;
 };
 
+/** What an integrator's provider rejects a reverted call with. */
+export type ProviderRevert = {
+  readonly data: Hex;
+};
+
 /** The first and last block `fetch` reads. */
 export type BlockRange = {
   readonly from: number;

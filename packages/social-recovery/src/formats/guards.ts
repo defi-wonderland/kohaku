@@ -1,6 +1,6 @@
 import { checksumAddress, getAddress } from 'viem';
 import { FORMATS_HEX_ADDRESS_PATTERN, FORMATS_HEX_BYTES32_PATTERN, FORMATS_HEX_BYTES_PATTERN, FORMATS_SAFE_INTEGER_BITS } from '../constants';
-import type { Address, Hex } from '../interfaces';
+import type { Address, Hex, PinnedBlock } from '../interfaces';
 
 /** Refuses anything but whole bytes as 0x-prefixed hex, since an odd digit count would be padded into other bytes. */
 export function assertBytes(value: unknown, name: string): asserts value is Hex {
@@ -84,3 +84,18 @@ export function assertUintBigint(value: unknown, bits: number, name: string): as
 
 /** The same address, compared without regard to case. */
 export const sameAddress = (left: Address, right: Address): boolean => left.toLowerCase() === right.toLowerCase();
+
+/** The hex string lower-cased, for a value already checked. */
+export const lowerHex = (value: Hex): Hex => value.toLowerCase() as Hex;
+
+/** The block's number and lower-cased hash, refusing anything but a non-negative safe integer and a 32-byte hash. */
+export function checkedBlock(value: unknown, name: string): PinnedBlock {
+  assertObject(value, name);
+
+  const { number, hash } = value as Partial<Record<keyof PinnedBlock, unknown>>;
+
+  assertUintNumber(number, FORMATS_SAFE_INTEGER_BITS, `${name}.number`);
+  assertBytes32(hash, `${name}.hash`);
+
+  return { number, hash: lowerHex(hash) };
+}

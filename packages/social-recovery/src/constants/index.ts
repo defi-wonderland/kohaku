@@ -10,3 +10,4 @@ export * from './validation';
 export * from './gathering';
 export * from './description';
 export * from './errors';
+export * from './recovery-action';

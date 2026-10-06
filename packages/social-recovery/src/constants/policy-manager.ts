@@ -1,5 +1,5 @@
-import type { AbiFunctionItem, Address, Hex } from '../interfaces/records';
-import { FORMATS_PAYMENT_ORDER_TYPED_DATA_FIELDS } from './formats';
+import type { AbiFunctionItem, Hex } from '../interfaces/records';
+import { FORMATS_PAYMENT_ORDER_TYPED_DATA_FIELDS, FORMATS_ZERO_ADDRESS } from './formats';
 import { FORMATS_CANCEL_BY_PROOFS_ABI, FORMATS_START_ATTEMPT_ABI } from './formats-requests';
 
 /** The ERC-165 id of the method interface: the XOR of the selectors of `verify`, `trustedParties`, `supportsInterface`, `name` and `version`. */
@@ -165,7 +165,7 @@ export const POLICY_MANAGER_TRUE_WORD: Hex = '0x00000000000000000000000000000000
 export const POLICY_MANAGER_INTERFACE_ID_SIZE = 4;
 
 /** The address every view is read from, since no view of the manager or a module depends on its caller. */
-export const POLICY_MANAGER_READ_FROM: Address = '0x0000000000000000000000000000000000000000';
+export const POLICY_MANAGER_READ_FROM = FORMATS_ZERO_ADDRESS;
 
 /** The result of a module read that answered nothing. */
-export const POLICY_MANAGER_UNANSWERED = { answered: false } as const;
+export const POLICY_MANAGER_UNANSWERED = Object.freeze({ answered: false } as const);

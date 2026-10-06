@@ -1,7 +1,7 @@
 import fc from 'fast-check';
-import { decodeFunctionData, getAddress, parseAbi } from 'viem';
+import { decodeFunctionData, parseAbi } from 'viem';
 import { describe, expect, it } from 'vitest';
-import type { Address, ProofPlace } from '../../src/index';
+import type { Address } from '../../src/index';
 import { TIMEOUT, address, anyBytes, bytesN, place } from '../formats/arbitraries';
 import { always } from './double';
 import { attemptRequestOf, cancelRequestOf, partFor, vectorRow } from './fixtures';
@@ -20,26 +20,21 @@ const HASH_ABI = parseAbi([
 const VECTOR_ACCOUNT: Address = '0x1111111111111111111111111111111111111111';
 const VECTOR_ACTION: Address = '0x2222222222222222222222222222222222222222';
 
-const proof: fc.Arbitrary<ProofPlace> = fc.record({
-  place: fc.oneof(fc.nat(4), place),
-  method: address.map((raw) => raw as Address),
-  config: anyBytes,
-  salt: bytesN(32),
-  proof: anyBytes,
-});
+/** Anything a caller might put in `proofs`: well-formed entries in any order, junk entries, or no array at all. */
+const anyProofs = fc.oneof(
+  fc.array(fc.record({ place: fc.oneof(fc.nat(4), place), method: address, config: anyBytes, salt: bytesN(32), proof: anyBytes }), { maxLength: 5 }),
+  fc.array(fc.anything(), { maxLength: 3 }),
+  fc.anything(),
+);
 
-/** The proofs as the decoder hands them back: places as bigint, methods checksummed. */
-const decodedForm = (proofs: readonly ProofPlace[]) =>
-  proofs.map((given) => ({ ...given, place: BigInt(given.place), method: getAddress(given.method) }));
-
-describe('the hash reads over arbitrary proof orders', () => {
-  it('decode back to the proofs in the order given, repeats and disorder included', async () => {
+describe('the hash reads over arbitrary proofs', () => {
+  it('always send an empty proof array and the place asked for', async () => {
     await runAsync(
-      fc.asyncProperty(fc.array(proof, { maxLength: 5 }), fc.nat(64), async (proofs, at) => {
+      fc.asyncProperty(anyProofs, fc.nat(64), async (proofs, at) => {
         const approvalProvider = always({ returns: `0x${'00'.repeat(32)}` });
         const cancelProvider = always({ returns: `0x${'00'.repeat(32)}` });
-        const attempt = { ...attemptRequestOf(vectorRow('attempt-request.json', 'sorted-proofs')), proofs };
-        const cancel = { ...cancelRequestOf(vectorRow('cancel-request.json', 'one-proof')), proofs };
+        const attempt = { ...attemptRequestOf(vectorRow('attempt-request.json', 'sorted-proofs')), proofs } as never;
+        const cancel = { ...cancelRequestOf(vectorRow('cancel-request.json', 'one-proof')), proofs } as never;
 
         await partFor(approvalProvider, VECTOR_ACCOUNT, VECTOR_ACTION).hashApproval(attempt, at);
         await partFor(cancelProvider, VECTOR_ACCOUNT, VECTOR_ACTION).hashCancel(cancel, at);
@@ -47,11 +42,10 @@ describe('the hash reads over arbitrary proof orders', () => {
         const approval = decodeFunctionData({ abi: HASH_ABI, data: approvalProvider.calls[0]?.data ?? '0x' });
         const cancellation = decodeFunctionData({ abi: HASH_ABI, data: cancelProvider.calls[0]?.data ?? '0x' });
 
-        expect(approval.functionName).toBe('hashApproval');
-        expect(cancellation.functionName).toBe('hashCancel');
-        expect((approval.args[0] as { proofs: unknown }).proofs).toEqual(decodedForm(proofs));
-        expect((cancellation.args[0] as { proofs: unknown }).proofs).toEqual(decodedForm(proofs));
+        expect((approval.args[0] as { proofs: unknown }).proofs).toEqual([]);
+        expect((cancellation.args[0] as { proofs: unknown }).proofs).toEqual([]);
         expect(approval.args[1]).toBe(BigInt(at));
+        expect(cancellation.args[1]).toBe(BigInt(at));
       }),
     );
   }, TIMEOUT);

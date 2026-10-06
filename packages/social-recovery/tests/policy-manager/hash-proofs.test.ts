@@ -19,7 +19,7 @@ const VECTOR_ACCOUNT: Address = '0x1111111111111111111111111111111111111111';
 const VECTOR_ACTION: Address = '0x2222222222222222222222222222222222222222';
 const DIGEST: Hex = `0x${'5e'.repeat(32)}`;
 
-/** One proof at a place, its bytes marked with the place so two proofs at one place still differ. */
+/** One proof at a place, its bytes marked so two proofs at one place still differ. */
 const proofAt = (place: number, mark: number): ProofPlace => ({
   place,
   method: METHOD,
@@ -28,23 +28,32 @@ const proofAt = (place: number, mark: number): ProofPlace => ({
   proof: `0xbeef${mark.toString(16).padStart(2, '0')}`,
 });
 
-const attempt = (proofs: readonly ProofPlace[]): AttemptRequest => ({ ...attemptRequestOf(vectorRow('attempt-request.json', 'sorted-proofs')), proofs });
-const cancel = (proofs: readonly ProofPlace[]): CancelRequest => ({ ...cancelRequestOf(vectorRow('cancel-request.json', 'one-proof')), proofs });
+const attempt = (proofs: unknown): AttemptRequest =>
+  ({ ...attemptRequestOf(vectorRow('attempt-request.json', 'sorted-proofs')), proofs }) as AttemptRequest;
+const cancel = (proofs: unknown): CancelRequest =>
+  ({ ...cancelRequestOf(vectorRow('cancel-request.json', 'one-proof')), proofs }) as CancelRequest;
 
+/** The calldata the manager's view takes for the request with no proofs at all. */
 const approvalData = (request: AttemptRequest, place: bigint): Hex =>
-  callData(SIGNATURES.hashApproval, [ATTEMPT_REQUEST_PARAM, { type: 'uint256' }], [tupleOf(request), place]);
+  callData(SIGNATURES.hashApproval, [ATTEMPT_REQUEST_PARAM, { type: 'uint256' }], [tupleOf({ ...request, proofs: [] }), place]);
 const cancelData = (request: CancelRequest, place: bigint): Hex =>
-  callData(SIGNATURES.hashCancel, [CANCEL_REQUEST_PARAM, { type: 'uint256' }], [tupleOf(request), place]);
+  callData(SIGNATURES.hashCancel, [CANCEL_REQUEST_PARAM, { type: 'uint256' }], [tupleOf({ ...request, proofs: [] }), place]);
 
-const PROOF_SETS = [
-  ['unsorted places [2, 0], kept in that order', [proofAt(2, 1), proofAt(0, 2)]],
+const PROOF_SETS: readonly (readonly [string, unknown])[] = [
+  ['the blessed sorted proofs', attemptRequestOf(vectorRow('attempt-request.json', 'sorted-proofs')).proofs],
+  ['unsorted places [2, 0]', [proofAt(2, 1), proofAt(0, 2)]],
   ['the repeated places [0, 0]', [proofAt(0, 1), proofAt(0, 2)]],
-  ['an empty proof array', []],
-  ['descending places [5, 3, 1]', [proofAt(5, 1), proofAt(3, 2), proofAt(1, 3)]],
-] as const;
+  ['an empty array', []],
+  ['a proof with a bad-checksum method', [{ ...proofAt(0, 1), method: '0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9adb' }]],
+  ['a proof with a 31-byte salt and a negative place', [{ ...proofAt(-1, 1), salt: `0x${'aa'.repeat(31)}` }]],
+  ['a null proof', [null]],
+  ['a string', 'none'],
+  ['null', null],
+  ['undefined', undefined],
+];
 
-describe('the hash reads carry the proofs as given', () => {
-  it.each(PROOF_SETS)('hashApproval sends %s and makes the read', async (_case, proofs) => {
+describe('the hash reads send an empty proof array whatever the request holds', () => {
+  it.each(PROOF_SETS)('hashApproval with %s', async (_case, proofs) => {
     const provider = always({ returns: DIGEST });
     const request = attempt(proofs);
 
@@ -53,7 +62,7 @@ describe('the hash reads carry the proofs as given', () => {
     expect(provider.calls[0]?.data).toBe(approvalData(request, 2n));
   });
 
-  it.each(PROOF_SETS)('hashCancel sends %s and makes the read', async (_case, proofs) => {
+  it.each(PROOF_SETS)('hashCancel with %s', async (_case, proofs) => {
     const provider = always({ returns: DIGEST });
     const request = cancel(proofs);
 
@@ -62,14 +71,14 @@ describe('the hash reads carry the proofs as given', () => {
     expect(provider.calls[0]?.data).toBe(cancelData(request, 0n));
   });
 
-  it('checksums lower-case and upper-case proof methods and lower-cases upper-case proof bytes', async () => {
+  it('sends the same calldata for a request with proofs and the same request without them', async () => {
     const provider = always({ returns: DIGEST });
-    const given: ProofPlace = { ...proofAt(4, 9), method: METHOD.toUpperCase().replace('0X', '0x') as Address, config: '0xABCD', proof: '0xBEEF' };
-    const expected: ProofPlace = { ...given, method: METHOD, config: '0xabcd', proof: '0xbeef' };
+    const part = partFor(provider, VECTOR_ACCOUNT, VECTOR_ACTION);
 
-    await partFor(provider, VECTOR_ACCOUNT, VECTOR_ACTION).hashApproval(attempt([given, proofAt(1, 1)]), 0);
+    await part.hashApproval(attempt([proofAt(3, 1)]), 1);
+    await part.hashApproval(attempt([]), 1);
 
-    expect(provider.calls[0]?.data).toBe(approvalData(attempt([expected, proofAt(1, 1)]), 0n));
+    expect(provider.calls[0]?.data).toBe(provider.calls[1]?.data);
   });
 });
 
@@ -96,24 +105,19 @@ describe('the prepares keep the submission rules', () => {
   });
 });
 
-describe('the member guards on the hash path', () => {
+describe('the other member guards on the hash path', () => {
   const badCases = [
-    ['a proof method whose checksum is wrong', { proofs: [{ ...proofAt(0, 1), method: '0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9adb' }] }],
     ['an order token whose checksum is wrong', 'order'],
     ['an attempt id of 2^64', { attemptId: 1n << 64n }],
     ['a setup nonce of 2^64', { setupNonce: 1n << 64n }],
     ['a setup body that is not hex', { setupBody: '0xzz' }],
-    ['a proof salt of 31 bytes', { proofs: [{ ...proofAt(0, 1), salt: `0x${'aa'.repeat(31)}` }] }],
-    ['a negative proof place', { proofs: [proofAt(-1, 1)] }],
-    ['proofs that are not an array', { proofs: 'none' }],
-    ['a proof that is null', { proofs: [proofAt(0, 1), null] }],
+    ['a valid-until beyond uint48', { validUntil: 2 ** 48 }],
+    ['an account that is not the bound one', { account: ACTION_BAD_CHECKSUM.toLowerCase() }],
   ] as const;
 
   /** The bad member applied to a request of either kind. */
   const spoil = <Request extends CancelRequest>(request: Request, change: (typeof badCases)[number][1]): Request =>
-    (change === 'order'
-      ? { ...request, order: { token: ACTION_BAD_CHECKSUM, amount: 1n, payee: METHOD } }
-      : { ...request, ...change }) as Request;
+    (change === 'order' ? { ...request, order: { token: ACTION_BAD_CHECKSUM, amount: 1n, payee: METHOD } } : { ...request, ...change }) as Request;
 
   it.each(badCases)('hashApproval throws on %s before any read', async (_case, change) => {
     const provider = always({ returns: DIGEST });

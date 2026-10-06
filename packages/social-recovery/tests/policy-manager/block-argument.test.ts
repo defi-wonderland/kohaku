@@ -10,21 +10,22 @@ const PINNED: PinnedBlock = { number: 18_000_000, hash: `0x${'cd'.repeat(32)}` }
 const HEADER: BlockHeader = { number: 17_999_999, timestamp: 1_800_000_000, hash: `0x${'ef'.repeat(32)}` };
 const FINALIZED = { read: 'finalized', watch: 'latest' } as const;
 
-const MALFORMED: readonly (readonly [string, unknown])[] = [
-  ['null', null],
-  ['a number', 18_000_000],
-  ['a string', 'latest'],
-  ['a block without hash', { number: 1 }],
-  ['a block without number', { hash: PINNED.hash }],
-  ['a 31-byte hash', { number: 1, hash: `0x${'cd'.repeat(31)}` }],
-  ['a 33-byte hash', { number: 1, hash: `0x${'cd'.repeat(33)}` }],
-  ['a non-hex hash', { number: 1, hash: `0x${'zz'.repeat(32)}` }],
-  ['a hash without 0x', { number: 1, hash: 'cd'.repeat(32) }],
-  ['a negative number', { number: -1, hash: PINNED.hash }],
-  ['a fractional number', { number: 1.5, hash: PINNED.hash }],
-  ['an unsafe number', { number: Number.MAX_SAFE_INTEGER + 1, hash: PINNED.hash }],
-  ['a bigint number', { number: 1n, hash: PINNED.hash }],
-  ['a string number', { number: '1', hash: PINNED.hash }],
+/** A malformed block, the error class the shared guards refuse it with, and the name the message carries. */
+const MALFORMED: readonly (readonly [string, unknown, typeof TypeError | typeof RangeError, RegExp])[] = [
+  ['null', null, TypeError, /^block must be an object/],
+  ['a number', 18_000_000, TypeError, /^block must be an object/],
+  ['a string', 'latest', TypeError, /^block must be an object/],
+  ['a block without hash', { number: 1 }, TypeError, /^block\.hash /],
+  ['a block without number', { hash: PINNED.hash }, TypeError, /^block\.number /],
+  ['a 31-byte hash', { number: 1, hash: `0x${'cd'.repeat(31)}` }, TypeError, /^block\.hash /],
+  ['a 33-byte hash', { number: 1, hash: `0x${'cd'.repeat(33)}` }, TypeError, /^block\.hash /],
+  ['a non-hex hash', { number: 1, hash: `0x${'zz'.repeat(32)}` }, TypeError, /^block\.hash /],
+  ['a hash without 0x', { number: 1, hash: 'cd'.repeat(32) }, TypeError, /^block\.hash /],
+  ['a fractional number', { number: 1.5, hash: PINNED.hash }, TypeError, /^block\.number /],
+  ['a bigint number', { number: 1n, hash: PINNED.hash }, TypeError, /^block\.number /],
+  ['a string number', { number: '1', hash: PINNED.hash }, TypeError, /^block\.number /],
+  ['a negative number', { number: -1, hash: PINNED.hash }, RangeError, /^block\.number /],
+  ['an unsafe number', { number: Number.MAX_SAFE_INTEGER + 1, hash: PINNED.hash }, RangeError, /^block\.number /],
 ];
 
 describe('a passed block replaces the block read', () => {
@@ -96,21 +97,57 @@ describe('an omitted block keeps the part\'s own block read', () => {
 });
 
 describe('a malformed block throws before any provider call', () => {
-  it.each(MEMBERS.flatMap((entry) => MALFORMED.map(([label, block]) => [entry.name, label, entry, block] as const)))(
-    '%s refuses %s with a TypeError naming block',
-    async (_name, _label, entry, block) => {
+  it.each(MEMBERS.flatMap((entry) => MALFORMED.map(([label, block, kind, message]) => [entry.name, label, entry, block, kind, message] as const)))(
+    '%s refuses %s',
+    async (_name, _label, entry, block, kind, message) => {
       const provider = answeringAll();
       const outcome = await entry.invoke(partFor(provider), [block]).then(
         () => undefined,
         (thrown: unknown) => thrown,
       );
 
-      expect(outcome).toBeInstanceOf(TypeError);
-      expect((outcome as TypeError).message).toMatch(/block/);
+      expect(outcome).toBeInstanceOf(kind);
+      expect((outcome as Error).message).toMatch(message);
       expect(provider.blockTags).toEqual([]);
       expect(provider.calls).toEqual([]);
     },
   );
+});
+
+describe('a malformed header from the provider', () => {
+  const badHeader = (header: unknown) => {
+    const provider = answeringAll();
+
+    provider.block = async (tag) => {
+      provider.blockTags.push(tag);
+
+      return header as BlockHeader;
+    };
+
+    return provider;
+  };
+
+  it.each([
+    ['a 31-byte hash', { number: 1, timestamp: 1, hash: `0x${'cd'.repeat(31)}` }, TypeError, /^block header\.hash /],
+    ['a negative number', { number: -1, timestamp: 1, hash: PINNED.hash }, RangeError, /^block header\.number /],
+    ['null', null, TypeError, /^block header must be an object/],
+  ] as const)('makes a manager read and a prepare throw on %s, named as the block header', async (_case, header, kind, message) => {
+    for (const run of [(part: ReturnType<typeof partFor>) => part.name(), (part: ReturnType<typeof partFor>) => part.prepareClearSetup(ACTION)]) {
+      const provider = badHeader(header);
+      const outcome = await run(partFor(provider)).then(() => undefined, (thrown: unknown) => thrown);
+
+      expect(outcome).toBeInstanceOf(kind);
+      expect((outcome as Error).message).toMatch(message);
+      expect(provider.calls).toEqual([]);
+    }
+  });
+
+  it('makes a module read answer nothing, since the provider failed to name a block', async () => {
+    const provider = badHeader({ number: 1, timestamp: 1, hash: '0x12' });
+
+    expect(await partFor(provider).paused(METHOD)).toEqual({ answered: false });
+    expect(provider.calls).toEqual([]);
+  });
 });
 
 describe('one passed block pins a composite of part calls', () => {

@@ -34,6 +34,23 @@ describe('the public surface', () => {
     expect(entry.POLICY_MANAGER_UNANSWERED).toEqual({ answered: false });
   });
 
+  it('freezes POLICY_MANAGER_UNANSWERED, so no caller can turn a failed read into an answer', () => {
+    const shared = entry.POLICY_MANAGER_UNANSWERED as { answered: boolean };
+
+    expect(Object.isFrozen(shared)).toBe(true);
+    expect(() => {
+      shared.answered = true;
+    }).toThrow(TypeError);
+    expect(entry.POLICY_MANAGER_UNANSWERED).toEqual({ answered: false });
+  });
+
+  it('hands out the frozen record itself for a module read that answered nothing', async () => {
+    const result = await partFor(always({ rejects: new Error('down') })).paused(METHOD);
+
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(result).toEqual({ answered: false });
+  });
+
   it('hands one instance out through both interfaces', () => {
     const part = partFor(always({ returns: TRUE_WORD }));
     const interactor: IPolicyManagerInteractor = part;

@@ -15,6 +15,7 @@ import type {
 /**
  * The policy manager's writes as prepared calls and its views as reads, bound to one account and one action.
  * The optional last `block` pins a member to that block instead of the read tag's.
+ * A passed block is used as given: reads pin by its number and a prepare reports its hash unverified.
  */
 export interface IPolicyManagerInteractor {
   prepareCommitSetup(

@@ -52,6 +52,7 @@ function checkReadTag(blockTags: BlockTags): NamedBlockTag {
  * The shipped `IPolicyManagerInteractor`, bound to one manager, one account and one action.
  * Every read and every prepare pins to the block passed, or else reads the configured read tag's block once;
  * a prepare carries no simulation, and an argument naming another account or action throws a `TypeError`.
+ * A passed block is used as given: reads pin by its number and a prepare reports its hash unverified.
  */
 export class PolicyManager implements IPolicyManagerInteractor, IMethodModuleReads {
   private readonly provider: IProvider;

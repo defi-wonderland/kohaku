@@ -9,10 +9,10 @@ import {
   POLICY_MANAGER_VERSION_ABI,
   POLICY_METHOD_INTERFACE_ID,
 } from '../constants';
-import { normalizeAddress } from '../formats/guards';
+import { checkedBlock, normalizeAddress } from '../formats/guards';
 import type { BlockTag, Hex, IProvider, ModuleInfo, Parties, PinnedBlock, ReadResult } from '../interfaces';
 import type { CallOutcome } from '../types/policy-manager';
-import { decodeModuleReturn, moduleCall, passedBlock, pinBlock } from './chain';
+import { decodeModuleReturn, moduleCall, pinBlock } from './chain';
 import { partiesFrom } from './records';
 
 /** The block the tag names, or nothing where the provider failed to name one. */
@@ -36,7 +36,7 @@ async function moduleCalls(
   block: PinnedBlock | undefined,
 ): Promise<readonly CallOutcome[] | undefined> {
   const target = normalizeAddress(module, 'module');
-  const pinned = block === undefined ? await tryPinBlock(provider, tag) : passedBlock(block);
+  const pinned = block === undefined ? await tryPinBlock(provider, tag) : checkedBlock(block, 'block');
 
   if (pinned === undefined) return undefined;
 

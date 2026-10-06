@@ -3,10 +3,9 @@ import {
   POLICY_MANAGER_STATE_OF_ABI,
   POLICY_MANAGER_TRUSTED_PARTIES_ABI,
 } from '../constants';
-import { ATTEMPT_STATES, type ActionState, type AttemptState, type Domain, type Hex, type Parties } from '../interfaces';
+import { ATTEMPT_STATES, type ActionState, type AttemptState, type Domain, type Parties } from '../interfaces';
+import { lowerHex } from '../formats/guards';
 import { decodeReturn } from './chain';
-
-const lower = (value: Hex): Hex => value.toLowerCase() as Hex;
 
 /** The enum index as its state name; an index the enum does not declare throws a `TypeError`. */
 function attemptState(index: number): AttemptState {
@@ -23,7 +22,7 @@ export function actionStateFrom(returned: unknown): ActionState {
   const { attempt } = state;
 
   return {
-    setupCommitment: lower(state.setupCommitment),
+    setupCommitment: lowerHex(state.setupCommitment),
     setupNonce: state.setupNonce,
     nextAttemptId: state.nextAttemptId,
     setupCommittedAtBlock: state.setupCommittedAtBlock,
@@ -32,7 +31,7 @@ export function actionStateFrom(returned: unknown): ActionState {
       setupNonce: attempt.setupNonce,
       consumableAfter: attempt.consumableAfter,
       state: attemptState(attempt.state),
-      payloadHash: lower(attempt.payloadHash),
+      payloadHash: lowerHex(attempt.payloadHash),
       order: { ...attempt.order },
       usedMethods: [...attempt.usedMethods],
       ignoresPause: attempt.ignoresPause,
@@ -53,12 +52,12 @@ export function domainFrom(returned: unknown): Domain {
   }
 
   return {
-    fields: lower(fields),
+    fields: lowerHex(fields),
     name,
     version,
     chainId: Number(chainId),
     verifyingContract,
-    salt: lower(salt),
+    salt: lowerHex(salt),
     extensions: [...extensions],
   };
 }
@@ -71,5 +70,5 @@ export function partiesFrom(returned: unknown): Parties {
     'trustedParties',
   );
 
-  return { admin, pendingAdmin, trustedKeys: trustedKeys.map(lower), pauseHolder, pendingPauseHolder };
+  return { admin, pendingAdmin, trustedKeys: trustedKeys.map(lowerHex), pauseHolder, pendingPauseHolder };
 }

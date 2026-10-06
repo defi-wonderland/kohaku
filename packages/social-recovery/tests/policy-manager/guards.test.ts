@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { checkedBlock, lowerHex } from '../../src/formats/guards';
 import type { Address, Hex } from '../../src/index';
 import { ProviderDouble } from './double';
 import {
@@ -134,5 +135,46 @@ describe('the bound account and action', () => {
     await expect(partFor(fresh(), VECTOR_ACCOUNT, VECTOR_ACTION).prepareStartAttempt({ ...attempt, action: OTHER })).rejects.toThrow(TypeError);
     await expect(partFor(fresh(), VECTOR_ACCOUNT, VECTOR_ACTION).prepareCancelByProofs({ ...cancel, account: OTHER })).rejects.toThrow(TypeError);
     await expect(partFor(fresh(), VECTOR_ACCOUNT, VECTOR_ACTION).prepareCancelByProofs({ ...cancel, action: OTHER })).rejects.toThrow(TypeError);
+  });
+});
+
+describe('lowerHex', () => {
+  it.each([
+    ['0xABCDEF', '0xabcdef'],
+    ['0xabcdef', '0xabcdef'],
+    ['0x', '0x'],
+    [`0x${'Ab'.repeat(32)}`, `0x${'ab'.repeat(32)}`],
+  ] as const)('lower-cases %s to %s', (value, expected) => {
+    expect(lowerHex(value)).toBe(expected);
+  });
+});
+
+describe('checkedBlock', () => {
+  const hash: Hex = `0x${'CD'.repeat(32)}`;
+
+  it('returns the number and the lower-cased hash, and nothing else of the value', () => {
+    const checked = checkedBlock({ number: 7, timestamp: 9, hash, extra: 'x' }, 'block');
+
+    expect(checked).toStrictEqual({ number: 7, hash: `0x${'cd'.repeat(32)}` });
+  });
+
+  it.each([0, Number.MAX_SAFE_INTEGER])('accepts the number %s', (number) => {
+    expect(checkedBlock({ number, hash }, 'block').number).toBe(number);
+  });
+
+  it.each([
+    ['null', null, TypeError, 'pin must be an object'],
+    ['a string', 'latest', TypeError, 'pin must be an object'],
+    ['a missing number', { hash }, TypeError, 'pin.number must be an integer'],
+    ['a fractional number', { number: 0.5, hash }, TypeError, 'pin.number must be an integer'],
+    ['a bigint number', { number: 1n, hash }, TypeError, 'pin.number must be an integer'],
+    ['a negative number', { number: -1, hash }, RangeError, 'pin.number -1 does not fit'],
+    ['an unsafe number', { number: 2 ** 53, hash }, RangeError, 'pin.number 9007199254740992 does not fit'],
+    ['a missing hash', { number: 1 }, TypeError, 'pin.hash must be exactly 32 bytes'],
+    ['a 31-byte hash', { number: 1, hash: `0x${'cd'.repeat(31)}` }, TypeError, 'pin.hash must be exactly 32 bytes'],
+    ['a non-hex hash', { number: 1, hash: `0x${'zz'.repeat(32)}` }, TypeError, 'pin.hash must be exactly 32 bytes'],
+  ] as const)('refuses %s with the name it was given', (_case, value, kind, message) => {
+    expect(() => checkedBlock(value, 'pin')).toThrow(kind);
+    expect(() => checkedBlock(value, 'pin')).toThrow(message);
   });
 });

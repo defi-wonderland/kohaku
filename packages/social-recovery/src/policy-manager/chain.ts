@@ -1,43 +1,18 @@
 import { decodeAbiParameters, encodeAbiParameters, type AbiParameter, type DecodeAbiParametersReturnType } from 'viem';
-import { FORMATS_HEX_BYTES32_PATTERN, FORMATS_HEX_BYTES_PATTERN, FORMATS_SAFE_INTEGER_BITS, POLICY_MANAGER_READ_FROM } from '../constants';
-import { assertBytes32, assertObject, assertUintNumber } from '../formats/guards';
+import { FORMATS_HEX_BYTES_PATTERN, POLICY_MANAGER_READ_FROM } from '../constants';
+import { assertBytes, checkedBlock, lowerHex } from '../formats/guards';
+import { decodeStrictly } from '../formats/strict';
 import { isProviderRevert, type Address, type BlockTag, type Hex, type IProvider, type PinnedBlock } from '../interfaces';
 import type { CallOutcome } from '../types/policy-manager';
 
-/** The block the tag names at this moment, read once; a header that is not a block number and a 32-byte hash throws. */
+/** The block the tag names at this moment, read once; a header without a block number and a 32-byte hash throws. */
 export async function pinBlock(provider: IProvider, tag: BlockTag): Promise<PinnedBlock> {
-  const header: unknown = await provider.block(tag);
-
-  assertObject(header, 'block');
-
-  const { number, hash } = header as { number: unknown; hash: unknown };
-
-  assertUintNumber(number, FORMATS_SAFE_INTEGER_BITS, 'block.number');
-  assertBytes32(hash, 'block.hash');
-
-  return { number, hash: hash.toLowerCase() as Hex };
+  return checkedBlock(await provider.block(tag), 'block header');
 }
 
-/** The caller's block, checked before any provider call: anything but a safe block number and a 32-byte hash throws a `TypeError`. */
-export function passedBlock(block: unknown): PinnedBlock {
-  if (typeof block !== 'object' || block === null) throw new TypeError('block must be an object with a number and a hash');
-
-  const { number, hash } = block as Partial<PinnedBlock>;
-
-  if (typeof number !== 'number' || !Number.isSafeInteger(number) || number < 0) {
-    throw new TypeError('block.number must be a non-negative safe integer');
-  }
-
-  if (typeof hash !== 'string' || !FORMATS_HEX_BYTES32_PATTERN.test(hash)) {
-    throw new TypeError('block.hash must be exactly 32 bytes of 0x-prefixed hex');
-  }
-
-  return { number, hash: hash.toLowerCase() as Hex };
-}
-
-/** The passed block where one was passed, else the read tag's block read once. */
+/** The passed block, checked before any provider call, where one was passed; else the read tag's block read once. */
 export const resolveBlock = (provider: IProvider, tag: BlockTag, block: PinnedBlock | undefined): Promise<PinnedBlock> =>
-  block === undefined ? pinBlock(provider, tag) : Promise.resolve(passedBlock(block));
+  block === undefined ? pinBlock(provider, tag) : Promise.resolve(checkedBlock(block, 'block'));
 
 /** One view call at the pinned block; a revert and a transport failure reject as the provider rejected. */
 export const readCall = (provider: IProvider, to: Address, data: Hex, block: PinnedBlock): Promise<Hex> =>
@@ -55,36 +30,32 @@ export async function moduleCall(provider: IProvider, to: Address, data: Hex, bl
 
   if (typeof returned !== 'string' || !FORMATS_HEX_BYTES_PATTERN.test(returned)) return { kind: 'failed' };
 
-  return { kind: 'returned', data: returned.toLowerCase() as Hex };
+  return { kind: 'returned', data: lowerHex(returned as Hex) };
 }
 
 /**
- * Decodes a view's return, refusing with a `TypeError` bytes that are not hex, do not decode,
- * or are not the canonical encoding the decoded values re-encode to.
+ * Decodes a view's return: bytes that are not hex throw a `TypeError`, and bytes that do not decode
+ * or are not the canonical encoding the decoded values re-encode to throw a `RangeError`.
  */
 export function decodeReturn<const Params extends readonly AbiParameter[]>(
   params: Params,
   returned: unknown,
   view: string,
 ): DecodeAbiParametersReturnType<Params> {
-  if (typeof returned !== 'string' || !FORMATS_HEX_BYTES_PATTERN.test(returned)) {
-    throw new TypeError(`${view} returned something other than 0x-prefixed hex of whole bytes`);
-  }
+  assertBytes(returned, view);
 
-  const lowered = returned.toLowerCase() as Hex;
-  let canonical: boolean;
-  let decoded: DecodeAbiParametersReturnType<Params>;
-
-  try {
-    decoded = decodeAbiParameters(params, lowered);
-    canonical = encodeAbiParameters(params, decoded as never) === lowered;
-  } catch (cause) {
-    throw new TypeError(`${view} returned bytes that do not decode`, { cause });
-  }
-
-  if (!canonical) throw new TypeError(`${view} returned bytes that are not the canonical encoding of its return`);
-
-  return decoded;
+  return decodeStrictly(returned, view, `the return of ${view}`, {
+    decode: (bytes) => decodeAbiParameters(params, bytes),
+    build: (decoded) => decoded,
+    encode: (decoded) => {
+      // A decoded value the encoder refuses is not a canonical return, so it fails the comparison.
+      try {
+        return encodeAbiParameters(params, decoded as never);
+      } catch {
+        return '0x';
+      }
+    },
+  });
 }
 
 /** The decoded return, or nothing where the module reverted or returned bytes that do not decode. */

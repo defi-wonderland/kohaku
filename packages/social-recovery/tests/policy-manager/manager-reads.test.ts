@@ -115,7 +115,7 @@ describe('stateOf()', () => {
     ['an empty return', '0x'],
     ['a single word', TRUE_WORD],
     ['the layout with ignoresPause last', 'last'],
-  ] as const)('throws a TypeError on %s', async (_case, returned) => {
+  ] as const)('throws a RangeError on %s, bytes that do not decode as the pinned layout', async (_case, returned) => {
     const raw = rawState(1, true);
     const lastLayout = encodeAbiParameters(
       [{ type: 'tuple', components: [...ACTION_STATE_PARAMS[0].components.slice(0, 4), {
@@ -135,36 +135,36 @@ describe('stateOf()', () => {
       [raw],
     );
 
-    await expect(partFor(always({ returns: returned === 'last' ? lastLayout : returned })).stateOf()).rejects.toThrow(TypeError);
+    await expect(partFor(always({ returns: returned === 'last' ? lastLayout : returned })).stateOf()).rejects.toThrow(RangeError);
   });
 });
 
 describe('hashApproval and hashCancel', () => {
-  it('sends hashApproval(AttemptRequest,uint256) with the proofs and returns the word lower-cased', async () => {
+  it('sends hashApproval(AttemptRequest,uint256) with an empty proof array and returns the word lower-cased', async () => {
     const request = attemptRequestOf(vectorRow('attempt-request.json', 'sorted-proofs'));
     const { digest } = vectorRow('approval-digest.json', 'normal').expected as { digest: Hex };
     const provider = always({ returns: `0x${digest.slice(2).toUpperCase()}` });
     const answer = await partFor(provider, VECTOR_ACCOUNT, VECTOR_ACTION).hashApproval(request, 3);
 
     expect(request.proofs.length).toBeGreaterThan(0);
-    expectOneReadOfManager(provider, callData(SIGNATURES.hashApproval, [ATTEMPT_REQUEST_PARAM, { type: 'uint256' }], [tupleOf(request), 3n]));
+    expectOneReadOfManager(provider, callData(SIGNATURES.hashApproval, [ATTEMPT_REQUEST_PARAM, { type: 'uint256' }], [tupleOf({ ...request, proofs: [] }), 3n]));
     expect(answer).toBe(digest);
   });
 
-  it('sends hashCancel(CancelRequest,uint256) with the proofs and returns the word lower-cased', async () => {
+  it('sends hashCancel(CancelRequest,uint256) with an empty proof array and returns the word lower-cased', async () => {
     const request = cancelRequestOf(vectorRow('cancel-request.json', 'one-proof'));
     const { digest } = vectorRow('cancellation-digest.json', 'normal').expected as { digest: Hex };
     const provider = always({ returns: `0x${digest.slice(2).toUpperCase()}` });
     const answer = await partFor(provider, VECTOR_ACCOUNT, VECTOR_ACTION).hashCancel(request, 0);
 
-    expectOneReadOfManager(provider, callData(SIGNATURES.hashCancel, [CANCEL_REQUEST_PARAM, { type: 'uint256' }], [tupleOf(request), 0n]));
+    expectOneReadOfManager(provider, callData(SIGNATURES.hashCancel, [CANCEL_REQUEST_PARAM, { type: 'uint256' }], [tupleOf({ ...request, proofs: [] }), 0n]));
     expect(answer).toBe(digest);
   });
 
-  it.each(['0x', `0x${'ab'.repeat(31)}`])('throws a TypeError when the digest return is %s', async (returned) => {
+  it.each(['0x', `0x${'ab'.repeat(31)}`])('throws a RangeError when the digest return is %s', async (returned) => {
     const request = attemptRequestOf(vectorRow('attempt-request.json', 'sorted-proofs'));
 
-    await expect(partFor(always({ returns: returned as Hex }), VECTOR_ACCOUNT, VECTOR_ACTION).hashApproval(request, 0)).rejects.toThrow(TypeError);
+    await expect(partFor(always({ returns: returned as Hex }), VECTOR_ACCOUNT, VECTOR_ACTION).hashApproval(request, 0)).rejects.toThrow(RangeError);
   });
 
   it('decodes a digest the double answered as encoded by viem', async () => {
@@ -203,8 +203,8 @@ describe('eip712Domain()', () => {
     await expect(partFor(always({ returns: domainReturn(safe + 1n) })).eip712Domain()).rejects.toThrow(TypeError);
   });
 
-  it('throws a TypeError on a return that does not decode', async () => {
-    await expect(partFor(always({ returns: TRUE_WORD })).eip712Domain()).rejects.toThrow(TypeError);
+  it('throws a RangeError on a return that does not decode', async () => {
+    await expect(partFor(always({ returns: TRUE_WORD })).eip712Domain()).rejects.toThrow(RangeError);
   });
 });
 
@@ -245,11 +245,36 @@ describe('name(), version() and supportsInterface(id)', () => {
     ['version', TRUE_WORD],
     ['supportsInterface', '0x'],
     ['supportsInterface', wordOf(2)],
-  ] as const)('%s throws a TypeError on the undecodable return %s', async (member, returned) => {
+  ] as const)('%s throws a RangeError on the undecodable return %s', async (member, returned) => {
     const part = partFor(always({ returns: returned }));
     const read = member === 'supportsInterface' ? part.supportsInterface('0x01ffc9a7') : part[member]();
 
-    await expect(read).rejects.toThrow(TypeError);
+    await expect(read).rejects.toThrow(RangeError);
+  });
+});
+
+describe('the strictness of a manager read\'s return', () => {
+  const stringWord = encodeAbiParameters(STRING_PARAMS, ['PolicyManager']);
+  const reads = [
+    ['stateOf', (part: ReturnType<typeof partFor>) => part.stateOf()],
+    ['name', (part: ReturnType<typeof partFor>) => part.name()],
+    ['version', (part: ReturnType<typeof partFor>) => part.version()],
+    ['eip712Domain', (part: ReturnType<typeof partFor>) => part.eip712Domain()],
+    ['supportsInterface', (part: ReturnType<typeof partFor>) => part.supportsInterface('0x01ffc9a7')],
+    ['hashApproval', (part: ReturnType<typeof partFor>) => part.hashApproval(attemptRequestOf(vectorRow('attempt-request.json', 'sorted-proofs')), 0)],
+    ['hashCancel', (part: ReturnType<typeof partFor>) => part.hashCancel(cancelRequestOf(vectorRow('cancel-request.json', 'one-proof')), 0)],
+  ] as const;
+
+  it.each(reads.flatMap(([member, read]) => [
+    [member, 'odd-length hex', '0x123', read] as const,
+    [member, 'text that is not hex', 'not hex', read] as const,
+    [member, 'hex without 0x', '00'.repeat(32), read] as const,
+  ]))('%s throws a TypeError on a return of %s', async (_member, _case, returned, read) => {
+    await expect(read(partFor(always({ returns: returned as Hex }), VECTOR_ACCOUNT, VECTOR_ACTION))).rejects.toThrow(TypeError);
+  });
+
+  it('name() throws a RangeError on a valid string followed by a stray word, which is not the canonical encoding', async () => {
+    await expect(partFor(always({ returns: `${stringWord}${'00'.repeat(32)}` })).name()).rejects.toThrow(RangeError);
   });
 });
 

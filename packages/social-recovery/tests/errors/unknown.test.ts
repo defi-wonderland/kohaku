@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decodeRevert, type Hex } from '../../src/index';
-import { KIT_ROWS, revertData, samplesFor } from './rows';
+import { KIT_ROWS, revertData, rowNamed, samplesFor } from './rows';
 
 describe('decodeRevert on data it cannot name', () => {
   it('returns the unknown result with the selector and the raw bytes for an undeclared selector', () => {
@@ -36,9 +36,7 @@ describe('decodeRevert on data it cannot name', () => {
   );
 
   it('returns the unknown result when an address argument carries bits above its twenty bytes', () => {
-    const noSetup = KIT_ROWS.find((entry) => entry.name === 'NoSetup');
-
-    if (noSetup === undefined) throw new Error('fixture lacks NoSetup');
+    const noSetup = rowNamed('PolicyManager_NoSetup');
 
     const dirty: Hex = `${noSetup.selector}${'ff'.repeat(12)}${'11'.repeat(20)}${'00'.repeat(12)}${'22'.repeat(20)}`;
 
@@ -47,13 +45,21 @@ describe('decodeRevert on data it cannot name', () => {
   });
 
   it('returns the unknown result for a bytes argument whose offset points past the data', () => {
-    const malformed = KIT_ROWS.find((entry) => entry.name === 'MalformedHandover');
-
-    if (malformed === undefined) throw new Error('fixture lacks MalformedHandover');
+    const malformed = rowNamed('RecoveryAction_MalformedHandover');
 
     const data: Hex = `${malformed.selector}${'00'.repeat(31)}ff${'00'.repeat(32)}`;
 
     expect(decodeRevert(data)).toMatchObject({ known: false, selector: malformed.selector });
+  });
+
+  it.each([
+    ['NoSetup(address,address)', '0x4ed09422'],
+    ['ReservedAuthority(address)', '0x58c9302f'],
+    ['NotConsumable(address,uint8,uint48,bytes32)', '0x6c5e8cd1'],
+  ] as const)('returns the unknown result for the unprefixed %s selector %s the contracts do not raise', (_signature, selector) => {
+    const data: Hex = `${selector}${'00'.repeat(12)}${'11'.repeat(20)}${'00'.repeat(32)}${'00'.repeat(32)}${'00'.repeat(32)}`;
+
+    expect(decodeRevert(data)).toEqual({ known: false, selector, data });
   });
 
   it.each(['0x123', 'not hex', '0xzzzzzzzz', ''])('never throws on input %j that is not even hex bytes', (data) => {

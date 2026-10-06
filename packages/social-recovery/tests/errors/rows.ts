@@ -16,37 +16,42 @@ const row = (name: string, selector: Hex, source: KitErrorSource, inputs: readon
   inputs: inputs.map(([argument, type]) => ({ name: argument, type })),
 });
 
-/** The manager's twenty-one errors. */
+/** The manager's twenty-one errors, in their declaration order. */
 export const MANAGER_ROWS: readonly ErrorRow[] = [
-  row('InvalidCommitment', '0x537fbfab', 'manager', [['supplied', 'bytes32']]),
-  row('WrongSetupNonce', '0x79d95968', 'manager', [['supplied', 'uint64'], ['expected', 'uint64']]),
-  row('PlaceOutOfRange', '0xfccf8ba3', 'manager', [['place', 'uint256'], ['count', 'uint256']]),
-  row('NoSetup', '0x4ed09422', 'manager', [['account', 'address'], ['action', 'address']]),
-  row('NoActiveAttempt', '0x083c73d3', 'manager', [['account', 'address'], ['action', 'address']]),
-  row('AttemptAlreadyActive', '0x659a6529', 'manager', [['account', 'address'], ['action', 'address'], ['attemptId', 'uint64']]),
-  row('WrongAttemptId', '0xd7faf9c3', 'manager', [['supplied', 'uint64'], ['expected', 'uint64']]),
-  row('SetupCommitmentMismatch', '0x1a88ff56', 'manager', [['recomputed', 'bytes32'], ['committed', 'bytes32']]),
-  row('StaleAttempt', '0x6e095a46', 'manager', [['judgedUnder', 'uint64'], ['currentNonce', 'uint64']]),
-  row('CredentialMismatch', '0x5460a018', 'manager', [['place', 'uint256'], ['recomputed', 'bytes32']]),
-  row('PlacesNotStrictlyIncreasing', '0x241d94cd', 'manager', [['place', 'uint256']]),
-  row('RequestExpired', '0x42a2e33c', 'manager', [['blockTimestamp', 'uint48'], ['validUntil', 'uint48']]),
-  row('ProofRejected', '0xa5f5e92a', 'manager', [['place', 'uint256'], ['method', 'address']]),
-  row('MethodStopped', '0x4ba81865', 'manager', [['place', 'uint256'], ['method', 'address']]),
-  row('MethodVetoedSpend', '0x8721dfbf', 'manager', [['method', 'address']]),
-  row('MethodNotUsed', '0x0e15d63a', 'manager', [['attemptId', 'uint64'], ['method', 'address']]),
-  row('AttemptIgnoresPause', '0x7d6d61b3', 'manager', [['attemptId', 'uint64']]),
-  row('MethodNotStopped', '0x9a5410d8', 'manager', [['method', 'address']]),
-  row('RuleUnsatisfied', '0xd3bd0752', 'manager', [['clause', 'uint256']]),
-  row('WaitNotOver', '0x55dc11ee', 'manager', [['blockTimestamp', 'uint48'], ['consumableAfter', 'uint48']]),
-  row('WrongPayload', '0x5c5cb894', 'manager', [['supplied', 'bytes32'], ['committed', 'bytes32']]),
+  row('PolicyManager_InvalidCommitment', '0x755fed9c', 'manager', [['supplied', 'bytes32']]),
+  row('PolicyManager_WrongSetupNonce', '0x9609057d', 'manager', [['supplied', 'uint64'], ['expected', 'uint64']]),
+  row('PolicyManager_PlaceOutOfRange', '0x26013c4a', 'manager', [['place', 'uint256'], ['count', 'uint256']]),
+  row('PolicyManager_NoSetup', '0x912e69d3', 'manager', [['account', 'address'], ['action', 'address']]),
+  row('PolicyManager_NoActiveAttempt', '0x4c3e406c', 'manager', [['account', 'address'], ['action', 'address']]),
+  row('PolicyManager_AttemptAlreadyActive', '0x2299285b', 'manager', [
+    ['account', 'address'],
+    ['action', 'address'],
+    ['attemptId', 'uint64'],
+  ]),
+  row('PolicyManager_WrongAttemptId', '0x62a0f2aa', 'manager', [['supplied', 'uint64'], ['expected', 'uint64']]),
+  row('PolicyManager_SetupCommitmentMismatch', '0x359cb009', 'manager', [['recomputed', 'bytes32'], ['committed', 'bytes32']]),
+  row('PolicyManager_StaleAttempt', '0xbb175e1b', 'manager', [['judgedUnder', 'uint64'], ['currentNonce', 'uint64']]),
+  row('PolicyManager_CredentialMismatch', '0x44cec67d', 'manager', [['place', 'uint256'], ['recomputed', 'bytes32']]),
+  row('PolicyManager_PlacesNotStrictlyIncreasing', '0x98ed6faa', 'manager', [['place', 'uint256']]),
+  row('PolicyManager_RequestExpired', '0x8a633487', 'manager', [['blockTimestamp', 'uint48'], ['validUntil', 'uint48']]),
+  row('PolicyManager_ProofRejected', '0x0baf055d', 'manager', [['place', 'uint256'], ['method', 'address']]),
+  row('PolicyManager_MethodStopped', '0xd8fb45f3', 'manager', [['place', 'uint256'], ['method', 'address']]),
+  row('PolicyManager_MethodVetoedSpend', '0xd5bea339', 'manager', [['method', 'address']]),
+  row('PolicyManager_MethodNotUsed', '0xb19e9abb', 'manager', [['attemptId', 'uint64'], ['method', 'address']]),
+  row('PolicyManager_AttemptIgnoresPause', '0x52c83963', 'manager', [['attemptId', 'uint64']]),
+  row('PolicyManager_MethodNotStopped', '0x9f427781', 'manager', [['method', 'address']]),
+  row('PolicyManager_RuleUnsatisfied', '0x1318f9e6', 'manager', [['clause', 'uint256']]),
+  row('PolicyManager_WaitNotOver', '0xc28b7bc4', 'manager', [['blockTimestamp', 'uint48'], ['consumableAfter', 'uint48']]),
+  row('PolicyManager_WrongPayload', '0x567247d3', 'manager', [['supplied', 'bytes32'], ['committed', 'bytes32']]),
 ];
 
-/** The action contract's four errors; the attempt state travels as the enum's `uint8`. */
+/** The action contract's five errors; the attempt state travels as the enum's `uint8`. */
 export const ACTION_ROWS: readonly ErrorRow[] = [
-  row('BatchNotApproved', '0x16f1317c', 'action', [['callIndex', 'uint256']]),
-  row('MalformedHandover', '0x2c35b8b1', 'action', [['payload', 'bytes']]),
-  row('ReservedAuthority', '0x58c9302f', 'action', [['authority', 'address']]),
-  row('NotConsumable', '0x6c5e8cd1', 'action', [
+  row('RecoveryAction_BatchNotApproved', '0x239f9939', 'action', [['callIndex', 'uint256']]),
+  row('RecoveryAction_MalformedHandover', '0x35c2a352', 'action', [['payload', 'bytes']]),
+  row('RecoveryAction_NotAKey', '0x63add869', 'action', [['authority', 'address']]),
+  row('RecoveryAction_AlreadyPrivileged', '0xd2221b55', 'action', [['authority', 'address']]),
+  row('RecoveryAction_NotConsumable', '0xeae434ed', 'action', [
     ['account', 'address'],
     ['state', 'uint8'],
     ['consumableAfter', 'uint48'],
@@ -54,10 +59,19 @@ export const ACTION_ROWS: readonly ErrorRow[] = [
   ]),
 ];
 
+/** Finds a row by its declared name, failing the test when the fixture lacks it. */
+export function rowNamed(name: string): ErrorRow {
+  const found = [...MANAGER_ROWS, ...ACTION_ROWS].find((entry) => entry.name === name);
+
+  if (found === undefined) throw new Error(`fixture lacks ${name}`);
+
+  return found;
+}
+
 /** One argument as the encoder takes it. */
 export type ArgumentValue = bigint | string;
 
-/** The kit's twenty-five declared errors. */
+/** The kit's twenty-six declared errors. */
 export const KIT_ROWS: readonly ErrorRow[] = [...MANAGER_ROWS, ...ACTION_ROWS];
 
 /** The language pair's selectors, well known outside the kit. */

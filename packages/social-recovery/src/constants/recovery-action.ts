@@ -1,5 +1,6 @@
 import { toFunctionSelector } from 'viem';
-import type { AbiFunctionItem, Address, Hex } from '../interfaces/records';
+import type { AbiFunctionItem, Hex } from '../interfaces/records';
+import { FORMATS_ZERO_ADDRESS } from './formats';
 
 /** The ERC-165 id of the policy-action interface. */
 export const POLICY_ACTION_INTERFACE_ID: Hex = '0x59cd148e';
@@ -99,7 +100,7 @@ export const RECOVERY_ACTION_HANDOVER_LAYOUT = '(address newAuthority, address r
 export const RECOVERY_ACTION_DISARMED_VALUE: Hex = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
 /** The zero address, which a handover may name on neither side. */
-export const RECOVERY_ACTION_ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000';
+export const RECOVERY_ACTION_ZERO_ADDRESS = FORMATS_ZERO_ADDRESS;
 
 /** The address the action's views are read from. */
-export const RECOVERY_ACTION_READ_FROM: Address = RECOVERY_ACTION_ZERO_ADDRESS;
+export const RECOVERY_ACTION_READ_FROM = FORMATS_ZERO_ADDRESS;

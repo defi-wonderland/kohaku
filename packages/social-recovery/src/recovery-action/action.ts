@@ -6,7 +6,7 @@ import {
   RECOVERY_ACTION_SET_ADDR_PRIVILEGE_ABI,
   RECOVERY_ACTION_VIEWS_ABI,
 } from '../constants';
-import { assertArray, assertBytes32, assertObject, normalizeAddress, sameAddress } from '../formats/guards';
+import { assertArray, assertBytes32, assertObject, checkedBlock, lowerHex, normalizeAddress, sameAddress } from '../formats/guards';
 import { kitBinding, kitSlot } from '../formats/kit';
 import {
   isProviderRevert,
@@ -23,10 +23,12 @@ import {
   type PinnedBlock,
   type PreparedCall,
 } from '../interfaces';
-import { pinnedBlock } from './block';
 import { boolReturn, stringReturn } from './returns';
 
-/** The Ambire recovery action's part, bound to one account and one action; each member reads or pins at the passed block, else at the read tag's. */
+/**
+ * The Ambire recovery action's part, bound to one account and one action; each member reads or pins at the passed block, else at the read tag's.
+ * A passed block is used as given: reads pin by its number and a prepare reports its hash unverified.
+ */
 export class AmbireRecoveryAction implements IRecoveryActionInteractor, IRecoveryActionArming {
   private readonly provider: IProvider;
   private readonly descriptor: DeploymentDescriptor;
@@ -34,6 +36,8 @@ export class AmbireRecoveryAction implements IRecoveryActionInteractor, IRecover
   private readonly action: Address;
   private readonly codec: IActionCodec;
   private readonly blockTags: BlockTags;
+  private readonly slot: Address;
+  private readonly binding: Hex;
 
   /** Throws where the action is not one the codec serves. */
   constructor(
@@ -59,9 +63,14 @@ export class AmbireRecoveryAction implements IRecoveryActionInteractor, IRecover
     this.codec = codec;
     this.blockTags = blockTags;
 
-    if (!codec.actions.some((served) => sameAddress(served, this.action))) {
+    const served = codec.actions.map((entry, index) => normalizeAddress(entry, `codec.actions[${index}]`));
+
+    if (!served.some((entry) => sameAddress(entry, this.action))) {
       throw new RangeError(`action ${this.action} is not one the codec serves`);
     }
+
+    this.slot = kitSlot(this.action);
+    this.binding = kitBinding(this.action);
   }
 
   /** The action's `supportsAccount` over the bound account. */
@@ -125,7 +134,7 @@ export class AmbireRecoveryAction implements IRecoveryActionInteractor, IRecover
     const data = encodeFunctionData({
       abi: RECOVERY_ACTION_SET_ADDR_PRIVILEGE_ABI,
       functionName: 'setAddrPrivilege',
-      args: [kitSlot(this.action), value.toLowerCase() as Hex],
+      args: [this.slot, lowerHex(value)],
     });
 
     return { kind: 'call', target: this.account, value: 0n, data, sender: 'account', block: pinned };
@@ -133,7 +142,7 @@ export class AmbireRecoveryAction implements IRecoveryActionInteractor, IRecover
 
   /** Writes the action's binding under its kit slot. */
   armingCall(block?: PinnedBlock): Promise<PreparedCall> {
-    return this.prepareSetAddrPrivilege(kitBinding(this.action), block);
+    return this.prepareSetAddrPrivilege(this.binding, block);
   }
 
   /** Writes zero under the action's kit slot. */
@@ -143,9 +152,9 @@ export class AmbireRecoveryAction implements IRecoveryActionInteractor, IRecover
 
   /** The passed block checked, or the read tag resolved to one block where none is passed. */
   private async pinned(block: PinnedBlock | undefined): Promise<PinnedBlock> {
-    if (block !== undefined) return pinnedBlock(block, 'block');
+    if (block !== undefined) return checkedBlock(block, 'block');
 
-    return pinnedBlock(await this.provider.block(this.blockTags.read), 'block header');
+    return checkedBlock(await this.provider.block(this.blockTags.read), 'block header');
   }
 
   /** The number of the block a read runs at. */

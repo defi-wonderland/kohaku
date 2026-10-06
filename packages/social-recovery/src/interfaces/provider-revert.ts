@@ -1,3 +1,4 @@
+import { FORMATS_HEX_BYTES_PATTERN } from '../constants';
 import type { ProviderRevert } from './records';
 
 /** Tells a reverted call from any other failure of the provider. */
@@ -6,4 +7,4 @@ export const isProviderRevert = (thrown: unknown): thrown is ProviderRevert =>
   thrown !== null &&
   'data' in thrown &&
   typeof thrown.data === 'string' &&
-  /^0x([0-9a-fA-F]{2})*$/.test(thrown.data);
+  FORMATS_HEX_BYTES_PATTERN.test(thrown.data);

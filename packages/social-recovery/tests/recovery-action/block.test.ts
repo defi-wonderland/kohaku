@@ -58,25 +58,26 @@ describe.each(BLOCK_MEMBERS)('$name with a passed block', ({ prepare, invoke }) 
   });
 
   it.each([
-    ['null', null],
-    ['a number', 7],
-    ['a string', '0x01'],
-    ['an object missing hash', { number: 1 }],
-    ['an object missing number', { hash: PASSED.hash }],
-    ['a 31-byte hash', { number: 1, hash: `0x${'c3'.repeat(31)}` }],
-    ['a 33-byte hash', { number: 1, hash: `0x${'c3'.repeat(33)}` }],
-    ['a non-hex hash', { number: 1, hash: `0x${'zz'.repeat(32)}` }],
-    ['an unprefixed hash', { number: 1, hash: 'c3'.repeat(32) }],
-    ['a negative number', { number: -1, hash: PASSED.hash }],
-    ['a fractional number', { number: 1.5, hash: PASSED.hash }],
-    ['an unsafe number', { number: Number.MAX_SAFE_INTEGER + 1, hash: PASSED.hash }],
-    ['a bigint number', { number: 1n, hash: PASSED.hash }],
-    ['a string number', { number: '1', hash: PASSED.hash }],
-  ])('throws a TypeError naming block for %s, before any provider call', async (_label, block) => {
+    ['null', null, TypeError, /^block must be an object/],
+    ['a number', 7, TypeError, /^block must be an object/],
+    ['a string', '0x01', TypeError, /^block must be an object/],
+    ['an object missing hash', { number: 1 }, TypeError, /^block\.hash /],
+    ['an object missing number', { hash: PASSED.hash }, TypeError, /^block\.number /],
+    ['a 31-byte hash', { number: 1, hash: `0x${'c3'.repeat(31)}` }, TypeError, /^block\.hash /],
+    ['a 33-byte hash', { number: 1, hash: `0x${'c3'.repeat(33)}` }, TypeError, /^block\.hash /],
+    ['a non-hex hash', { number: 1, hash: `0x${'zz'.repeat(32)}` }, TypeError, /^block\.hash /],
+    ['an unprefixed hash', { number: 1, hash: 'c3'.repeat(32) }, TypeError, /^block\.hash /],
+    ['a negative number', { number: -1, hash: PASSED.hash }, RangeError, /^block\.number /],
+    ['an unsafe number', { number: Number.MAX_SAFE_INTEGER + 1, hash: PASSED.hash }, RangeError, /^block\.number /],
+    ['a fractional number', { number: 1.5, hash: PASSED.hash }, TypeError, /^block\.number /],
+    ['a bigint number', { number: 1n, hash: PASSED.hash }, TypeError, /^block\.number /],
+    ['a string number', { number: '1', hash: PASSED.hash }, TypeError, /^block\.number /],
+  ] as const)('throws %s naming the field, before any provider call', async (_label, block, kind, message) => {
     const { double, part } = fresh();
+    const attempt = () => (async () => invoke(part, block as unknown as PinnedBlock))();
 
-    await expect((async () => invoke(part, block as unknown as PinnedBlock))()).rejects.toThrow(TypeError);
-    await expect((async () => invoke(part, block as unknown as PinnedBlock))()).rejects.toThrow(/block/);
+    await expect(attempt()).rejects.toThrow(kind);
+    await expect(attempt()).rejects.toThrow(message);
     expect(double.calls).toEqual([]);
     expect(double.blockTags).toEqual([]);
     expect(double.codeReads).toBe(0);

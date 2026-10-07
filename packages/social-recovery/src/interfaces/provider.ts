@@ -1,4 +1,4 @@
-import type { Address, BlockHeader, BlockRange, BlockTag, FilterSpec, Hex, RawLog } from './records';
+import type { Address, BlockHeader, BlockRange, BlockTag, FilterSpec, Hex, RawLog, RawTransaction } from './records';
 
 /** The integrator's chain access, the only way the SDK reaches a chain. */
 export interface IProvider {
@@ -10,4 +10,6 @@ export interface IProvider {
   block(tag: BlockTag): Promise<BlockHeader>;
   /** One `eth_getCode`; `0x` where the address holds no code. */
   code(address: Address, block: BlockTag): Promise<Hex>;
+  /** One `eth_getTransactionByHash`; `undefined` where the node knows no such transaction. */
+  transaction(hash: Hex): Promise<RawTransaction | undefined>;
 }

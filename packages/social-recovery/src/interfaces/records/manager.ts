@@ -47,13 +47,11 @@ export type Domain = {
 
 /** Why no address could be named for the key a handover would remove. */
 export const REMOVED_KEY_UNNAMED = [
-  /** No creation triple was given. */
-  'no-creation-triple',
-  /** The privilege replay leaves no entry holding a key. */
-  'no-key-entry',
-  /** The privilege replay leaves more than one entry holding a key. */
-  'several-key-entries',
-  /** A read the inference needs failed, or the creation triple does not produce the account. */
+  /** No address was supplied, no handover was consumed and no signer was recovered. */
+  'no-source',
+  /** Every address named was denied by `isAuthority`. */
+  'not-a-key',
+  /** A read the inference needs failed. */
   'unread',
 ] as const;
 
@@ -76,7 +74,7 @@ export type RecoveryState = {
 /** The authority a handover adds and the one it removes. */
 export type Handover = {
   readonly newAuthority: Address;
-  /** Absent only on the init's argument, where the client configuration carries a creation record. */
+  /** Absent only on the init's argument, where the SDK infers the key instead. */
   readonly removedAuthority?: Address;
 };
 

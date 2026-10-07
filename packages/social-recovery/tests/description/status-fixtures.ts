@@ -66,7 +66,7 @@ export const RECOVERY_STATE: RecoveryState = {
   nextAttemptId: 6n,
   setupCommitment: COMMITMENT,
   setupNonce: 3n,
-  removedKey: 'no-creation-triple',
+  removedKey: 'no-source',
   block: { number: 100, timestamp: BLOCK_TIME, hash: HASH_ONE },
 };
 

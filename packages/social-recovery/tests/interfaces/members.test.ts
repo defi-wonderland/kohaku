@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, expectTypeOf, it } from 'vitest';
-import type { Address, BlockTag, Hex, IProvider } from '../../src/index';
+import type { Address, BlockTag, Hex, IProvider, ISignerRecovery, RawTransaction } from '../../src/index';
 import { createSourceProgram, findInterfaces, type InterfaceShape, type MemberKind, shapeOf } from '../helpers/source';
 
 /** Each interface's members, listed independently of src/: a member without parentheses is a 'property', any other a 'method'. */
@@ -107,6 +107,10 @@ const EXPECTED: Readonly<Record<string, Readonly<Record<string, MemberKind>>>> =
     logs: 'method',
     block: 'method',
     code: 'method',
+    transaction: 'method',
+  },
+  ISignerRecovery: {
+    recoverSigner: 'method',
   },
 };
 
@@ -131,8 +135,8 @@ const shape = (name: string): InterfaceShape => {
   return found;
 };
 
-it('carries a member list for each of the twelve interfaces', () => {
-  expect(Object.keys(EXPECTED)).toHaveLength(12);
+it('carries a member list for each of the thirteen interfaces', () => {
+  expect(Object.keys(EXPECTED)).toHaveLength(13);
 });
 
 describe.each(Object.entries(EXPECTED))('%s', (name, expected) => {
@@ -165,5 +169,32 @@ describe('IProvider.code', () => {
     expectTypeOf<IProvider['code']>().parameters.toEqualTypeOf<[address: Address, block: BlockTag]>();
     expectTypeOf<IProvider['code']>().returns.toEqualTypeOf<Promise<Hex>>();
     expectTypeOf<IProvider>().toHaveProperty('code');
+  });
+});
+
+describe('IProvider.transaction', () => {
+  it('takes one Hex and returns Promise<RawTransaction | undefined>', () => {
+    expectTypeOf<IProvider['transaction']>().parameters.toEqualTypeOf<[hash: Hex]>();
+    expectTypeOf<IProvider['transaction']>().returns.toEqualTypeOf<Promise<RawTransaction | undefined>>();
+  });
+});
+
+describe('ISignerRecovery.recoverSigner', () => {
+  it('takes (RawTransaction, Address) and returns Promise<Address | undefined>', () => {
+    expectTypeOf<ISignerRecovery['recoverSigner']>().parameters.toEqualTypeOf<[transaction: RawTransaction, account: Address]>();
+    expectTypeOf<ISignerRecovery['recoverSigner']>().returns.toEqualTypeOf<Promise<Address | undefined>>();
+  });
+});
+
+describe('RawTransaction', () => {
+  it('is exactly the six members of one included transaction', () => {
+    expectTypeOf<RawTransaction>().toEqualTypeOf<{
+      readonly hash: Hex;
+      readonly from: Address;
+      readonly to: Address | null;
+      readonly input: Hex;
+      readonly blockNumber: number;
+      readonly blockHash: Hex;
+    }>();
   });
 });

@@ -280,7 +280,7 @@ describe('every record type the core entry exports', () => {
   });
 });
 
-describe('the twelve interface files', () => {
+describe('the thirteen interface files', () => {
   const interfaceFiles = listSourceFiles(INTERFACES_ROOT).filter((path) => dirname(path) === INTERFACES_ROOT);
 
   it('are found beside the records folder', () => {

@@ -152,9 +152,7 @@ const expected = (input: Plan): { result: RemovedKey; reads: string[] } => {
   let denied = false;
 
   if (input.supplied !== undefined) {
-    if (ask(key(input.supplied))) return { result: key(input.supplied), reads };
-
-    denied = true;
+    return { result: ask(key(input.supplied)) ? key(input.supplied) : 'not-a-key', reads };
   }
 
   const history = input.deployedAbove ? [] : historyOf(input);

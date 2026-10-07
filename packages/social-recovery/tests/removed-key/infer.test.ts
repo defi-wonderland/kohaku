@@ -62,20 +62,21 @@ describe('a supplied address', () => {
     }
   });
 
-  it('falls to step 1 when denied, and step 1 then names the key', async () => {
+  it('denied: not-a-key at once, even where step 1 would name a confirmed key', async () => {
     const { inputs, reads } = rig(world(attempt(3, key(1), 200), { authorities: keySet(key(1)) }), { supplied: key(0) }, codec);
 
-    await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe(key(1));
-    expect(askedKeys(reads)).toEqual([key(0), key(1)].map((one) => one.toLowerCase()));
+    await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe('not-a-key');
+    expect(kinds(reads)).toEqual(['isAuthority']);
+    expect(askedKeys(reads)).toEqual([key(0).toLowerCase()]);
   });
 
-  it('falls through step 1 and step 2 when every address is denied: not-a-key', async () => {
+  it('denied: not-a-key with exactly one isAuthority, no fetch, no transaction and no seam call', async () => {
     const history = [...attempt(3, key(1), 200), committed({ block: 300 })];
-    const { inputs, reads } = rig(world(history, { signer: { value: key(2) } }), { supplied: key(0) }, codec);
+    const { inputs, reads, filterOptions } = rig(world(history, { authorities: keySet(key(1), key(2)), signer: { value: key(2) } }), { supplied: key(0) }, codec);
 
     await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe('not-a-key');
-    expect(kinds(reads)).toEqual(['isAuthority', 'fetch', 'isAuthority', 'transaction', 'recoverSigner', 'isAuthority']);
-    expect(askedKeys(reads)).toEqual([key(0), key(1), key(2)].map((one) => one.toLowerCase()));
+    expect(reads).toEqual([{ kind: 'isAuthority', key: key(0), block: BLOCK }]);
+    expect(filterOptions).toEqual([]);
   });
 
   it('denied with nothing else to name: not-a-key', async () => {
@@ -125,13 +126,13 @@ describe('the reads', () => {
 
   it('pass the given block to every isAuthority', async () => {
     const history = [...attempt(3, key(1), 200), committed({ block: 300 })];
-    const { inputs, reads } = rig(world(history, { signer: { value: key(2) } }), { supplied: key(0) }, codec);
+    const { inputs, reads } = rig(world(history, { signer: { value: key(2) } }), {}, codec);
 
     await inferRemovedKey(inputs, BLOCK);
 
     const blocks = reads.flatMap((read) => (read.kind === 'isAuthority' ? [read.block] : []));
 
-    expect(blocks).toHaveLength(3);
+    expect(blocks).toHaveLength(2);
 
     for (const block of blocks) expect(block).toEqual(BLOCK);
   });
@@ -388,12 +389,12 @@ describe('unread: a failed read, at once, and the function resolves', () => {
   });
 
   it.each([['an Error', new Error('down')], ['a string', 'down'], ['undefined', undefined]])(
-    'fetch rejecting with %s, after a denied supplied address: nothing else is read',
+    'fetch rejecting with %s: nothing else is read',
     async (_label, reason) => {
-      const { inputs, reads } = rig({ ...world(history, { signer: { value: key(2) } }), notifications: { rejects: reason } }, { supplied: key(0) }, codec);
+      const { inputs, reads } = rig({ ...world(history, { authorities: keySet(key(1)), signer: { value: key(2) } }), notifications: { rejects: reason } }, {}, codec);
 
       await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe('unread');
-      expect(kinds(reads)).toEqual(['isAuthority', 'fetch']);
+      expect(kinds(reads)).toEqual(['fetch']);
     },
   );
 
@@ -453,12 +454,13 @@ describe('unread: a failed read, at once, and the function resolves', () => {
     },
   );
 
-  it('a later failure is unread even after a key was denied', async () => {
+  it('a later failure is unread even after step 1 named a denied key', async () => {
     const note = committed({ block: 300 });
     const transactions = new Map([[note.at.transactionHash.toLowerCase(), { rejects: new Error('down') }]]);
-    const { inputs } = rig(world([...attempt(3, key(1), 200), note], { signer: { value: key(2) }, transactions }), { supplied: key(0) }, codec);
+    const { inputs, reads } = rig(world([...attempt(3, key(1), 200), note], { signer: { value: key(2) }, transactions }), {}, codec);
 
     await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe('unread');
+    expect(kinds(reads)).toEqual(['fetch', 'isAuthority', 'transaction']);
   });
 });
 
@@ -469,6 +471,7 @@ describe('malformed answers resolve rather than reject', () => {
     ['an entry without a position', [{ kind: 'attempt-consumed', account: ACCOUNT, action: ACTION, attemptId: 3n }]],
     ['an entry without a kind', [{ account: ACCOUNT, action: ACTION, attemptId: 3n, at: positionAt({ block: 201 }) }]],
     ['an entry whose kind is not a string', [{ kind: 7, account: ACCOUNT, action: ACTION, attemptId: 3n, at: positionAt({ block: 201 }) }]],
+    ['an entry whose kind the SDK does not declare', [{ kind: 'mystery', account: ACCOUNT, action: ACTION, attemptId: 3n, at: positionAt({ block: 201 }) }]],
     ['not an array', { length: 1 }],
   ])('fetch answering %s: unread', async (_label, notifications) => {
     const { inputs } = rig({ notifications: { value: notifications as never }, authorities: keySet(key(1)) }, {}, codec);
@@ -476,15 +479,37 @@ describe('malformed answers resolve rather than reject', () => {
     await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe('unread');
   });
 
-  it('fetch answering a sparse array reads its entries and skips the holes', async () => {
+  it('fetch answering a sparse array: unread, no authority read, though its entries would name a confirmed key', async () => {
     const sparse: KitNotification[] = [];
 
     sparse[3] = started(3, handoverPayload(key(1), key(4)), { block: 200 });
     sparse[7] = consumed(3, { block: 201 });
 
-    const { inputs } = rig({ notifications: { value: sparse }, authorities: keySet(key(1)) }, {}, codec);
+    const { inputs, reads } = rig({ notifications: { value: sparse }, authorities: keySet(key(1)) }, {}, codec);
 
-    await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe(key(1));
+    await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe('unread');
+    expect(kinds(reads)).toEqual(['fetch']);
+  });
+
+  it('fetch answering an unknown kind beside a valid attempt: unread, no authority read', async () => {
+    const odd = { kind: 'mystery', account: ACCOUNT, action: ACTION, at: positionAt({ block: 150 }) } as unknown as KitNotification;
+    const { inputs, reads } = rig({ notifications: { value: [odd, ...attempt(3, key(1), 200)] }, authorities: keySet(key(1)) }, {}, codec);
+
+    await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe('unread');
+    expect(kinds(reads)).toEqual(['fetch']);
+  });
+
+  describe.each(['blockNumber', 'logIndex'] as const)('a first SetupCommitted whose %s is malformed, a valid one after it', (member) => {
+    it.each([['NaN', Number.NaN], ['fractional', 1.5], ['negative', -1], ['2^53', 2 ** 53]])('%s: unread, no transaction and no authority read', async (_label, value) => {
+      const bad = committed({ block: 300 });
+      const broken = { ...bad, at: { ...bad.at, [member]: value } } as KitNotification;
+      const good = committed({ block: 310 });
+      const history = [broken, good];
+      const { inputs, reads } = rig(world(history, { authorities: keySet(key(2)), signer: { value: key(2) } }), {}, codec);
+
+      await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe('unread');
+      expect(kinds(reads)).toEqual(['fetch']);
+    });
   });
 
   it.each([['a string', 'true'], ['a number', 1], ['undefined', undefined]])(

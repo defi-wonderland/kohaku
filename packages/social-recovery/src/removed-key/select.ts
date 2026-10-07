@@ -1,26 +1,50 @@
+import { FORMATS_SAFE_INTEGER_BITS } from '../constants';
+import { assertUintNumber, sameAddress } from '../formats/guards';
+import { NOTIFICATION_KINDS } from '../interfaces';
 import type { KitNotification, LogPosition } from '../interfaces';
-import { sameAddress } from '../formats/guards';
 import type { CheckedRemovedKeyInputs, RemovedKeyNotification } from '../types/removed-key';
 
 const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null;
 
-/** Whether one entry of a log read carries what the selection reads: a kind and a position, and for a handover kind its fields. */
-export function isWellFormed(entry: unknown): boolean {
-  if (!isRecord(entry) || typeof entry['kind'] !== 'string' || !isRecord(entry['at'])) return false;
+/** Whether the value is a non-negative safe integer, as a block number or log index must be. */
+function isPositionNumber(value: unknown): boolean {
+  try {
+    assertUintNumber(value, FORMATS_SAFE_INTEGER_BITS, 'position');
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether one entry of a log read is a declared notification kind with a sound position, and for a handover kind the fields the selection reads. */
+function isWellFormed(entry: unknown): boolean {
+  if (!isRecord(entry) || !isRecord(entry['at'])) return false;
 
   const { kind, at } = entry;
 
+  if (!(NOTIFICATION_KINDS as readonly unknown[]).includes(kind)) return false;
+
+  if (!isPositionNumber(at['blockNumber']) || !isPositionNumber(at['logIndex'])) return false;
+
   if (kind !== 'setup-committed' && kind !== 'attempt-started' && kind !== 'attempt-consumed') return true;
 
-  const positioned =
-    typeof entry['account'] === 'string' &&
-    typeof entry['action'] === 'string' &&
-    typeof at['blockNumber'] === 'number' &&
-    typeof at['logIndex'] === 'number';
+  if (typeof entry['account'] !== 'string' || typeof entry['action'] !== 'string') return false;
 
-  if (kind === 'setup-committed') return positioned && typeof at['transactionHash'] === 'string' && typeof at['blockHash'] === 'string';
+  if (kind === 'setup-committed') return typeof at['transactionHash'] === 'string' && typeof at['blockHash'] === 'string';
 
-  return positioned && typeof entry['attemptId'] === 'bigint' && (kind === 'attempt-consumed' || typeof entry['payload'] === 'string');
+  return typeof entry['attemptId'] === 'bigint' && (kind === 'attempt-consumed' || typeof entry['payload'] === 'string');
+}
+
+/** Whether a log read's answer is a dense array of well-formed notifications; a hole counts as malformed. */
+export function isWellFormedAnswer(answer: unknown): answer is readonly KitNotification[] {
+  if (!Array.isArray(answer)) return false;
+
+  for (let index = 0; index < answer.length; index += 1) {
+    if (!(index in answer) || !isWellFormed(answer[index])) return false;
+  }
+
+  return true;
 }
 
 const isLater = (left: LogPosition, right: LogPosition): boolean =>

@@ -2,7 +2,7 @@ import type { KitNotification, PinnedBlock, RemovedKey } from '../interfaces';
 import type { CheckedRemovedKeyInputs, RemovedKeyInputs } from '../types/removed-key';
 import { checkedBlock } from '../formats/guards';
 import { checkedInputs } from './check';
-import { isWellFormed } from './select';
+import { isWellFormedAnswer } from './select';
 import { confirm, fromHandover, fromSetupSigner } from './steps';
 
 /** The bound account's and action's manager notifications from the deployment block to the pinned one; `unread` where the read fails. */
@@ -18,15 +18,15 @@ async function readNotifications(
       to: block.number,
     });
 
-    return Array.isArray(notifications) && notifications.every(isWellFormed) ? (notifications as readonly KitNotification[]) : 'unread';
+    return isWellFormedAnswer(notifications) ? notifications : 'unread';
   } catch {
     return 'unread';
   }
 }
 
 /**
- * The key a handover removes for the bound account: the supplied address, else the latest consumed handover's new key,
- * else the signer of the latest setup commit, each counting only once `isAuthority` confirms it at `block`.
+ * The key a handover removes for the bound account, each candidate counting only once `isAuthority` confirms it at `block`:
+ * a supplied address alone, else the latest consumed handover's new key, else the signer of the latest setup commit.
  * Throws a `TypeError` or `RangeError` on malformed inputs before any read; a failed read resolves to `unread` and nothing after it is read.
  */
 export async function inferRemovedKey(inputs: RemovedKeyInputs, block: PinnedBlock): Promise<RemovedKey> {
@@ -34,15 +34,13 @@ export async function inferRemovedKey(inputs: RemovedKeyInputs, block: PinnedBlo
 
   checkedBlock(block, 'block');
 
-  let denied = false;
-
   if (checked.supplied !== undefined) {
     const answer = await confirm(checked.supplied, checked, block);
 
-    if (answer !== 'denied') return answer;
-
-    denied = true;
+    return answer === 'denied' ? 'not-a-key' : answer;
   }
+
+  let denied = false;
 
   const notifications = await readNotifications(checked, block);
 

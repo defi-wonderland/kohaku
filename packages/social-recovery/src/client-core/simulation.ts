@@ -1,6 +1,6 @@
 import { CLIENT_CORE_SIMULATION_FROM } from '../constants';
 import { decodeRevert } from '../errors';
-import { assertAddress, assertArray, assertBool, assertBytes, assertObject, checkedBlock, normalizeAddress } from '../formats/guards';
+import { assertArray, assertBool, assertBytes, assertObject, checkedBlock, lowerHex, normalizeAddress } from '../formats/guards';
 import {
   isProviderRevert,
   SENDERS,
@@ -36,14 +36,16 @@ export async function simulateCall(
   block: PinnedBlock,
 ): Promise<SimulationResult> {
   assertObject(call, 'call');
-  assertAddress(call.target, 'call.target');
+
+  const target = normalizeAddress(call.target, 'call.target');
+
   assertBytes(call.data, 'call.data');
 
   const sender = normalizeAddress(from, 'from');
   const pinned = checkedBlock(block, 'block');
 
   try {
-    await provider.call(call.target, call.data, sender, pinned.number);
+    await provider.call(target, lowerHex(call.data), sender, pinned.number);
   } catch (thrown) {
     if (!isProviderRevert(thrown)) throw thrown;
 
@@ -96,11 +98,15 @@ export async function simulatePrepared<P extends PreparedCall | PreparedBatch>(
 
   const calls: PreparedCall[] = [];
 
-  prepared.calls.forEach((call, index) => {
+  for (let index = 0; index < prepared.calls.length; index += 1) {
+    const call = prepared.calls[index];
+
+    assertObject(call, `prepared.calls[${index}]`);
+
     if (!sameBlock(checkedBlock(call.block, `prepared.calls[${index}].block`), block)) {
       throw new TypeError(`prepared.calls[${index}] is pinned to another block than the batch`);
     }
-  });
+  }
 
   for (const call of prepared.calls) calls.push(await withSimulation(provider, call, account, block, options));
 

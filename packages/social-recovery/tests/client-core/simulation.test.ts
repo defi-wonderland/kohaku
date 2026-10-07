@@ -338,3 +338,61 @@ describe('simulatePrepared on malformed records', () => {
     expect(double.calls).toEqual([]);
   });
 });
+
+describe('simulateCall normalises the record on entry', () => {
+  it.each([
+    ['all lower case', ACCOUNT_MIXED.toLowerCase() as Hex],
+    ['all upper case', `0x${ACCOUNT_MIXED.slice(2).toUpperCase()}` as Hex],
+    ['EIP-55', ACCOUNT_MIXED],
+  ])('hands the provider the checksummed target and lower-cased data, target %s', async (_, target) => {
+    const double = providerDouble();
+    const call: PreparedCall = { ...preparedCall('anyone', '0xABCDEF12'), target };
+
+    await simulateCall(double.provider, call, SENDER, BLOCK);
+    expect(double.calls).toEqual([{ to: getAddress(ACCOUNT_MIXED), data: '0xabcdef12', from: SENDER, block: BLOCK.number }]);
+  });
+
+  it('does the same through simulatePrepared, and leaves the record as given', async () => {
+    const double = providerDouble();
+    const call = deepFreeze<PreparedCall>({ ...preparedCall('account', '0xDEADBEEF'), target: ACCOUNT_MIXED.toLowerCase() as Hex });
+    const result = await simulatePrepared(double.provider, call, ACCOUNT, { simulate: true });
+
+    expect(double.calls[0]).toMatchObject({ to: getAddress(ACCOUNT_MIXED), data: '0xdeadbeef' });
+    expect(result.target).toBe(call.target);
+    expect(result.data).toBe(call.data);
+  });
+
+  it('refuses a mixed-case target whose checksum fails, before any call', async () => {
+    const double = providerDouble();
+    const call: PreparedCall = { ...preparedCall('anyone'), target: ACCOUNT_BAD_CHECKSUM };
+
+    await expect(simulateCall(double.provider, call, SENDER, BLOCK)).rejects.toThrow(TypeError);
+    expect(double.calls).toEqual([]);
+  });
+});
+
+describe('simulatePrepared refuses a sparse batch before any call', () => {
+  const sparseAt = (hole: number): PreparedCall[] => {
+    const calls = new Array<PreparedCall>(3);
+
+    for (let index = 0; index < 3; index += 1) if (index !== hole) calls[index] = preparedCall('account');
+
+    return calls;
+  };
+
+  it.each([0, 1, 2])('with a hole at index %i', async (hole) => {
+    const double = providerDouble();
+
+    await expect(simulatePrepared(double.provider, preparedBatch(sparseAt(hole)), ACCOUNT, { simulate: true })).rejects.toThrow(TypeError);
+    expect(double.calls).toEqual([]);
+  });
+
+  it('with a trailing hole from a stretched length', async () => {
+    const double = providerDouble();
+    const calls = [preparedCall('account')];
+
+    calls.length = 2;
+    await expect(simulatePrepared(double.provider, preparedBatch(calls), ACCOUNT, { simulate: true })).rejects.toThrow(TypeError);
+    expect(double.calls).toEqual([]);
+  });
+});

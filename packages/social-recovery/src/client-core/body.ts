@@ -1,5 +1,6 @@
+import { FORMATS_THRESHOLD_BITS, FORMATS_WAIT_BITS } from '../constants';
 import { credentialHash, encodeSetupBody, setupCommitment } from '../formats';
-import { assertArray, assertObject, normalizeAddress } from '../formats/guards';
+import { assertArray, assertBool, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import type { Address, Configuration, Credential, Hex } from '../interfaces';
 import { defaultSalt } from '../salts';
 import type { BodyClause, SetupBody } from '../types';
@@ -10,6 +11,8 @@ import type { BodyClause, SetupBody } from '../types';
  */
 export function configurationBody(configuration: Configuration, account: Address): SetupBody {
   assertObject(configuration, 'configuration');
+  assertUintNumber(configuration.wait, FORMATS_WAIT_BITS, 'configuration.wait');
+  assertBool(configuration.ignoresPause, 'configuration.ignoresPause');
   assertArray(configuration.clauses, 'configuration.clauses');
 
   const accountAddress = normalizeAddress(account, 'account');
@@ -17,6 +20,7 @@ export function configurationBody(configuration: Configuration, account: Address
 
   const clauses = configuration.clauses.map((clause, index): BodyClause => {
     assertObject(clause, `configuration.clauses[${index}]`);
+    assertUintNumber(clause.threshold, FORMATS_THRESHOLD_BITS, `configuration.clauses[${index}].threshold`);
     assertArray(clause.credentials, `configuration.clauses[${index}].credentials`);
 
     const credentials = clause.credentials.map((credential: Credential, position) => {

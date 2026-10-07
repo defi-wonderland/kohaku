@@ -217,3 +217,31 @@ describe('configurationCommitment', () => {
     expect(configurationCommitment(CONFIGURATION, ACCOUNT_MIXED, ACTION.toUpperCase().replace('0X', '0x') as Hex, 1n)).toBe(expected);
   });
 });
+
+describe('configurationBody refuses a member outside its width', () => {
+  const clause = (threshold: unknown) => ({ threshold, credentials: [{ method: METHOD_A, config: '0x' as Hex }] });
+
+  it.each([
+    ['a negative wait', { ...CONFIGURATION, wait: -1 }, RangeError],
+    ['a wait of 2^48', { ...CONFIGURATION, wait: 2 ** 48 }, RangeError],
+    ['a fractional wait', { ...CONFIGURATION, wait: 1.5 }, TypeError],
+    ['a string wait', { ...CONFIGURATION, wait: '60' }, TypeError],
+    ['a missing wait', { clauses: CONFIGURATION.clauses, ignoresPause: false }, TypeError],
+    ['a threshold of 256', { ...CONFIGURATION, clauses: [clause(256)] }, RangeError],
+    ['a negative threshold', { ...CONFIGURATION, clauses: [clause(-1)] }, RangeError],
+    ['a fractional threshold', { ...CONFIGURATION, clauses: [clause(0.5)] }, TypeError],
+    ['a missing threshold', { ...CONFIGURATION, clauses: [{ credentials: [] }] }, TypeError],
+    ['a threshold in an empty clause after a good one', { ...CONFIGURATION, clauses: [clause(1), { threshold: 300, credentials: [] }] }, RangeError],
+    ['a string ignoresPause', { ...CONFIGURATION, ignoresPause: 'yes' }, TypeError],
+    ['a numeric ignoresPause', { ...CONFIGURATION, ignoresPause: 1 }, TypeError],
+    ['a missing ignoresPause', { clauses: CONFIGURATION.clauses, wait: 60 }, TypeError],
+  ] as const)('refuses %s', (_, configuration, kind) => {
+    expect(() => configurationBody(configuration as unknown as Configuration, ACCOUNT)).toThrow(kind);
+  });
+
+  it('accepts the largest wait and threshold', () => {
+    const body = configurationBody({ clauses: [{ threshold: 255, credentials: [] }], wait: 2 ** 48 - 1, ignoresPause: true }, ACCOUNT);
+
+    expect(body).toEqual({ wait: 2 ** 48 - 1, ignoresPause: true, clauses: [{ threshold: 255, credentials: [] }] });
+  });
+});

@@ -60,6 +60,9 @@ export function assertArray(value: unknown, name: string): asserts value is read
   if (!Array.isArray(value)) throw new TypeError(`${name} must be an array`);
 }
 
+/** Whether the value is a non-negative safe integer, as a block number, log index or count must be. */
+export const isSafeCount = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+
 /** Refuses a non-integer with a `TypeError`, and a value outside [0, 2^bits) or the safe-integer range with a `RangeError`. */
 export function assertUintNumber(value: unknown, bits: number, name: string): asserts value is number {
   if (typeof value !== 'number' || !Number.isInteger(value)) {

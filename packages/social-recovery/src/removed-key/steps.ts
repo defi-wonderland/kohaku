@@ -1,6 +1,6 @@
-import { isAddressEqual, zeroAddress } from 'viem';
-import { lowerHex, normalizeAddress } from '../formats/guards';
-import type { Address, KitNotification, PinnedBlock } from '../interfaces';
+import { FORMATS_ZERO_ADDRESS } from '../constants';
+import { lowerHex, normalizeAddress, sameAddress } from '../formats/guards';
+import type { Address, KitNotification, PinnedBlock, RawTransaction } from '../interfaces';
 import type { CheckedRemovedKeyInputs, RemovedKeyStepAnswer } from '../types/removed-key';
 import { lastByPosition, latestConsumedStart, ofKind } from './select';
 
@@ -35,7 +35,7 @@ export async function fromHandover(
     return undefined;
   }
 
-  if (isAddressEqual(newAuthority, zeroAddress)) return undefined;
+  if (sameAddress(newAuthority, FORMATS_ZERO_ADDRESS)) return undefined;
 
   return confirm(newAuthority, inputs, block);
 }
@@ -57,10 +57,11 @@ export async function fromSetupSigner(
   let signer: Address;
 
   try {
-    const transaction = await inputs.provider.transaction(commit.at.transactionHash);
+    const transaction: RawTransaction | null | undefined = await inputs.provider.transaction(commit.at.transactionHash);
+
+    if (transaction === undefined || transaction === null) return 'unread';
 
     if (
-      transaction === undefined ||
       lowerHex(transaction.hash) !== lowerHex(commit.at.transactionHash) ||
       lowerHex(transaction.blockHash) !== lowerHex(commit.at.blockHash)
     ) {

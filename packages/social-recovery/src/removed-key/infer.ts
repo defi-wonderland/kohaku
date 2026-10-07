@@ -31,23 +31,22 @@ async function readNotifications(
  */
 export async function inferRemovedKey(inputs: RemovedKeyInputs, block: PinnedBlock): Promise<RemovedKey> {
   const checked = checkedInputs(inputs);
-
-  checkedBlock(block, 'block');
+  const pinned = checkedBlock(block, 'block');
 
   if (checked.supplied !== undefined) {
-    const answer = await confirm(checked.supplied, checked, block);
+    const answer = await confirm(checked.supplied, checked, pinned);
 
     return answer === 'denied' ? 'not-a-key' : answer;
   }
 
-  let denied = false;
-
-  const notifications = await readNotifications(checked, block);
+  const notifications = await readNotifications(checked, pinned);
 
   if (notifications === 'unread') return 'unread';
 
+  let denied = false;
+
   for (const step of [fromHandover, fromSetupSigner]) {
-    const answer = await step(notifications, checked, block);
+    const answer = await step(notifications, checked, pinned);
 
     if (answer === 'denied') denied = true;
     else if (answer !== undefined) return answer;

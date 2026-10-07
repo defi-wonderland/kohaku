@@ -540,3 +540,15 @@ describe('malformed answers resolve rather than reject', () => {
     expect(kinds(reads)).toEqual(['fetch']);
   });
 });
+
+describe('a position tie', () => {
+  it('between two committed notifications at one position: the later arrival is the last', async () => {
+    const first = committed({ block: 300 });
+    const second = { ...first, at: { ...first.at, transactionHash: `0x${'f'.repeat(64)}` } } as KitNotification;
+    const history = [first, second];
+    const { inputs, reads } = rig(world(history, { authorities: keySet(key(2)), signer: { value: key(2) } }), {}, codec);
+
+    await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe(key(2));
+    expect(reads.find((read) => read.kind === 'transaction')).toEqual({ kind: 'transaction', hash: `0x${'f'.repeat(64)}` });
+  });
+});

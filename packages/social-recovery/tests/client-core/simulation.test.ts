@@ -396,3 +396,32 @@ describe('simulatePrepared refuses a sparse batch before any call', () => {
     expect(double.calls).toEqual([]);
   });
 });
+
+describe('simulatePrepared checks every call of a batch before the first call', () => {
+  const second: readonly (readonly [string, PreparedCall, PrepareOptions | undefined])[] = [
+    ['missing data', { ...preparedCall('account'), data: undefined } as unknown as PreparedCall, undefined],
+    ['data that is not hex', { ...preparedCall('account'), data: '0xzz' } as unknown as PreparedCall, undefined],
+    ['an unknown sender', { ...preparedCall('account'), sender: 'stranger' } as unknown as PreparedCall, undefined],
+    ['a target that is not an address', { ...preparedCall('account'), target: '0x12' } as unknown as PreparedCall, undefined],
+    ['a target with a failing checksum', { ...preparedCall('account'), target: ACCOUNT_BAD_CHECKSUM }, undefined],
+    ['a call that is not an object', null as unknown as PreparedCall, undefined],
+    ['a permissionless call under a malformed options.from', preparedCall('anyone'), { from: '0x12' }],
+    ['a permissionless call under a checksum-failing options.from', preparedCall('anyone'), { from: ACCOUNT_BAD_CHECKSUM }],
+  ];
+
+  it.each(second)('a well-formed first call and a second with %s throw a TypeError and reach no provider call', async (_, call, options) => {
+    const double = providerDouble();
+    const batch = preparedBatch([preparedCall('account'), call]);
+
+    await expect(simulatePrepared(double.provider, batch, ACCOUNT, { simulate: true }, options)).rejects.toThrow(TypeError);
+    expect(double.calls).toEqual([]);
+  });
+
+  it('a malformed third call is caught before the first two are simulated', async () => {
+    const double = providerDouble();
+    const batch = preparedBatch([preparedCall('account'), preparedCall('anyone'), { ...preparedCall('account'), data: 5 } as unknown as PreparedCall]);
+
+    await expect(simulatePrepared(double.provider, batch, ACCOUNT, { simulate: true })).rejects.toThrow(TypeError);
+    expect(double.calls).toEqual([]);
+  });
+});

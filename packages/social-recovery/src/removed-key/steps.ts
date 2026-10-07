@@ -50,7 +50,8 @@ export async function fromSetupSigner(
 
   if (signerRecovery === undefined) return undefined;
 
-  const commit = lastByPosition(ofKind(notifications, 'setup-committed', inputs));
+  const commits = ofKind(notifications, 'setup-committed', inputs);
+  const commit = lastByPosition(commits);
 
   if (commit === undefined) return undefined;
 

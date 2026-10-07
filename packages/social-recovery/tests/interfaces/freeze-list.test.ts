@@ -28,6 +28,7 @@ const FREEZE_LIST = [
   'IMethodCodec',
   'IRecoveryActionInteractor',
   'IRecoveryActionArming',
+  'ISignerRecovery',
 ] as const;
 
 /** The shipped implementations' names, which no type or interface may take. */
@@ -61,8 +62,8 @@ beforeAll(() => {
 const sitesNamed = (name: string): InterfaceSite[] => sites.filter((site) => site.name === name);
 
 describe('the freeze list', () => {
-  it('names twelve distinct interfaces', () => {
-    expect(new Set(FREEZE_LIST).size).toBe(12);
+  it('names thirteen distinct interfaces', () => {
+    expect(new Set(FREEZE_LIST).size).toBe(13);
   });
 
   it('carries the I prefix on every name and the Interactor suffix on the two contract interactors', () => {
@@ -76,7 +77,7 @@ describe('the freeze list', () => {
 });
 
 describe('interface declarations under src/interfaces/', () => {
-  it('are exactly the twelve names of the freeze list', () => {
+  it('are exactly the thirteen names of the freeze list', () => {
     const declared = sites.filter((site) => site.file.startsWith('src/interfaces/')).map((site) => site.name);
 
     expect(sorted(declared)).toEqual(sorted(FREEZE_LIST));

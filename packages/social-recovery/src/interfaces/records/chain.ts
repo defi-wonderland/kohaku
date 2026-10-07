@@ -67,5 +67,16 @@ export type RawLog = {
   readonly removed?: boolean;
 };
 
+/** One transaction as `eth_getTransactionByHash` returns it, once included in a block. */
+export type RawTransaction = {
+  readonly hash: Hex;
+  readonly from: Address;
+  /** `null` for a contract creation. */
+  readonly to: Address | null;
+  readonly input: Hex;
+  readonly blockNumber: number;
+  readonly blockHash: Hex;
+};
+
 /** The moment a judgment compares against, in seconds; the SDK reads no wall clock. */
 export type Moment = number;

@@ -14,6 +14,7 @@ export type ProviderDouble = {
   readonly codeReads: number;
   readonly logReads: number;
   readonly chainIdReads: number;
+  readonly transactionReads: number;
 };
 
 /** The header every `block` read answers, so a pinned block is recognisable in a prepared call. */
@@ -27,7 +28,7 @@ export const HEADER: BlockHeader = {
 export function providerDouble(answers: Readonly<Record<string, CallAnswer>> = {}, header: BlockHeader = HEADER): ProviderDouble {
   const calls: SeenCall[] = [];
   const blockTags: BlockTag[] = [];
-  const counts = { code: 0, logs: 0, chainId: 0 };
+  const counts = { code: 0, logs: 0, chainId: 0, transaction: 0 };
 
   const provider: IProvider = {
     async chainId() {
@@ -61,6 +62,11 @@ export function providerDouble(answers: Readonly<Record<string, CallAnswer>> = {
 
       return '0x';
     },
+    async transaction() {
+      counts.transaction += 1;
+
+      throw new Error('transaction is not the action part\'s');
+    },
   };
 
   return {
@@ -75,6 +81,9 @@ export function providerDouble(answers: Readonly<Record<string, CallAnswer>> = {
     },
     get chainIdReads() {
       return counts.chainId;
+    },
+    get transactionReads() {
+      return counts.transaction;
     },
   };
 }

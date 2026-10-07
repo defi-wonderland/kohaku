@@ -69,6 +69,7 @@ export function realEvents(logs: readonly RawLog[]): { readonly manager: EventMa
     call: unused,
     block: unused,
     code: unused,
+    transaction: unused,
     async logs(filter, range) {
       filters.push(filter);
       ranges.push(range);

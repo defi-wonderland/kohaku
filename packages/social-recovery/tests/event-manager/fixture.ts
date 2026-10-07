@@ -124,10 +124,11 @@ const UNUSED_IMPLEMENTATION = {} as unknown as IRecoveryMethod;
 
 export const REGISTRY: ReadonlyMap<Address, IRecoveryMethod> = new Map([[REGISTERED_MODULE, UNUSED_IMPLEMENTATION]]);
 
-/** An `IProvider` that records each `logs` and `code` call it receives. */
+/** An `IProvider` that records each `logs`, `code` and `transaction` call it receives. */
 export type ProviderDouble = IProvider & {
   readonly calls: { filter: FilterSpec; range: BlockRange }[];
   readonly codeCalls: { address: Address; block: BlockTag }[];
+  readonly transactionCalls: Hex[];
 };
 
 /** A provider double for a reader that should only read logs: every other read rejects or is recorded. */
@@ -136,10 +137,12 @@ export const providerDouble = (
 ): ProviderDouble => {
   const calls: { filter: FilterSpec; range: BlockRange }[] = [];
   const codeCalls: { address: Address; block: BlockTag }[] = [];
+  const transactionCalls: Hex[] = [];
 
   return {
     calls,
     codeCalls,
+    transactionCalls,
     chainId: () => Promise.reject(new Error('chainId is not the reader\'s')),
     call: () => Promise.reject(new Error('call is not the reader\'s')),
     block: () => Promise.reject(new Error('block is not the reader\'s')),
@@ -152,6 +155,11 @@ export const providerDouble = (
       codeCalls.push({ address, block });
 
       return Promise.resolve('0x');
+    },
+    transaction: (hash) => {
+      transactionCalls.push(hash);
+
+      return Promise.reject(new Error('transaction is not the reader\'s'));
     },
   };
 };

@@ -1,13 +1,5 @@
-import {
-  assertAddress,
-  assertArray,
-  assertBool,
-  assertBytes,
-  assertBytes32,
-  assertObject,
-  normalizeAddress,
-  sameAddress,
-} from '../formats/guards';
+import { assertArray, assertBool, assertBytes32, assertObject, isSafeCount, normalizeAddress, sameAddress } from '../formats/guards';
+import { assertNotification, byPosition } from '../formats/notifications';
 import type {
   KitNotification,
   MethodStopNotification,
@@ -17,10 +9,6 @@ import type {
   StatusDescription,
 } from '../interfaces';
 import type { OpeningNotification, StatusScope } from '../types/description';
-
-/** Orders notifications by block, then by log index; a tie keeps its arrival order. */
-const byPosition = (left: KitNotification, right: KitNotification): number =>
-  left.at.blockNumber - right.at.blockNumber || left.at.logIndex - right.at.logIndex;
 
 /** The last of the notifications in chain order, leaving out any log the chain removed. */
 function latestOf<Notification extends KitNotification>(notifications: readonly Notification[]): Notification | undefined {
@@ -73,24 +61,7 @@ function attemptOf(recoveryState: RecoveryState, latest: readonly KitNotificatio
 
 /** Refuses anything but a non-negative safe integer with a `TypeError`. */
 function assertCount(value: unknown, name: string): void {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-    throw new TypeError(`${name} must be a non-negative safe integer`);
-  }
-}
-
-/** Refuses an opening notification whose members the attempt reads are not the shapes they declare. */
-function assertOpening(opening: OpeningNotification, name: string): void {
-  if (typeof opening.attemptId !== 'bigint') throw new TypeError(`${name}.attemptId must be a bigint`);
-
-  assertAddress(opening.account, `${name}.account`);
-  assertAddress(opening.action, `${name}.action`);
-  assertArray(opening.usedPlaces, `${name}.usedPlaces`);
-
-  for (let position = 0; position < opening.usedPlaces.length; position += 1) {
-    if (typeof opening.usedPlaces[position] !== 'bigint') throw new TypeError(`${name}.usedPlaces[${position}] must be a bigint`);
-  }
-
-  assertBytes(opening.payload, `${name}.payload`);
+  if (!isSafeCount(value)) throw new TypeError(`${name} must be a non-negative safe integer`);
 }
 
 /** Refuses records and notifications whose members this description reads are not the shapes they declare. */
@@ -111,20 +82,7 @@ function assertStatusInputs(setupState: SetupState, recoveryState: RecoveryState
   assertObject(recoveryState.attempt, 'recoveryState.attempt');
   assertArray(latest, 'latest');
 
-  for (let index = 0; index < latest.length; index += 1) {
-    const notification = latest[index];
-
-    assertObject(notification, `latest[${index}]`);
-
-    if (typeof notification.kind !== 'string') throw new TypeError(`latest[${index}].kind must be a string`);
-
-    assertObject(notification.at, `latest[${index}].at`);
-    assertCount(notification.at.blockNumber, `latest[${index}].at.blockNumber`);
-    assertCount(notification.at.logIndex, `latest[${index}].at.logIndex`);
-    assertBool(notification.at.removed, `latest[${index}].at.removed`);
-
-    if (isOpening(notification as KitNotification)) assertOpening(notification as OpeningNotification, `latest[${index}]`);
-  }
+  for (let index = 0; index < latest.length; index += 1) assertNotification(latest[index], `latest[${index}]`);
 }
 
 /**

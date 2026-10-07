@@ -12,6 +12,7 @@ import type {
   KitNotification,
   RawLog,
 } from '../interfaces';
+import { byPosition } from '../formats/notifications';
 import type { MethodRegistry } from '../types';
 import { checkChunkWidth, chunkRange } from './chunks';
 import { decodeManagerLog } from './decode-manager';
@@ -35,10 +36,6 @@ const withLowerHex = (log: RawLog): RawLog => ({
   blockHash: lower(log.blockHash),
   transactionHash: lower(log.transactionHash),
 });
-
-/** Orders notifications by block, then by log index; a tie keeps its arrival order. */
-const byPosition = (left: KitNotification, right: KitNotification): number =>
-  left.at.blockNumber - right.at.blockNumber || left.at.logIndex - right.at.logIndex;
 
 /**
  * The `IEventManager` bound to one account and one action, reading logs through the provider.

@@ -1,4 +1,4 @@
-import type { Address, BlockHeader, BlockTag, Hex, IProvider, RawLog } from '../../src/index';
+import type { Address, BlockHeader, BlockTag, Hex, IProvider, RawLog, RawTransaction } from '../../src/index';
 
 /** One `eth_call` the part asked the double for. */
 export type CallRecord = {
@@ -35,6 +35,7 @@ export class ProviderDouble implements IProvider {
   codeReads = 0;
   logReads = 0;
   chainIdReads = 0;
+  transactionReads = 0;
   blockFailure: unknown = undefined;
 
   constructor(private readonly answerer: Answerer = () => ({ rejects: new Error('no answer set') })) {}
@@ -81,6 +82,12 @@ export class ProviderDouble implements IProvider {
     this.codeReads += 1;
 
     return '0x';
+  }
+
+  async transaction(): Promise<RawTransaction | undefined> {
+    this.transactionReads += 1;
+
+    throw new Error('transaction is not the manager part\'s');
   }
 
   /** The selectors of every call made, in order. */

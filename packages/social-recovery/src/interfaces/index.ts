@@ -6,6 +6,7 @@ export type { IEventManager } from './event-manager';
 export type { IMethodModuleReads } from './method-module-reads';
 export type { IProvider } from './provider';
 export { isProviderRevert } from './provider-revert';
+export type { ISignerRecovery } from './signer-recovery';
 export type { IRecoveryMethod } from './recovery-method';
 export type { IActionCodec } from './action-codec';
 export type { IMethodCodec } from './method-codec';

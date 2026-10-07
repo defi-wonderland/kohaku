@@ -1,0 +1,15 @@
+import type { BlockHeader, PinnedBlock, RestoreCause, ValidationResult } from '../interfaces';
+
+/** A block read once: its checked header, and the number and hash every read behind it is pinned to. */
+export type PinnedHeader = {
+  readonly header: BlockHeader;
+  readonly block: PinnedBlock;
+};
+
+/** What a refusal carries beside its message. */
+export type KitRefusalDetails = {
+  /** The findings of the validation that refused. */
+  readonly findings?: ValidationResult;
+  /** Which step of a restore refused, and the values it refused on. */
+  readonly restoreCause?: RestoreCause;
+};

@@ -173,6 +173,11 @@ export function providerDouble(
 
       return '0x';
     },
+    async transaction() {
+      others.push('transaction');
+
+      return undefined;
+    },
   };
 
   return { provider, calls, blockTags, others };

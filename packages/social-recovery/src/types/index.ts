@@ -21,3 +21,4 @@ export type {
 } from './description';
 export type { KitRefusalDetails, PinnedHeader } from './client-core';
 export type { RemovedKeyInputs } from './removed-key';
+export type { SetupClientRecoveryAction } from './setup-client';

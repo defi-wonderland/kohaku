@@ -8,7 +8,6 @@ import {
   SetupClient,
   type Address,
   type Hex,
-  type IActionCodec,
   type PreparedBatch,
   type PreparedCall,
   type SetupDraft,
@@ -20,6 +19,7 @@ import {
   build,
   COMMITTED,
   committed,
+  codecFor,
   CONFIGURATION,
   configurationOf,
   defaultRegistry,
@@ -55,14 +55,7 @@ const WIDE_DRAFT: SetupDraft = {
 const commitArguments = (seen: ReturnType<typeof build>['seen']): readonly unknown[] =>
   seen.parts.find((part) => part.member === 'prepareCommitSetup')?.args ?? [];
 
-/** A codec stub serving the bound action, decoding nothing a test needs. */
-const CODEC: IActionCodec = {
-  actions: [ACTION],
-  encode: () => '0x',
-  decode: () => {
-    throw new Error('not a handover');
-  },
-};
+const CODEC = codecFor(ACTION);
 
 describe('inputs that slip past a naive setup client', () => {
   it('refuses an encrypted backup wider than the padding through the findings, not a raw seal error', async () => {
@@ -171,7 +164,7 @@ describe('inputs that slip past a naive setup client', () => {
     expect((await client.confirmSetup(withBackup(DRAFT, 'clear'), prepared)).landed).toBe(true);
   });
 
-  it('infers the removed key from the bound log when a codec is given, naming no-source on an empty history', async () => {
+  it('infers the removed key from the bound log with the required codec, naming no-source on an empty history', async () => {
     const made = doubles(defaultWorld());
     const client = new SetupClient(
       made.provider,
@@ -184,7 +177,6 @@ describe('inputs that slip past a naive setup client', () => {
       made.action,
       made.events,
       defaultRegistry(),
-      false,
       CODEC,
     );
     const description = await client.describeSetup(DRAFT);

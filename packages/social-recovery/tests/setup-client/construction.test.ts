@@ -8,6 +8,7 @@ import {
   ACCOUNT_BAD_CHECKSUM,
   ACTION,
   build,
+  codecFor,
   CONFIGURATION,
   defaultRegistry,
   DESCRIPTOR,
@@ -15,6 +16,7 @@ import {
   defaultWorld,
   DRAFT,
   noSetupState,
+  OTHER_ACTION,
 } from './doubles';
 
 const MEMBERS = [
@@ -47,6 +49,7 @@ async function refusalUnder(account: string): Promise<{ thrown: unknown; provide
       made.action,
       made.events,
       defaultRegistry(),
+      codecFor(ACTION),
     );
 
     await client.setupState();
@@ -106,6 +109,39 @@ describe('SetupClient construction', () => {
           made.action,
           made.events,
           defaultRegistry(),
+          codecFor(ACTION),
+        ),
+    ).toThrow();
+    expect(made.seen.provider).toEqual([]);
+  });
+
+  it('refuses a construction without the codec', () => {
+    const made = doubles(defaultWorld());
+    const construct = SetupClient as unknown as new (...args: unknown[]) => SetupClient;
+
+    expect(
+      () =>
+        new construct(made.provider, DESCRIPTOR, ACCOUNT, ACTION, CONFIGURATION, 'kit', made.manager, made.action, made.events, defaultRegistry()),
+    ).toThrow(TypeError);
+  });
+
+  it('refuses a codec that does not serve the bound action', () => {
+    const made = doubles(defaultWorld());
+
+    expect(
+      () =>
+        new SetupClient(
+          made.provider,
+          DESCRIPTOR,
+          ACCOUNT,
+          ACTION,
+          CONFIGURATION,
+          'kit',
+          made.manager,
+          made.action,
+          made.events,
+          defaultRegistry(),
+          codecFor(OTHER_ACTION),
         ),
     ).toThrow();
     expect(made.seen.provider).toEqual([]);

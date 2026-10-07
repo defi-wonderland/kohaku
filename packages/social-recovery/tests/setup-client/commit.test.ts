@@ -175,10 +175,10 @@ describe('prepareCommitSetup: the backup the draft names', () => {
     ['encrypted without a password', DRAFT, undefined],
     ['clear with a password', withBackup(DRAFT, 'clear'), PASSWORD],
     ['empty with a password', withBackup(DRAFT, 'empty'), PASSWORD],
-  ] as const)('refuses %s before any read', async (_name, draft, password) => {
+  ] as const)('refuses %s with a TypeError before any read', async (_name, draft, password) => {
     const { client, seen } = build();
 
-    await expect(client.prepareCommitSetup(draft, password)).rejects.toThrow();
+    await expect(client.prepareCommitSetup(draft, password)).rejects.toThrow(TypeError);
     expect(seen.provider).toEqual([]);
     expect(seen.parts).toEqual([]);
   });
@@ -233,7 +233,7 @@ describe('prepareCommitSetup: the version escape', () => {
   it('throws while the escape flag is set, preparing nothing', async () => {
     const { client, seen } = build({ escaped: true });
 
-    await expect(client.prepareCommitSetup(DRAFT, PASSWORD)).rejects.toThrow();
+    await expect(client.prepareCommitSetup(DRAFT, PASSWORD)).rejects.toThrow(KitRefusalError);
     expect(members(seen)).not.toContain('manager.prepareCommitSetup');
     expect(members(seen)).not.toContain('action.armingCall');
   });

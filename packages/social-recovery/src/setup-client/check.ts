@@ -32,7 +32,7 @@ function assertServes(codec: IActionCodec, action: Address): void {
 
 /**
  * The client's inputs with the account and action checksummed, refusing a malformed part or record, a read tag that is
- * not a named block tag, and a given codec that does not serve the action.
+ * not a named block tag, and a codec that does not serve the action.
  */
 export function checkedParts(parts: SetupClientParts): SetupClientParts {
   const { provider, descriptor, configuration, descriptorOrigin, policyManager, recoveryAction, events, methods, codec } = parts;
@@ -60,7 +60,7 @@ export function checkedParts(parts: SetupClientParts): SetupClientParts {
   const account = normalizeAddress(parts.account, 'account');
   const action = normalizeAddress(parts.action, 'action');
 
-  if (codec !== undefined) assertServes(codec, action);
+  assertServes(codec, action);
 
   return { ...parts, account, action };
 }
@@ -79,16 +79,13 @@ export function assertPreparesServed(versionEscaped: boolean): void {
   if (versionEscaped) throw new KitRefusalError(SETUP_CLIENT_VERSION_ESCAPED_MESSAGE);
 }
 
-/**
- * Refuses an encrypted backup without a password, and a password beside a clear or empty backup;
- * a password that is not a well-formed string throws a `TypeError`.
- */
+/** Refuses with a `TypeError` an encrypted backup without a password, a password beside a clear or empty backup, and a malformed password. */
 export function assertBackupPassword(draft: SetupDraft, password: string | undefined): void {
   if (password !== undefined) assertPassword(password);
 
   const encrypted = draft.privacy.backup === 'encrypted';
 
-  if (encrypted && password === undefined) throw new KitRefusalError(SETUP_CLIENT_PASSWORD_MISSING_MESSAGE);
+  if (encrypted && password === undefined) throw new TypeError(SETUP_CLIENT_PASSWORD_MISSING_MESSAGE);
 
-  if (!encrypted && password !== undefined) throw new KitRefusalError(SETUP_CLIENT_PASSWORD_UNUSED_MESSAGE);
+  if (!encrypted && password !== undefined) throw new TypeError(SETUP_CLIENT_PASSWORD_UNUSED_MESSAGE);
 }

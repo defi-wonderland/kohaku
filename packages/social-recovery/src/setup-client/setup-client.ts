@@ -36,14 +36,14 @@ import { restoreAt, stateAt } from './state';
  * The setup client over parts its caller built, bound to one account and one action; it constructs nothing.
  * Every member reads the read tag's block once and pins every part call it makes to that block.
  * With `versionEscaped` set, the client still reads and describes but refuses both prepares.
- * Without `codec` no removed key is inferred and the description names it `unread`; `signerRecovery` is passed to the inference.
+ * `codec` and `signerRecovery` are passed to the inference that names the key a handover would remove.
  */
 export class SetupClient implements ISetupClient {
   readonly events: IEventManager;
   private readonly parts: SetupClientParts;
   private readonly versionEscaped: boolean;
 
-  /** Throws a `TypeError` or `RangeError` on a malformed input, or where a given codec does not serve the action. */
+  /** Throws a `TypeError` or `RangeError` on a malformed input, or where the codec does not serve the action. */
   constructor(
     provider: IProvider,
     descriptor: DeploymentDescriptor,
@@ -55,9 +55,9 @@ export class SetupClient implements ISetupClient {
     recoveryAction: SetupClientRecoveryAction,
     events: IEventManager,
     methods: MethodRegistry,
-    versionEscaped = false,
-    codec?: IActionCodec,
+    codec: IActionCodec,
     signerRecovery?: ISignerRecovery,
+    versionEscaped = false,
   ) {
     assertBool(versionEscaped, 'versionEscaped');
     this.parts = checkedParts({

@@ -1,6 +1,6 @@
 import { decodeFunctionData } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { POLICY_MANAGER_WRITES_ABI, type PreparedBatch, type PreparedCall } from '../../src/index';
+import { KitRefusalError, POLICY_MANAGER_WRITES_ABI, type PreparedBatch, type PreparedCall } from '../../src/index';
 import {
   ACCOUNT,
   ACTION,
@@ -97,7 +97,7 @@ describe('prepareClearSetup: three shapes from hasSetup and isAuthorized', () =>
   it('throws while the version escape is set', async () => {
     const { client, seen } = build({ escaped: true, world: { state: standingState(COMMITTED, 3n, 900), authorized: true } });
 
-    await expect(client.prepareClearSetup()).rejects.toThrow();
+    await expect(client.prepareClearSetup()).rejects.toThrow(KitRefusalError);
     expect(members(seen)).not.toContain('manager.prepareClearSetup');
     expect(members(seen)).not.toContain('action.disarmingCall');
   });

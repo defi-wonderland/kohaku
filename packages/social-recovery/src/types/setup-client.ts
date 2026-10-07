@@ -28,7 +28,7 @@ export type SetupClientParts = {
   readonly recoveryAction: SetupClientRecoveryAction;
   readonly events: IEventManager;
   readonly methods: MethodRegistry;
-  readonly codec: IActionCodec | undefined;
+  readonly codec: IActionCodec;
   readonly signerRecovery: ISignerRecovery | undefined;
 };
 

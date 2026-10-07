@@ -1,4 +1,4 @@
-import type { AttemptState, RemovedKeyUnnamed } from '../interfaces/records';
+import type { AttemptState } from '../interfaces/records';
 
 /** The attempt state in which an attempt is live: started, neither cancelled nor consumed. */
 export const SETUP_CLIENT_LIVE_ATTEMPT_STATE: AttemptState = 'Waiting';
@@ -19,6 +19,3 @@ export const SETUP_CLIENT_PASSWORD_UNUSED_MESSAGE = 'a password was given, but t
 /** The refusal message when the draft does not recompute to the commitment the prepared commit carries. */
 export const SETUP_CLIENT_COMMITMENT_UNMATCHED_MESSAGE =
   'the draft does not recompute to the setup commitment the prepared commit carries';
-
-/** The removed key a description names when the client was built without the action codec the inference decodes with. */
-export const SETUP_CLIENT_UNINFERRED_REMOVED_KEY: RemovedKeyUnnamed = 'unread';

@@ -1,4 +1,3 @@
-import { SETUP_CLIENT_UNINFERRED_REMOVED_KEY } from '../constants';
 import { describeSetup as describeDraft } from '../description';
 import type { Address, PinnedBlock, RemovedKey, SetupDescription, SetupDraft, ValidationResult } from '../interfaces';
 import { inferRemovedKey } from '../removed-key';
@@ -45,15 +44,8 @@ async function candidateKeys(parts: SetupClientParts, deployed: boolean, block: 
   );
 }
 
-/**
- * The key a handover would remove, inferred with no supplied address; its authority reads answer false where the account
- * holds no code, and without a codec nothing is inferred and the key is `unread`.
- */
+/** The key a handover would remove, inferred with no supplied address; its authority reads answer false where the account holds no code. */
 async function removedKey(parts: SetupClientParts, deployed: boolean, block: PinnedBlock): Promise<RemovedKey> {
-  const { codec } = parts;
-
-  if (codec === undefined) return SETUP_CLIENT_UNINFERRED_REMOVED_KEY;
-
   const isAuthority = (key: Address, at?: PinnedBlock): Promise<boolean> =>
     deployed ? parts.recoveryAction.isAuthority(key, at) : Promise.resolve(false);
 
@@ -61,7 +53,7 @@ async function removedKey(parts: SetupClientParts, deployed: boolean, block: Pin
     {
       events: parts.events,
       action: { isAuthority },
-      codec,
+      codec: parts.codec,
       provider: parts.provider,
       ...(parts.signerRecovery === undefined ? {} : { signerRecovery: parts.signerRecovery }),
       descriptor: parts.descriptor,

@@ -16,6 +16,7 @@ import {
   type DescriptorOrigin,
   type FilterSpec,
   type Hex,
+  type IActionCodec,
   type IEventManager,
   type IPolicyManagerInteractor,
   type IProvider,
@@ -568,6 +569,15 @@ export function doubles(world: World): Doubles {
   return { provider, manager, action, events, seen };
 }
 
+/** A codec stub serving the given action; a payload never decodes to a handover. */
+export const codecFor = (action: Address): IActionCodec => ({
+  actions: [action],
+  encode: () => '0x',
+  decode: () => {
+    throw new Error('not a handover');
+  },
+});
+
 /** What `build` may override in the client's constructor arguments. */
 export type BuildOptions = {
   readonly world?: Partial<World>;
@@ -584,31 +594,36 @@ export function build(options: BuildOptions = {}): Doubles & { readonly client: 
   const world: World = { ...defaultWorld(), ...options.world };
   const made = doubles(world);
   const configuration = { ...CONFIGURATION, ...options.configuration };
+  const action = options.action ?? ACTION;
+  const codec = codecFor(action);
   const client =
     options.escaped === undefined
       ? new SetupClient(
           made.provider,
           DESCRIPTOR,
           options.account ?? ACCOUNT,
-          options.action ?? ACTION,
+          action,
           configuration,
           options.descriptorOrigin ?? 'kit',
           made.manager,
           made.action,
           made.events,
           options.methods ?? defaultRegistry(),
+          codec,
         )
       : new SetupClient(
           made.provider,
           DESCRIPTOR,
           options.account ?? ACCOUNT,
-          options.action ?? ACTION,
+          action,
           configuration,
           options.descriptorOrigin ?? 'kit',
           made.manager,
           made.action,
           made.events,
           options.methods ?? defaultRegistry(),
+          codec,
+          undefined,
           options.escaped,
         );
 

@@ -226,3 +226,68 @@ describe('a configuration hole', () => {
     expect(thrown).toBeInstanceOf(TypeError);
   });
 });
+
+describe('the window at both inits', () => {
+  const NEAR_END = { ...HEADER, timestamp: UINT48_MAX - 100 };
+
+  const runInit = (init: 'opening' | 'cancel', window: number) => {
+    const built = rig(world({ header: NEAR_END, state: init === 'cancel' ? WAITING : stateFor() }));
+
+    return init === 'opening'
+      ? built.client.initRecoveryGathering(CONFIGURATION, HANDOVER, ORDER, { window })
+      : built.client.initCancelGathering(CONFIGURATION, { window });
+  };
+
+  it.each(['opening', 'cancel'] as const)('the %s init refuses a zero window with a RangeError before any read', async (init) => {
+    const built = rig(world({ state: init === 'cancel' ? WAITING : stateFor() }));
+    const run =
+      init === 'opening'
+        ? built.client.initRecoveryGathering(CONFIGURATION, HANDOVER, ORDER, { window: 0 })
+        : built.client.initCancelGathering(CONFIGURATION, { window: 0 });
+
+    expect(await rejectionOf(run)).toBeInstanceOf(RangeError);
+    expect(built.seen).toEqual([]);
+  });
+
+  it.each(['opening', 'cancel'] as const)('the %s init builds a deadline exactly at uint48', async (init) => {
+    const record = await runInit(init, 100);
+
+    expect(record.request.validUntil).toBe(String(UINT48_MAX));
+  });
+
+  it.each(['opening', 'cancel'] as const)('the %s init refuses a deadline one second past uint48 with a RangeError', async (init) => {
+    expect(await rejectionOf(runInit(init, 101))).toBeInstanceOf(RangeError);
+  });
+});
+
+describe('a wallet place whose config is not one address word', () => {
+  const MALFORMED: Configuration = {
+    clauses: [{ threshold: 1, credentials: [{ method: METHOD_ECDSA, config: '0x1234' }, { method: METHOD_OTHER, config: '0x' }] }],
+    wait: 60,
+    ignoresPause: false,
+  };
+
+  it.each(['opening', 'cancel'] as const)('the %s init refuses it with a TypeError', async (init) => {
+    const built = rig(world({ state: stateFor(MALFORMED, init === 'cancel' ? attemptIn('Waiting') : attemptIn('None')) }));
+    const run =
+      init === 'opening'
+        ? built.client.initRecoveryGathering(MALFORMED, HANDOVER, ORDER, { window: 3_600 })
+        : built.client.initCancelGathering(MALFORMED, { window: 3_600 });
+
+    expect(await rejectionOf(run)).toBeInstanceOf(TypeError);
+  });
+
+  it.each(['opening', 'cancel'] as const)('the %s init refuses a wallet config with a dirty upper word with a TypeError', async (init) => {
+    const dirty: Configuration = {
+      ...MALFORMED,
+      clauses: [{ threshold: 1, credentials: [{ method: METHOD_ECDSA, config: `0x${'01'.repeat(12)}${'ab'.repeat(20)}` }] }],
+    };
+    const built = rig(world({ state: stateFor(dirty, init === 'cancel' ? attemptIn('Waiting') : attemptIn('None')) }));
+    const run =
+      init === 'opening'
+        ? built.client.initRecoveryGathering(dirty, HANDOVER, ORDER, { window: 3_600 })
+        : built.client.initCancelGathering(dirty, { window: 3_600 });
+
+    expect(await rejectionOf(run)).toBeInstanceOf(TypeError);
+  });
+});

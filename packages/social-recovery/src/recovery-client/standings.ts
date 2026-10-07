@@ -36,12 +36,12 @@ async function methodStops(
   return stops;
 }
 
-/** The guardian address a wallet config holds, or nothing where the config is not one address word. */
-function guardianOf(config: Credential['config']): Address | undefined {
+/** The guardian address a wallet config holds, refusing a config that is not one address word with a `TypeError`. */
+function guardianOf(config: Credential['config'], place: number): Address {
   try {
     return decodeSigner(config);
   } catch {
-    return undefined;
+    throw new TypeError(`place ${place} config must be one address word for the wallet method`);
   }
 }
 
@@ -64,6 +64,7 @@ async function guardianCode(parts: RecoveryClientParts, guardians: readonly Addr
 /**
  * Each place's standing in body order: its method's stop and pause holder, and for a wallet place whether its guardian
  * address holds code; every other method's place holds none. Every read is pinned to `block`.
+ * A wallet place whose config is not one address word throws a `TypeError` before any stop or code is read.
  */
 export async function placeStandings(
   parts: RecoveryClientParts,
@@ -72,10 +73,10 @@ export async function placeStandings(
 ): Promise<PlaceStanding[]> {
   const credentials = configuration.clauses.flatMap((clause) => clause.credentials);
   const methods = credentials.map((credential, place) => normalizeAddress(credential.method, `place ${place} method`));
-  const stops = await methodStops(parts, [...new Set(methods)], block);
   const guardians = methods.map((method, place) =>
-    sameAddress(method, parts.walletMethod) ? guardianOf((credentials[place] as Credential).config) : undefined,
+    sameAddress(method, parts.walletMethod) ? guardianOf((credentials[place] as Credential).config, place) : undefined,
   );
+  const stops = await methodStops(parts, [...new Set(methods)], block);
   const code = await guardianCode(parts, guardians.filter((guardian) => guardian !== undefined), block);
 
   return methods.map((method, place) => {

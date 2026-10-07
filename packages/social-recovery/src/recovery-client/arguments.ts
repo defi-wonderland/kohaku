@@ -39,22 +39,18 @@ export function assertSource(source: ConfigurationSource, account: Address): voi
   else configurationBody(source, account);
 }
 
-/** The window's width in seconds, refusing a non-integer and a width outside the deadline's `uint48`. */
+/** The window's width in seconds, refusing a non-integer with a `TypeError` and a zero width or one past `uint48` with a `RangeError`. */
 function windowWidth(window: ValidityWindow): number {
   assertObject(window, 'window');
   assertUintNumber(window.window, FORMATS_VALID_UNTIL_BITS, 'window.window');
 
+  if (window.window === 0) throw new RangeError('window.window must be at least one second');
+
   return window.window;
 }
 
-/** An opening gathering's window width, refusing a zero width with a `RangeError`. */
-export function openingWindow(window: ValidityWindow): number {
-  const width = windowWidth(window);
-
-  if (width === 0) throw new RangeError('window.window must be at least one second');
-
-  return width;
-}
+/** An opening gathering's window width. */
+export const openingWindow = (window: ValidityWindow): number => windowWidth(window);
 
 /** A cancel gathering's window width, refusing one longer than the cancel gathering's own duration with a `RangeError`. */
 export function cancellingWindow(window: ValidityWindow, configuration: ClientConfiguration): number {

@@ -1,6 +1,6 @@
 import { FORMATS_THRESHOLD_BITS, FORMATS_WAIT_BITS } from '../constants';
 import { credentialHash, encodeSetupBody, setupCommitment } from '../formats';
-import { assertArray, assertBool, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
+import { assertArray, assertBool, assertBytes32, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import type { Address, Clause, Configuration, Credential, Hex } from '../interfaces';
 import { defaultSalt } from '../salts';
 import type { BodyClause, SetupBody } from '../types';
@@ -20,7 +20,12 @@ function assertConfigurationShape(configuration: Configuration): void {
     assertArray(clause.credentials, `configuration.clauses[${index}].credentials`);
 
     for (let position = 0; position < clause.credentials.length; position += 1) {
-      assertObject(clause.credentials[position], `configuration.clauses[${index}].credentials[${position}]`);
+      const credential = clause.credentials[position];
+      const name = `configuration.clauses[${index}].credentials[${position}]`;
+
+      assertObject(credential, name);
+
+      if (credential.salt !== undefined) assertBytes32(credential.salt, `${name}.salt`);
     }
   }
 }
@@ -43,7 +48,7 @@ export function configurationBody(configuration: Configuration, account: Address
     for (let position = 0; position < clause.credentials.length; position += 1) {
       const { method, config, salt } = clause.credentials[position] as Credential;
 
-      credentials.push(credentialHash(method, config, salt ?? defaultSalt(accountAddress, place)));
+      credentials.push(credentialHash(method, config, salt === undefined ? defaultSalt(accountAddress, place) : salt));
       place += 1;
     }
 

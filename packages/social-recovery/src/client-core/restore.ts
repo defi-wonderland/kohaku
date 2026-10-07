@@ -25,18 +25,25 @@ import type { SetupCommitted } from '../types/client-core';
 import { configurationCommitment } from './body';
 import { KitRefusalError } from './refusal';
 
-/** Whether a setup stands: the manager's commitment is not the zero word. */
-export function setupStands(state: ActionState): boolean {
+/** Whether a commitment already checked as 32 bytes is a standing setup's, not the zero word. */
+const standingCommitment = (commitment: Hex): boolean => commitment.toLowerCase() !== CLIENT_CORE_NO_SETUP_COMMITMENT;
+
+/** Refuses a state that is not an object or whose commitment is not 32 bytes. */
+function assertStateCommitment(state: ActionState): void {
   assertObject(state, 'state');
   assertBytes32(state.setupCommitment, 'state.setupCommitment');
+}
 
-  return state.setupCommitment.toLowerCase() !== CLIENT_CORE_NO_SETUP_COMMITMENT;
+/** Whether a setup stands: the manager's commitment is not the zero word. */
+export function setupStands(state: ActionState): boolean {
+  assertStateCommitment(state);
+
+  return standingCommitment(state.setupCommitment);
 }
 
 /** Refuses a malformed state member the restore reads, before any read. */
 function assertRestoreState(state: ActionState): void {
-  assertObject(state, 'state');
-  assertBytes32(state.setupCommitment, 'state.setupCommitment');
+  assertStateCommitment(state);
   assertUintBigint(state.setupNonce, FORMATS_SETUP_NONCE_BITS, 'state.setupNonce');
   assertUintNumber(state.setupCommittedAtBlock, FORMATS_SAFE_INTEGER_BITS, 'state.setupCommittedAtBlock');
 }
@@ -104,6 +111,7 @@ async function openCurrentBackup(
 /**
  * The setup standing for the account and action at the caller's block and `stateOf` reading, from the source given.
  * A password source opens the current setup's encrypted backup; a configuration source is checked and returned as given.
+ * A clear or empty backup never opens under a password, so its holder passes the configuration itself as the source.
  * Refuses with a `KitRefusalError` carrying the restore cause; a failed read rejects as the read rejected.
  */
 export async function restoreConfiguration(
@@ -123,7 +131,7 @@ export async function restoreConfiguration(
 
   if ('password' in source) assertPassword(source.password);
 
-  if (!setupStands(state)) throw noBackup(accountAddress, actionAddress);
+  if (!standingCommitment(state.setupCommitment)) throw noBackup(accountAddress, actionAddress);
 
   const committed: Hex = lowerHex(state.setupCommitment);
   const configuration =

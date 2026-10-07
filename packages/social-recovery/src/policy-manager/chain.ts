@@ -1,13 +1,14 @@
 import { decodeAbiParameters, encodeAbiParameters, type AbiParameter, type DecodeAbiParametersReturnType } from 'viem';
 import { FORMATS_HEX_BYTES_PATTERN, POLICY_MANAGER_READ_FROM } from '../constants';
+import { pinBlockHeader } from '../client-core/block';
 import { assertBytes, checkedBlock, lowerHex } from '../formats/guards';
 import { decodeStrictly } from '../formats/strict';
 import { isProviderRevert, type Address, type BlockTag, type Hex, type IProvider, type PinnedBlock } from '../interfaces';
 import type { CallOutcome } from '../types/policy-manager';
 
-/** The block the tag names at this moment, read once; a header without a block number and a 32-byte hash throws. */
+/** The block the tag names at this moment, read once through `pinBlockHeader`, without its timestamp. */
 export async function pinBlock(provider: IProvider, tag: BlockTag): Promise<PinnedBlock> {
-  return checkedBlock(await provider.block(tag), 'block header');
+  return (await pinBlockHeader(provider, tag)).block;
 }
 
 /** The passed block, checked before any provider call, where one was passed; else the read tag's block read once. */

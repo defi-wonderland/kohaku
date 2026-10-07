@@ -1,4 +1,4 @@
-import type { BlockHeader, KitNotification, PinnedBlock, RestoreCause, ValidationResult } from '../interfaces';
+import type { Address, BlockHeader, Hex, KitNotification, PinnedBlock, RestoreCause, Sender, ValidationResult } from '../interfaces';
 
 /** A block read once: its checked header, and the number and hash every read behind it is pinned to. */
 export type PinnedHeader = {
@@ -16,3 +16,10 @@ export type KitRefusalDetails = {
 
 /** A decoded setup-committed notification. */
 export type SetupCommitted = Extract<KitNotification, { readonly kind: 'setup-committed' }>;
+
+/** A prepared call's members a simulation sends, checked: the target checksummed and the data lower-cased. */
+export type CheckedCall = {
+  readonly sender: Sender;
+  readonly target: Address;
+  readonly data: Hex;
+};

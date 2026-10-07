@@ -19,4 +19,4 @@ export type {
   SetupDescriptionContext,
   StatusScope,
 } from './description';
-export type * from './client-core';
+export type { KitRefusalDetails, PinnedHeader } from './client-core';

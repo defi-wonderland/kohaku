@@ -21,10 +21,9 @@ import type {
   KitNotification,
   PinnedBlock,
 } from '../interfaces';
+import type { SetupCommitted } from '../types/client-core';
 import { configurationCommitment } from './body';
 import { KitRefusalError } from './refusal';
-
-type SetupCommitted = Extract<KitNotification, { kind: 'setup-committed' }>;
 
 /** Whether a setup stands: the manager's commitment is not the zero word. */
 export function setupStands(state: ActionState): boolean {

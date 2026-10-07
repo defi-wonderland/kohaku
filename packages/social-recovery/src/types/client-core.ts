@@ -1,4 +1,4 @@
-import type { BlockHeader, PinnedBlock, RestoreCause, ValidationResult } from '../interfaces';
+import type { BlockHeader, KitNotification, PinnedBlock, RestoreCause, ValidationResult } from '../interfaces';
 
 /** A block read once: its checked header, and the number and hash every read behind it is pinned to. */
 export type PinnedHeader = {
@@ -13,3 +13,6 @@ export type KitRefusalDetails = {
   /** Which step of a restore refused, and the values it refused on. */
   readonly restoreCause?: RestoreCause;
 };
+
+/** A decoded setup-committed notification. */
+export type SetupCommitted = Extract<KitNotification, { readonly kind: 'setup-committed' }>;

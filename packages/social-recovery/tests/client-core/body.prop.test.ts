@@ -59,3 +59,14 @@ describe('configuration body and commitment over arbitrary configurations', () =
     }));
   }, TIMEOUT);
 });
+
+describe('configurationBody over dense arrays', () => {
+  it('never throws for a dense configuration and keeps one credential hash per flat place', () => {
+    run(fc.property(configuration, anyAddress, (config, account) => {
+      const body = configurationBody(config, account);
+      const places = config.clauses.reduce((count, clause) => count + clause.credentials.length, 0);
+
+      expect(body.clauses.reduce((count, clause) => count + clause.credentials.length, 0)).toBe(places);
+    }));
+  }, TIMEOUT);
+});

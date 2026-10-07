@@ -245,3 +245,87 @@ describe('configurationBody refuses a member outside its width', () => {
     expect(body).toEqual({ wait: 2 ** 48 - 1, ignoresPause: true, clauses: [{ threshold: 255, credentials: [] }] });
   });
 });
+
+/** A credential whose `method` and `config` reads are counted, so a test can tell whether it was hashed. */
+function watchedCredential(reads: { count: number }): Credential {
+  return {
+    get method() {
+      reads.count += 1;
+
+      return METHOD_A;
+    },
+    get config() {
+      reads.count += 1;
+
+      return '0x' as Hex;
+    },
+  };
+}
+
+/** A list of `length` slots holding `make(index)` everywhere but at `hole`. */
+function withHole<T>(length: number, hole: number, make: (index: number) => T): T[] {
+  const list = new Array<T>(length);
+
+  for (let index = 0; index < length; index += 1) if (index !== hole) list[index] = make(index);
+
+  return list;
+}
+
+describe('configurationBody refuses a hole before any hash', () => {
+  it.each([
+    ['leading', 0],
+    ['middle', 1],
+    ['trailing', 2],
+  ])('a %s hole in the credentials of a clause', (_, hole) => {
+    const reads = { count: 0 };
+    const configuration: Configuration = {
+      ...CONFIGURATION,
+      clauses: [
+        { threshold: 1, credentials: [watchedCredential(reads)] },
+        { threshold: 1, credentials: withHole(3, hole, () => watchedCredential(reads)) },
+      ],
+    };
+
+    expect(() => configurationBody(configuration, ACCOUNT)).toThrow(TypeError);
+    expect(() => configurationBody(configuration, ACCOUNT)).toThrow(new RegExp(`\\[${hole}\\]`));
+    expect(reads.count).toBe(0);
+  });
+
+  it.each([
+    ['leading', 0],
+    ['middle', 1],
+    ['trailing', 2],
+  ])('a %s hole in the clauses', (_, hole) => {
+    const reads = { count: 0 };
+    const configuration: Configuration = {
+      ...CONFIGURATION,
+      clauses: withHole(3, hole, () => ({ threshold: 1, credentials: [watchedCredential(reads)] })),
+    };
+
+    expect(() => configurationBody(configuration, ACCOUNT)).toThrow(TypeError);
+    expect(() => configurationBody(configuration, ACCOUNT)).toThrow(new RegExp(`\\[${hole}\\]`));
+    expect(reads.count).toBe(0);
+  });
+
+  it('a trailing hole from a stretched length, in clauses and in credentials', () => {
+    const clauses = [...CONFIGURATION.clauses];
+    const credentials = [{ method: METHOD_A, config: '0x' as Hex }];
+
+    clauses.length += 1;
+    credentials.length += 1;
+    expect(() => configurationBody({ ...CONFIGURATION, clauses }, ACCOUNT)).toThrow(TypeError);
+    expect(() => configurationBody({ ...CONFIGURATION, clauses: [{ threshold: 1, credentials }] }, ACCOUNT)).toThrow(TypeError);
+  });
+
+  it('refuses the hole through configurationCommitment too', () => {
+    const configuration = { ...CONFIGURATION, clauses: withHole(2, 0, () => CONFIGURATION.clauses[0]!) };
+
+    expect(() => configurationCommitment(configuration, ACCOUNT, ACTION, 1n)).toThrow(TypeError);
+  });
+
+  it('an explicit undefined credential is refused like a hole', () => {
+    const configuration = { ...CONFIGURATION, clauses: [{ threshold: 1, credentials: [undefined] }] } as unknown as Configuration;
+
+    expect(() => configurationBody(configuration, ACCOUNT)).toThrow(TypeError);
+  });
+});

@@ -47,8 +47,9 @@ export function configurationBody(configuration: Configuration, account: Address
 
     for (let position = 0; position < clause.credentials.length; position += 1) {
       const { method, config, salt } = clause.credentials[position] as Credential;
+      const credentialSalt = salt === undefined ? defaultSalt(accountAddress, place) : salt;
 
-      credentials.push(credentialHash(method, config, salt === undefined ? defaultSalt(accountAddress, place) : salt));
+      credentials.push(credentialHash(method, config, credentialSalt));
       place += 1;
     }
 
@@ -60,5 +61,8 @@ export function configurationBody(configuration: Configuration, account: Address
 
 /** The setup commitment a configuration or a draft recomputes to for the account, the action and the setup nonce. */
 export function configurationCommitment(configuration: Configuration, account: Address, action: Address, nonce: bigint): Hex {
-  return setupCommitment(account, action, nonce, encodeSetupBody(configurationBody(configuration, account)));
+  const body = configurationBody(configuration, account);
+  const encoded = encodeSetupBody(body);
+
+  return setupCommitment(account, action, nonce, encoded);
 }

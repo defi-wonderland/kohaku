@@ -1,5 +1,5 @@
 import { isAddressEqual, zeroAddress } from 'viem';
-import { normalizeAddress, sameAddress } from '../formats/guards';
+import { lowerHex, normalizeAddress } from '../formats/guards';
 import type { Address, KitNotification, PinnedBlock } from '../interfaces';
 import type { CheckedRemovedKeyInputs, RemovedKeyStepAnswer } from '../types/removed-key';
 import { lastByPosition, latestConsumedStart, ofKind } from './select';
@@ -61,8 +61,8 @@ export async function fromSetupSigner(
 
     if (
       transaction === undefined ||
-      !sameAddress(transaction.hash, commit.at.transactionHash) ||
-      !sameAddress(transaction.blockHash, commit.at.blockHash)
+      lowerHex(transaction.hash) !== lowerHex(commit.at.transactionHash) ||
+      lowerHex(transaction.blockHash) !== lowerHex(commit.at.blockHash)
     ) {
       return 'unread';
     }

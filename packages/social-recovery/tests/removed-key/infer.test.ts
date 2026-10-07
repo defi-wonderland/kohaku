@@ -467,6 +467,8 @@ describe('malformed answers resolve rather than reject', () => {
     ['a null entry', [null]],
     ['an undefined entry', [undefined]],
     ['an entry without a position', [{ kind: 'attempt-consumed', account: ACCOUNT, action: ACTION, attemptId: 3n }]],
+    ['an entry without a kind', [{ account: ACCOUNT, action: ACTION, attemptId: 3n, at: positionAt({ block: 201 }) }]],
+    ['an entry whose kind is not a string', [{ kind: 7, account: ACCOUNT, action: ACTION, attemptId: 3n, at: positionAt({ block: 201 }) }]],
     ['not an array', { length: 1 }],
   ])('fetch answering %s: unread', async (_label, notifications) => {
     const { inputs } = rig({ notifications: { value: notifications as never }, authorities: keySet(key(1)) }, {}, codec);

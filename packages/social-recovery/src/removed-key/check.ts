@@ -1,25 +1,8 @@
-import { assertArray, assertBytes32, assertObject, normalizeAddress, sameAddress } from '../formats/guards';
-import type { PinnedBlock } from '../interfaces';
+import { FORMATS_SAFE_INTEGER_BITS } from '../constants';
+import { assertArray, assertObject, assertUintNumber, normalizeAddress, sameAddress } from '../formats/guards';
 import type { CheckedRemovedKeyInputs, RemovedKeyInputs } from '../types/removed-key';
 
-/** Refuses anything but a non-negative safe integer, with a `TypeError`. */
-function assertBlockNumber(value: unknown, name: string): asserts value is number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
-    throw new TypeError(`${name} must be a non-negative safe integer`);
-  }
-}
-
-/** Refuses anything but a block number and a 32-byte hash. */
-export function assertPinnedBlock(value: unknown, name: string): asserts value is PinnedBlock {
-  assertObject(value, name);
-
-  const { number, hash } = value as Partial<Record<keyof PinnedBlock, unknown>>;
-
-  assertBlockNumber(number, `${name}.number`);
-  assertBytes32(hash, `${name}.hash`);
-}
-
-/** The inputs with every address checksummed, refusing malformed ones with a `TypeError` before anything is read. */
+/** The inputs with every address checksummed, refusing malformed ones before anything is read. */
 export function checkedInputs(inputs: unknown): CheckedRemovedKeyInputs {
   assertObject(inputs, 'inputs');
 
@@ -29,7 +12,7 @@ export function checkedInputs(inputs: unknown): CheckedRemovedKeyInputs {
   const actionAddress = normalizeAddress(given.actionAddress, 'inputs.actionAddress');
 
   assertObject(given.descriptor, 'inputs.descriptor');
-  assertBlockNumber(given.descriptor.deployedAt, 'inputs.descriptor.deployedAt');
+  assertUintNumber(given.descriptor.deployedAt, FORMATS_SAFE_INTEGER_BITS, 'inputs.descriptor.deployedAt');
   assertObject(given.codec, 'inputs.codec');
   assertArray(given.codec.actions, 'inputs.codec.actions');
 

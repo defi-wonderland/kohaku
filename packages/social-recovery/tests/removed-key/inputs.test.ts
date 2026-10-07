@@ -15,8 +15,8 @@ const ready = (overrides: Partial<RemovedKeyInputs> = {}, codecOverride = codec)
   );
 };
 
-const refuses = async (inputs: unknown, block: unknown = BLOCK): Promise<void> => {
-  await expect(async () => inferRemovedKey(inputs as RemovedKeyInputs, block as PinnedBlock)).rejects.toThrow(TypeError);
+const refuses = async (inputs: unknown, block: unknown = BLOCK, error: typeof TypeError | typeof RangeError = TypeError): Promise<void> => {
+  await expect(async () => inferRemovedKey(inputs as RemovedKeyInputs, block as PinnedBlock)).rejects.toThrow(error);
 };
 
 const BAD_ADDRESSES: readonly (readonly [string, unknown])[] = [
@@ -28,7 +28,7 @@ const BAD_ADDRESSES: readonly (readonly [string, unknown])[] = [
   ['null', null],
 ];
 
-describe('inputs refused with a TypeError before any read', () => {
+describe('inputs refused before any read: a TypeError for a wrong type, a RangeError for an out-of-range number', () => {
   it('the bad-checksum spelling really is mixed case and not EIP-55', () => {
     const spelling = BAD_ADDRESSES[0]?.[1] as string;
 
@@ -50,34 +50,34 @@ describe('inputs refused with a TypeError before any read', () => {
     });
   });
 
-  it.each([
-    ['null', null],
-    ['a number', 500],
-    ['a negative number', { number: -1, hash: BLOCK.hash }],
-    ['a fractional number', { number: 1.5, hash: BLOCK.hash }],
-    ['an unsafe number', { number: 2 ** 53, hash: BLOCK.hash }],
-    ['a string number', { number: '500', hash: BLOCK.hash }],
-    ['no hash', { number: 500 }],
-    ['a short hash', { number: 500, hash: '0x1234' }],
-    ['a non-hex hash', { number: 500, hash: `0x${'zz'.repeat(32)}` }],
-  ])('a block that is %s', async (_label, block) => {
+  it.each<readonly [string, unknown, typeof TypeError | typeof RangeError]>([
+    ['null', null, TypeError],
+    ['a number', 500, TypeError],
+    ['a negative number', { number: -1, hash: BLOCK.hash }, RangeError],
+    ['a fractional number', { number: 1.5, hash: BLOCK.hash }, TypeError],
+    ['an unsafe number', { number: 2 ** 53, hash: BLOCK.hash }, RangeError],
+    ['a string number', { number: '500', hash: BLOCK.hash }, TypeError],
+    ['no hash', { number: 500 }, TypeError],
+    ['a short hash', { number: 500, hash: '0x1234' }, TypeError],
+    ['a non-hex hash', { number: 500, hash: `0x${'zz'.repeat(32)}` }, TypeError],
+  ])('a block that is %s', async (_label, block, error) => {
     const { inputs, reads } = ready();
 
-    await refuses(inputs, block);
+    await refuses(inputs, block, error);
     expect(reads).toEqual([]);
   });
 
-  it.each([
-    ['negative', -1],
-    ['fractional', 100.5],
-    ['NaN', Number.NaN],
-    ['unsafe', 2 ** 53],
-    ['a string', '100'],
-    ['missing', undefined],
-  ])('a deployedAt that is %s', async (_label, deployedAt) => {
+  it.each<readonly [string, unknown, typeof TypeError | typeof RangeError]>([
+    ['negative', -1, RangeError],
+    ['fractional', 100.5, TypeError],
+    ['NaN', Number.NaN, TypeError],
+    ['unsafe', 2 ** 53, RangeError],
+    ['a string', '100', TypeError],
+    ['missing', undefined, TypeError],
+  ])('a deployedAt that is %s', async (_label, deployedAt, error) => {
     const { inputs, reads } = ready({ descriptor: { ...DESCRIPTOR, deployedAt: deployedAt as number } });
 
-    await refuses(inputs);
+    await refuses(inputs, BLOCK, error);
     expect(reads).toEqual([]);
   });
 

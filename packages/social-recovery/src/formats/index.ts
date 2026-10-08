@@ -6,3 +6,4 @@ export { decodeProofPlace, encodeProofPlace } from './proof-place';
 export { decodePaymentOrder, encodePaymentOrder } from './payment-order';
 export { kitBinding, kitSlot } from './kit';
 export { creationPrivileges } from './creation';
+export { checkedConfiguration, checkedDescriptor } from './records';

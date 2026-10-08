@@ -6,9 +6,9 @@ import {
 import { KitRefusalError } from '../client-core';
 import { assertPassword } from '../encryption/cipher';
 import { assertArray, assertBool, assertObject, normalizeAddress, sameAddress } from '../formats/guards';
+import { checkedConfiguration, checkedDescriptor } from '../formats/records';
 import { type Address, type IActionCodec, type PrepareOptions, type SetupDraft } from '../interfaces';
 import type { SetupClientParts } from '../types/setup-client';
-import { checkedConfiguration, checkedDescriptor } from './records';
 
 /** Refuses a dependency that is not an object with every named member callable. */
 function assertDependency(value: unknown, members: readonly string[], name: string): void {
@@ -40,7 +40,7 @@ export function checkedParts(parts: SetupClientParts): SetupClientParts {
 
   assertDependency(provider, ['block', 'call', 'code', 'transaction'], 'provider');
 
-  const checkedRecords = { descriptor: checkedDescriptor(descriptor), configuration: checkedConfiguration(configuration) };
+  const checkedRecords = { descriptor: checkedDescriptor(descriptor, 'descriptor'), configuration: checkedConfiguration(configuration, 'configuration') };
 
   if (descriptorOrigin !== 'kit' && descriptorOrigin !== 'integrator') throw new TypeError('descriptorOrigin must be kit or integrator');
 

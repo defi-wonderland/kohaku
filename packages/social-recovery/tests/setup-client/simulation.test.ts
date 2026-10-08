@@ -1,6 +1,6 @@
 import { encodeErrorResult } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { decodeRevert, type Hex, type PreparedBatch, type PreparedCall } from '../../src/index';
+import { decodeRevert, type Address, type Hex, type PreparedBatch, type PreparedCall } from '../../src/index';
 import {
   ACCOUNT,
   ARMING_DATA,
@@ -53,6 +53,16 @@ describe('simulation of the setup prepares', () => {
     expect(seen.calls).toHaveLength(1);
     expect(seen.calls[0]?.from.toLowerCase()).toBe(ACCOUNT.toLowerCase());
     expect(prepared.simulation).toEqual({ success: true });
+  });
+
+  it.each([
+    ['prepareCommitSetup', (client: ReturnType<typeof build>['client']) => client.prepareCommitSetup(EMPTY_DRAFT, undefined, { from: 'garbage' as Address })],
+    ['prepareClearSetup', (client: ReturnType<typeof build>['client']) => client.prepareClearSetup({ from: 'garbage' as Address })],
+  ])('refuses a malformed options.from on %s with a TypeError before any read', async (_name, call) => {
+    const { client, seen } = build();
+
+    await expect(call(client)).rejects.toThrow(TypeError);
+    expect(seen.provider).toEqual([]);
   });
 
   it('skips the simulation where options.simulate is false', async () => {

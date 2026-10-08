@@ -77,6 +77,8 @@ export async function prepareCommit(
   assertUintBigint(state.setupNonce, FORMATS_SETUP_NONCE_BITS, 'state.setupNonce');
 
   const nonce = state.setupNonce + 1n;
+
+  assertUintBigint(nonce, FORMATS_SETUP_NONCE_BITS, 'the next setup nonce');
   const configuration = draftConfiguration(draft, credentials);
   const setupCommitment = configurationCommitment(configuration, parts.account, parts.action, nonce);
   const privateMetadata = await backupBytes(parts, draft, configuration, password, setupCommitment, nonce);

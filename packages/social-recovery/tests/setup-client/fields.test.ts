@@ -133,6 +133,14 @@ describe('construction-time checks of the consumed fields', () => {
     });
   });
 
+  it('refuses a logChunkSize of zero with a RangeError and no provider read', () => {
+    expect(construct({ configuration: { ...CONFIGURATION, logChunkSize: 0 } })).toEqual({ thrown: expect.any(RangeError), reads: 0 });
+  });
+
+  it('accepts a logChunkSize of one', () => {
+    expect(construct({ configuration: { ...CONFIGURATION, logChunkSize: 1 } })).toEqual({ thrown: undefined, reads: 0 });
+  });
+
   it('accepts a digestVersion at the largest safe integer', () => {
     expect(construct({ descriptor: { ...DESCRIPTOR, digestVersion: String(Number.MAX_SAFE_INTEGER) } })).toEqual({ thrown: undefined, reads: 0 });
   });

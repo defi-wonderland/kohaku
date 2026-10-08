@@ -5,21 +5,10 @@ import {
 } from '../constants';
 import { KitRefusalError } from '../client-core';
 import { assertPassword } from '../encryption/cipher';
-import { assertArray, assertBool, assertObject, normalizeAddress, sameAddress } from '../formats/guards';
+import { assertArray, assertBool, assertDependency, assertObject, normalizeAddress, sameAddress } from '../formats/guards';
 import { checkedConfiguration, checkedDescriptor } from '../formats/records';
 import { type Address, type IActionCodec, type PrepareOptions, type SetupDraft } from '../interfaces';
 import type { SetupClientParts } from '../types/setup-client';
-
-/** Refuses a dependency that is not an object with every named member callable. */
-function assertDependency(value: unknown, members: readonly string[], name: string): void {
-  assertObject(value, name);
-
-  for (const member of members) {
-    if (typeof (value as Readonly<Record<string, unknown>>)[member] !== 'function') {
-      throw new TypeError(`${name}.${member} must be a function`);
-    }
-  }
-}
 
 /** Refuses a codec that is not one or does not serve the action. */
 function assertServes(codec: IActionCodec, action: Address): void {
@@ -63,13 +52,15 @@ export function checkedParts(parts: SetupClientParts): SetupClientParts {
   return { ...parts, ...checkedRecords, account, action };
 }
 
-/** Refuses options that are not an object, or whose `simulate` is present and not a boolean. */
+/** Refuses options that are not an object, whose `simulate` is present and not a boolean, or whose `from` is present and not an address. */
 export function assertOptions(options: PrepareOptions | undefined): void {
   if (options === undefined) return;
 
   assertObject(options, 'options');
 
   if (options.simulate !== undefined) assertBool(options.simulate, 'options.simulate');
+
+  if (options.from !== undefined) normalizeAddress(options.from, 'options.from');
 }
 
 /** Refuses every prepare of a client built for a deployment version this build does not serve. */

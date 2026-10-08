@@ -26,6 +26,7 @@ import {
   type KitNotification,
   type LogPosition,
   type MethodRegistry,
+  type MethodTier,
   type ModuleInfo,
   type Parties,
   type PinnedBlock,
@@ -387,8 +388,7 @@ export type Seen = {
 };
 
 /** A stub method implementation serving the given modules, carrying a tier where one is given. */
-export const methodStub = (modules: readonly Address[], tier?: string): IRecoveryMethod => {
-  const stub = {
+export const methodStub = (modules: readonly Address[], tier?: MethodTier): IRecoveryMethod => ({
     modules: () => modules,
     enrollInput: () => {
       throw new Error('not used');
@@ -410,12 +410,9 @@ export const methodStub = (modules: readonly Address[], tier?: string): IRecover
     describe: () => {
       throw new Error('not used');
     },
-    vector: [],
-    ...(tier === undefined ? {} : { tier }),
-  };
-
-  return stub as unknown as IRecoveryMethod;
-};
+  vector: [],
+  ...(tier === undefined ? {} : { tier }),
+});
 
 /** The registry the client is built with by default: `METHOD_A` and `METHOD_B` implemented, `METHOD_C` not. */
 export const defaultRegistry = (): MethodRegistry =>

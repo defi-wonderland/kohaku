@@ -29,9 +29,9 @@ function implementationOf(parts: SetupClientParts, module: Address): IRecoveryMe
 
 /** The tier the implementation states, where it states one of the tiers. */
 function tierOf(implementation: IRecoveryMethod | undefined): MethodTier | undefined {
-  const tier = (implementation as { readonly tier?: unknown } | undefined)?.tier;
+  const tier = implementation?.tier;
 
-  return (METHOD_TIERS as readonly unknown[]).includes(tier) ? (tier as MethodTier) : undefined;
+  return tier !== undefined && METHOD_TIERS.includes(tier) ? tier : undefined;
 }
 
 /** One method module's reads at the block, beside whether this build serves it and the tier it states. */

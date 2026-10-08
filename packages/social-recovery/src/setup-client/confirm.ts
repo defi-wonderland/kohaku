@@ -80,11 +80,15 @@ function preparedCommit(parts: SetupClientParts, prepared: PreparedCall | Prepar
   throw new TypeError('prepared carries no commitSetup under the bound action');
 }
 
-/** The live setup-committed events at the nonce, in log order. */
-const committedAt = (notifications: readonly KitNotification[], nonce: bigint): SetupCommitted[] =>
+/** The live setup-committed events of the bound account and action at the nonce, in log order. */
+const committedAt = (parts: SetupClientParts, notifications: readonly KitNotification[], nonce: bigint): SetupCommitted[] =>
   notifications.filter(
     (notification): notification is SetupCommitted =>
-      notification.kind === 'setup-committed' && !notification.at.removed && notification.nonce === nonce,
+      notification.kind === 'setup-committed' &&
+      !notification.at.removed &&
+      notification.nonce === nonce &&
+      sameAddress(notification.account, parts.account) &&
+      sameAddress(notification.action, parts.action),
   );
 
 /**
@@ -109,7 +113,7 @@ export async function confirmAt(
     range.from > range.to ? Promise.resolve([]) : parts.events.fetch(parts.events.accountFilter(), range),
     authorizedAt(parts, block),
   ]);
-  const atNonce = committedAt(notifications, nonce);
+  const atNonce = committedAt(parts, notifications, nonce);
   const landed = atNonce.find((event) => lowerHex(event.setupCommitment) === setupCommitment);
   const other = atNonce.at(-1);
 

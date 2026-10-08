@@ -217,6 +217,29 @@ describe('prepareCommitSetup: validation inside the prepare', () => {
   });
 });
 
+describe('prepareCommitSetup: the nonce bound', () => {
+  it('refuses a stored nonce of 2^64 - 1 with a RangeError naming the nonce, preparing nothing', async () => {
+    const { client, seen } = build({ world: { authorized: true, state: standingState(COMMITTED, 2n ** 64n - 1n, 10) } });
+    const thrown = await client.prepareCommitSetup(withBackup(DRAFT, 'empty')).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    expect(thrown).toBeInstanceOf(RangeError);
+    expect((thrown as RangeError).message).toMatch(/nonce/i);
+    expect(members(seen)).not.toContain('manager.prepareCommitSetup');
+    expect(members(seen)).not.toContain('action.armingCall');
+  });
+
+  it('commits at the largest nonce the field holds', async () => {
+    const { client, seen } = build({ world: { authorized: true, state: standingState(COMMITTED, 2n ** 64n - 2n, 10) } });
+
+    await client.prepareCommitSetup(withBackup(DRAFT, 'empty'));
+
+    expect(commitArguments(seen)[2]).toBe(2n ** 64n - 1n);
+  });
+});
+
 describe('prepareCommitSetup: a code-less account', () => {
   it('reads the code first and, on 0x, makes no isAuthorized call and arms', async () => {
     const { client, seen } = build({ world: { code: '0x', authorized: { rejects: { data: '0x' } } } });

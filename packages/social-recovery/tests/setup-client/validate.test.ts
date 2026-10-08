@@ -174,9 +174,21 @@ describe('validateSetup', () => {
       [METHOD_B, methodStub([METHOD_B])],
     ]);
     const draft: SetupDraft = { ...DRAFT, clauses: [{ threshold: 1, credentials: [{ method: METHOD_A, config: '0x01' }] }] };
-    const result = await build({ methods: registry }).client.validateSetup(draft);
+    const { client } = build({ methods: registry });
+    const result = await client.validateSetup(draft);
+    const context = expectedContext(draft, { registry });
 
     expect(result.warnings.map((warning) => warning.code)).toContain('clause.secondary-only');
+    expect(result).toEqual(validateSetup(draft, { ...context, methods: context.methods.map((reads) => ({ ...reads, tier: 'secondary' as const })) }));
+    expect((await client.describeSetup(draft)).methodStanding).toEqual([expect.objectContaining({ method: METHOD_A, tier: 'secondary' })]);
+  });
+
+  it('leaves the tier absent for an implementation that states none', async () => {
+    const draft: SetupDraft = { ...DRAFT, clauses: [{ threshold: 1, credentials: [{ method: METHOD_B, config: '0x01' }] }] };
+    const standing = (await build().client.describeSetup(draft)).methodStanding;
+
+    expect(standing).toHaveLength(1);
+    expect('tier' in (standing[0] ?? {})).toBe(false);
   });
 
   it('passes the descriptor origin it was built with', async () => {

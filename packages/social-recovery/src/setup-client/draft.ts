@@ -1,5 +1,5 @@
 import { assertBytes, lowerHex } from '../formats/guards';
-import type { Address, Clause, Configuration, Credential, Hex, SetupDraft } from '../interfaces';
+import type { Clause, Configuration, Credential, Hex, SetupDraft } from '../interfaces';
 import type { PlacedCredential } from '../types/validation';
 import { placedCredentials } from '../validation/setup-draft';
 
@@ -28,11 +28,6 @@ export function checkedDraft(draft: SetupDraft): readonly PlacedCredential[] {
 
   return credentials;
 }
-
-/** The distinct methods the credentials name, in the order each first appears. */
-export const distinctMethods = (credentials: readonly PlacedCredential[]): Address[] => [
-  ...new Set(credentials.map(({ method }) => method)),
-];
 
 /** The configuration a checked draft commits to, every method checksummed and every config and salt lower-cased. */
 export function draftConfiguration(draft: SetupDraft, credentials: readonly PlacedCredential[]): Configuration {

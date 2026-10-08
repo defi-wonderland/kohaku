@@ -1,4 +1,4 @@
-import { assertArray, normalizeAddress } from '../formats/guards';
+export { normalizeAddresses } from '../formats/guards';
 import type { Address, ErrorCode, FindingSubject, FindingValues, ValidationResult, WarningCode } from '../interfaces';
 import type { Findings } from '../types/validation';
 
@@ -32,11 +32,4 @@ export function methodTable<Value>(entries: readonly (readonly [Address, Value])
   }
 
   return table;
-}
-
-/** The checksummed spellings of a list of addresses, refusing a malformed entry. */
-export function normalizeAddresses(values: readonly Address[], name: string): Address[] {
-  assertArray(values, name);
-
-  return values.map((value, index) => normalizeAddress(value, `${name}[${index}]`));
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getAddress } from 'viem';
-import type { Address, PreparedBatch, PreparedCall } from '../../src/index';
+import type { Address, KitNotification, PreparedBatch, PreparedCall } from '../../src/index';
 import {
   ACCOUNT,
   ACTION,
@@ -12,6 +12,7 @@ import {
   HEADER,
   MANAGER,
   members,
+  OTHER_ACTION,
   PIN,
   position,
   referenceCommitment,
@@ -21,6 +22,7 @@ import {
 
 const DRAFT_EMPTY = withBackup(DRAFT, 'empty');
 const LATER = { number: HEADER.number + 12, timestamp: HEADER.timestamp + 144, hash: `0x${'6c'.repeat(32)}` as const };
+const OTHER_ACCOUNT: Address = getAddress('0x00000000000000000000000000000000000acc02');
 const OTHER_MANAGER: Address = getAddress(`0x${'a2'.repeat(20)}`);
 const LATER_PIN = { number: LATER.number, hash: LATER.hash };
 
@@ -84,6 +86,22 @@ describe('confirmSetup', () => {
     expect(confirmation.cause).toBe('other-commitment');
     expect(confirmation.position).toEqual(at);
     expect(confirmation.setupCommitment).toBe(referenceCommitment(DRAFT_EMPTY, ACCOUNT, ACTION, 1n));
+  });
+
+  it.each([
+    ['another account', { account: OTHER_ACCOUNT }],
+    ['another action', { action: OTHER_ACTION }],
+  ])('ignores a setup-committed event at the nonce for %s, whatever commitment it carries', async (_name, foreign) => {
+    const { batch } = await preparedCommits();
+    const commitment = referenceCommitment(DRAFT_EMPTY, ACCOUNT, ACTION, 1n);
+    const matching = { ...committed(1n, commitment, '0x', position(HEADER.number + 1)), ...foreign };
+    const other = { ...committed(1n, `0x${'ab'.repeat(32)}`, '0x', position(HEADER.number + 2)), ...foreign };
+    const { client } = build({ world: { header: LATER, bound: [matching, other] as KitNotification[] } });
+    const confirmation = await client.confirmSetup(DRAFT_EMPTY, batch);
+
+    expect(confirmation.landed).toBe(false);
+    expect(confirmation.cause).toBe('no-event');
+    expect('position' in confirmation).toBe(false);
   });
 
   it('ignores a setup-cleared event at the nonce', async () => {

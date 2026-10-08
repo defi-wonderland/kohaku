@@ -97,8 +97,27 @@ export const HEADER: BlockHeader = {
   hash: `0x${'5a'.repeat(32)}`,
 };
 
+/** `abi.encode(address)`, a wallet guardian's config. */
+const SIGNER_CONFIG_ABI = [{ type: 'address' }] as const;
+
+/** `abi.encode(address, uint256)`, the default salt's preimage. */
+const DEFAULT_SALT_ABI = [{ type: 'address' }, { type: 'uint256' }] as const;
+
+/** `abi.encode(address, bytes, bytes32)`, a credential commitment's preimage. */
+const CREDENTIAL_ABI = [{ type: 'address' }, { type: 'bytes' }, { type: 'bytes32' }] as const;
+
+/** `abi.encode(uint48, bool, (uint8, bytes32[])[])`, the setup body. */
+const SETUP_BODY_ABI = [
+  { type: 'uint48' },
+  { type: 'bool' },
+  { type: 'tuple[]', components: [{ name: 'threshold', type: 'uint8' }, { name: 'credentials', type: 'bytes32[]' }] },
+] as const;
+
+/** `abi.encode(address, address, uint64, bytes)`, the setup commitment's preimage. */
+const SETUP_COMMITMENT_ABI = [{ type: 'address' }, { type: 'address' }, { type: 'uint64' }, { type: 'bytes' }] as const;
+
 /** `abi.encode(address)`, a wallet guardian's config, encoded with viem outside `src/`. */
-export const ecdsaConfig = (guardian: Address): Hex => encodeAbiParameters([{ type: 'address' }], [guardian]);
+export const ecdsaConfig = (guardian: Address): Hex => encodeAbiParameters(SIGNER_CONFIG_ABI, [guardian]);
 
 /** Two clauses over three methods; guardian A sits at places 0 and 3, place 1 carries its own salt and a label. */
 export const CONFIGURATION: Configuration = {
@@ -125,11 +144,11 @@ export const CONFIGURATION: Configuration = {
 
 /** The default salt recomputed independently: `keccak256(abi.encode(address, uint256))`. */
 export const referenceSalt = (account: Address, place: number): Hex =>
-  keccak256(encodeAbiParameters([{ type: 'address' }, { type: 'uint256' }], [account, BigInt(place)]));
+  keccak256(encodeAbiParameters(DEFAULT_SALT_ABI, [account, BigInt(place)]));
 
 /** A credential commitment recomputed independently: `keccak256(abi.encode(address, bytes, bytes32))`. */
 export const referenceCredential = (method: Address, config: Hex, salt: Hex): Hex =>
-  keccak256(encodeAbiParameters([{ type: 'address' }, { type: 'bytes' }, { type: 'bytes32' }], [method, config, salt]));
+  keccak256(encodeAbiParameters(CREDENTIAL_ABI, [method, config, salt]));
 
 /** The body a configuration commits to, places numbered across clauses. */
 export function referenceBody(configuration: Configuration, account: Address): SetupBody {
@@ -152,17 +171,13 @@ export function referenceBody(configuration: Configuration, account: Address): S
 /** The body bytes recomputed independently: `abi.encode(uint48, bool, (uint8, bytes32[])[])`. */
 export const referenceEncodeBody = (body: SetupBody): Hex =>
   encodeAbiParameters(
-    [
-      { type: 'uint48' },
-      { type: 'bool' },
-      { type: 'tuple[]', components: [{ name: 'threshold', type: 'uint8' }, { name: 'credentials', type: 'bytes32[]' }] },
-    ],
+    SETUP_BODY_ABI,
     [body.wait, body.ignoresPause, body.clauses.map((clause) => ({ threshold: clause.threshold, credentials: [...clause.credentials] }))],
   );
 
 /** The setup commitment recomputed independently: `keccak256(abi.encode(address, address, uint64, bytes))`. */
 export const referenceCommitment = (account: Address, action: Address, nonce: bigint, body: Hex): Hex =>
-  keccak256(encodeAbiParameters([{ type: 'address' }, { type: 'address' }, { type: 'uint64' }, { type: 'bytes' }], [account, action, nonce, body]));
+  keccak256(encodeAbiParameters(SETUP_COMMITMENT_ABI, [account, action, nonce, body]));
 
 /** The commitment a configuration closes over for the bound pair, recomputed independently. */
 export const commitmentOf = (configuration: Configuration, nonce: bigint): Hex =>

@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { GATHERING_VERSION, seed, type Gathering, type GatheringMembers } from '../../src/index';
+import { GATHERING_VERSION, seed, type Configuration, type Gathering, type GatheringMembers } from '../../src/index';
 import {
   ACCOUNT,
   ACTION,
   attemptIn,
   CONFIGURATION,
   DESCRIPTOR,
+  ecdsaConfig,
   GUARDIAN_A,
   GUARDIAN_B,
   HANDOVER,
@@ -211,5 +212,35 @@ describe('readings a naive init would misread', () => {
     const record = await rig(world({ state })).client.initCancelGathering(CONFIGURATION, { window: WINDOW });
 
     expect(record.request.setupNonce).toBe(String(SETUP_NONCE));
+  });
+});
+
+describe('the places carry lower-cased hex', () => {
+  const upper = (hex: string): `0x${string}` => `0x${hex.slice(2).toUpperCase()}`;
+  const SHOUTED: Configuration = {
+    clauses: [
+      {
+        threshold: 1,
+        credentials: [
+          { method: METHOD_ECDSA, config: upper(ecdsaConfig(GUARDIAN_A)) },
+          { method: METHOD_PASSKEY, config: '0xABCDEF', salt: upper(`0x${'ab'.repeat(32)}`) },
+        ],
+      },
+    ],
+    wait: 60,
+    ignoresPause: false,
+  };
+
+  it.each(['opening', 'cancel'] as const)('the %s init returns config and salt exactly lower-case for upper-case input, leaving the source as given', async (init) => {
+    const before = structuredClone(SHOUTED);
+    const built = rig(world({ state: stateFor(SHOUTED, init === 'cancel' ? attemptIn('Waiting') : attemptIn('None')) }));
+    const record =
+      init === 'opening'
+        ? await built.client.initRecoveryGathering(SHOUTED, HANDOVER, ORDER, { window: WINDOW })
+        : await built.client.initCancelGathering(SHOUTED, { window: WINDOW });
+
+    expect(record.places.map((entry) => entry.config)).toEqual([ecdsaConfig(GUARDIAN_A).toLowerCase(), '0xabcdef']);
+    expect(record.places.map((entry) => entry.salt)).toEqual([referenceSalt(ACCOUNT, 0).toLowerCase(), `0x${'ab'.repeat(32)}`]);
+    expect(SHOUTED).toEqual(before);
   });
 });

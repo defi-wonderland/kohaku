@@ -6,9 +6,9 @@ import {
 } from '../constants';
 import { configurationBody, KitRefusalError, pinBlockHeader, restoreConfiguration } from '../client-core';
 import { encodeSetupBody } from '../formats';
-import { assertObject, assertUintBigint, assertUintNumber } from '../formats/guards';
+import { assertBytes, assertObject, assertUintBigint, assertUintNumber, lowerHex } from '../formats/guards';
 import { placeMap } from '../gathering';
-import { ATTEMPT_STATES, type ActionState, type ConfigurationSource } from '../interfaces';
+import { ATTEMPT_STATES, type ActionState, type Configuration, type ConfigurationSource, type Credential } from '../interfaces';
 import type { GatheredSetup, InitReading, RecoveryClientParts } from '../types/recovery-client';
 import { placeStandings } from './standings';
 
@@ -64,13 +64,36 @@ export function assertAttemptWaiting({ attempt }: ActionState, parts: RecoveryCl
   });
 }
 
+/** A copy of the credential with its config and any salt lower-cased, refusing one that is not whole bytes of hex. */
+function lowerCredential(credential: Credential, name: string): Credential {
+  assertBytes(credential.config, `${name}.config`);
+
+  const copy: Credential = { ...credential, config: lowerHex(credential.config) };
+
+  return credential.salt === undefined ? copy : { ...copy, salt: lowerHex(credential.salt) };
+}
+
+/** A copy of a restored configuration with every config and salt lower-cased; the caller's source is left as given. */
+function lowerConfiguration(configuration: Configuration): Configuration {
+  return {
+    ...configuration,
+    clauses: configuration.clauses.map((clause, index) => ({
+      ...clause,
+      credentials: clause.credentials.map((credential, position) =>
+        lowerCredential(credential, `configuration.clauses[${index}].credentials[${position}]`),
+      ),
+    })),
+  };
+}
+
 /**
  * The setup restored behind the init's own block and state reading, with each place's standing read at that block.
  * A restore refusal carries its restore cause; a failed read rejects as itself.
  */
 export async function gatheredSetup(parts: RecoveryClientParts, source: ConfigurationSource, reading: InitReading): Promise<GatheredSetup> {
   const { block } = reading.pinned;
-  const configuration = await restoreConfiguration(parts.events, parts.account, parts.action, source, reading.state, block);
+  const restored = await restoreConfiguration(parts.events, parts.account, parts.action, source, reading.state, block);
+  const configuration = lowerConfiguration(restored);
   const body = configurationBody(configuration, parts.account);
   const standings = await placeStandings(parts, configuration, block);
 

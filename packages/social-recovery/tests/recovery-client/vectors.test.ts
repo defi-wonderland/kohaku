@@ -46,22 +46,25 @@ const STARTED_ABI = parseAbi([
   'event AttemptStarted(address indexed _account, address indexed _action, uint64 _attemptId, uint64 _setupNonce, bytes _setupBody, uint256[] _usedPlaces, address[] _usedMethods, bytes _payload, PaymentOrder _order, uint48 _consumableAfter)',
 ]);
 
+/** The non-indexed members of `AttemptStarted`, in declaration order. */
+const STARTED_DATA_ABI = [
+  { type: 'uint64' },
+  { type: 'uint64' },
+  { type: 'bytes' },
+  { type: 'uint256[]' },
+  { type: 'address[]' },
+  { type: 'bytes' },
+  { type: 'tuple', components: [{ type: 'address' }, { type: 'uint256' }, { type: 'address' }] },
+  { type: 'uint48' },
+] as const;
+
 /** The `AttemptStarted` row encoded by viem with the given payload, every other field the row's own. */
 function startedLog(payload: Hex): { readonly topics: Hex[]; readonly data: Hex } {
   const input = STARTED_ROW.input;
   const order = input['order'] as Record<string, string>;
   const topics = encodeEventTopics({ abi: STARTED_ABI, eventName: 'AttemptStarted', args: { _account: VECTOR_ACCOUNT, _action: VECTOR_ACTION } });
   const data = encodeAbiParameters(
-    [
-      { type: 'uint64' },
-      { type: 'uint64' },
-      { type: 'bytes' },
-      { type: 'uint256[]' },
-      { type: 'address[]' },
-      { type: 'bytes' },
-      { type: 'tuple', components: [{ type: 'address' }, { type: 'uint256' }, { type: 'address' }] },
-      { type: 'uint48' },
-    ],
+    STARTED_DATA_ABI,
     [
       BigInt(String(input['attemptId'])),
       BigInt(String(input['setupNonce'])),

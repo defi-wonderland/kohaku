@@ -29,7 +29,8 @@ function addUnnamed(findings: Findings, key: RemovedKey, supplied: Address | und
  * The handover with the key it removes named: the supplied one once the action confirms it is a key, else the one
  * `inferRemovedKey` names. Refuses with one `KitRefusalError` carrying every handover finding: a zero address, one address
  * on both sides, a removed key that is not a key or cannot be named, and a new key that already holds a privilege.
- * Every read is pinned to `block`; a read that rejects rejects the init with the same value.
+ * Every read is pinned to `block`. A rejection of the supplied key's `isAuthority` or of `holdsAnyPrivilege` rejects the init
+ * with the same value; a failure inside the inference's own reads names nothing and becomes the `handover.removed-unknown` finding.
  */
 export async function namedHandover(parts: RecoveryClientParts, handover: Handover, block: PinnedBlock): Promise<Required<Handover>> {
   const { newAuthority, removedAuthority: supplied } = handover;

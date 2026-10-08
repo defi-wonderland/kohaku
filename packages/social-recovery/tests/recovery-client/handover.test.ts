@@ -42,8 +42,11 @@ const position = (block: number, index = 0): LogPosition => ({
   removed: false,
 });
 
+/** `abi.encode(address, address)`, the handover payload layout. */
+const HANDOVER_ABI = [{ type: 'address' }, { type: 'address' }] as const;
+
 const payloadOf = (newAuthority: Address, removedAuthority: Address) =>
-  encodeAbiParameters([{ type: 'address' }, { type: 'address' }], [newAuthority, removedAuthority]);
+  encodeAbiParameters(HANDOVER_ABI, [newAuthority, removedAuthority]);
 
 const started = (attemptId: bigint, payload: `0x${string}`, block: number): KitNotification => ({
   kind: 'attempt-started',

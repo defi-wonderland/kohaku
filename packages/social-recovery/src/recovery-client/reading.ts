@@ -35,7 +35,7 @@ export async function readState(parts: RecoveryClientParts): Promise<InitReading
 }
 
 /** Refuses an opening while an attempt is waiting. */
-export function assertNoAttemptWaiting({ attempt }: ActionState, parts: RecoveryClientParts): void {
+export function assertNoAttemptWaiting({ attempt }: ActionState): void {
   if (attempt.state !== 'Waiting') return;
 
   throw new KitRefusalError(RECOVERY_CLIENT_ATTEMPT_WAITING_MESSAGE, {
@@ -44,7 +44,7 @@ export function assertNoAttemptWaiting({ attempt }: ActionState, parts: Recovery
         {
           code: 'request.attempt-active',
           subject: 'request',
-          values: { action: parts.action, attemptId: attempt.attemptId, consumableAfter: attempt.consumableAfter },
+          values: { attemptId: attempt.attemptId, consumableAfter: attempt.consumableAfter, ownRequest: false },
         },
       ],
       warnings: [],

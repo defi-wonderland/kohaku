@@ -165,3 +165,16 @@ describe('construction refuses a malformed consumed field with no read', () => {
     expect(record.request.manager).toBe(DESCRIPTOR.manager);
   });
 });
+
+describe('the log chunk size', () => {
+  it('zero throws a RangeError at construction with no read', () => {
+    const { thrown, seen } = construct(DESCRIPTOR, { ...CLIENT_CONFIGURATION, logChunkSize: 0 });
+
+    expect(thrown).toBeInstanceOf(RangeError);
+    expect(seen).toEqual([]);
+  });
+
+  it('one constructs', () => {
+    expect(construct(DESCRIPTOR, { ...CLIENT_CONFIGURATION, logChunkSize: 1 }).thrown).toBeUndefined();
+  });
+});

@@ -17,7 +17,7 @@ import type {
 } from '../interfaces';
 import type { MethodRegistry } from '../types';
 import type { RecoveryClientParts } from '../types/recovery-client';
-import { assertSource, cancellingWindow, checkedHandover, openingWindow, serializedOrder, windowEnd } from './arguments';
+import { assertSource, cancellingWindow, checkedHandover, serializedOrder, windowEnd, windowWidth } from './arguments';
 import { namedHandover } from './handover';
 import { assertAttemptWaiting, assertNoAttemptWaiting, gatheredSetup, readState } from './reading';
 import { sharedRequest } from './record';
@@ -76,13 +76,13 @@ export class RecoveryClient {
     const { parts } = this;
     const given = checkedHandover(handover);
     const storedOrder = serializedOrder(order);
-    const width = openingWindow(window);
+    const width = windowWidth(window);
 
-    assertSource(source, parts.account);
+    assertSource(source);
 
     const reading = await readState(parts);
 
-    assertNoAttemptWaiting(reading.state, parts);
+    assertNoAttemptWaiting(reading.state);
 
     const validUntil = windowEnd(reading.pinned.header.timestamp, width);
     const setup = await gatheredSetup(parts, source, reading);
@@ -101,7 +101,7 @@ export class RecoveryClient {
     const { parts } = this;
     const width = cancellingWindow(window, parts.configuration);
 
-    assertSource(source, parts.account);
+    assertSource(source);
 
     const reading = await readState(parts);
     const { attempt, setupNonce } = reading.state;

@@ -11,6 +11,7 @@ import {
   DESCRIPTOR,
   FOREIGN_PAYLOAD,
   handoverPayload,
+  INJECTED,
   key,
   KEYS,
   keySet,
@@ -234,7 +235,7 @@ describe('inferRemovedKey over arbitrary histories', () => {
     );
   });
 
-  it('answers unread when any read it makes fails, reading nothing after it', async () => {
+  it('answers unread when any read of its own fails and rejects as the supplied key\'s read rejected, reading nothing after it', async () => {
     await runAsync(
       fc.asyncProperty(plan, fc.nat(), async (input, pick) => {
         const clean = await settle(rigOf(input));
@@ -243,8 +244,9 @@ describe('inferRemovedKey over arbitrary histories', () => {
 
         const failAt = pick % clean.reads.length;
         const failed = await settle(rigOf(input, failAt));
+        const suppliedRead = input.supplied !== undefined && failAt === 0;
 
-        expect(failed).toEqual({ result: 'unread', reads: clean.reads.slice(0, failAt + 1) });
+        expect(failed).toEqual({ result: suppliedRead ? { rejected: INJECTED } : 'unread', reads: clean.reads.slice(0, failAt + 1) });
       }),
     );
   });

@@ -112,19 +112,11 @@ export function assertDependency(value: unknown, members: readonly string[], nam
   }
 }
 
-/** The checksummed spellings of a list of addresses, refusing a value that is not an array, a hole in it and a malformed entry. */
-export function normalizeAddresses(values: unknown, name: string): Address[] {
+/** The checksummed spellings of a list of addresses, refusing a malformed entry. */
+export function normalizeAddresses(values: readonly Address[], name: string): Address[] {
   assertArray(values, name);
 
-  const normalized: Address[] = [];
-
-  for (let index = 0; index < values.length; index += 1) {
-    if (!(index in values)) throw new TypeError(`${name}[${index}] is missing`);
-
-    normalized.push(normalizeAddress(values[index], `${name}[${index}]`));
-  }
-
-  return normalized;
+  return values.map((value, index) => normalizeAddress(value, `${name}[${index}]`));
 }
 
 /** Whether the removed key is one of the reasons no address could be named, rather than an address. */

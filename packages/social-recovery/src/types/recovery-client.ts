@@ -11,6 +11,7 @@ import type {
   IProvider,
   IRecoveryActionInteractor,
   ISignerRecovery,
+  RemovedKeyUnnamed,
   Standing,
 } from '../interfaces';
 import type { PinnedHeader } from './client-core';
@@ -54,3 +55,10 @@ export type MethodStop = {
 
 /** The request members both gatherings share. */
 export type SharedRequest = Omit<Extract<GatheringMembers, { readonly purpose: 'cancellation' }>['request'], 'consumableAfter'>;
+
+/** The removed key a handover names, the action's answer for it where one was read, and why none was named. */
+export type ResolvedRemovedKey = {
+  readonly named: Address | undefined;
+  readonly removedIsAuthority: boolean | undefined;
+  readonly unknown: RemovedKeyUnnamed | undefined;
+};

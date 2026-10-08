@@ -349,21 +349,21 @@ describe('step 2: the signer of the latest setup commit', () => {
   });
 });
 
-describe('unread: a failed read, at once, and the function resolves', () => {
+describe('a failed read: the supplied key\'s rejects as itself, any other answers unread at once', () => {
   const history = [...attempt(3, key(1), 200), committed({ block: 300 })];
 
   it.each([
     ['a transport error', new Error('socket hang up')],
     ['a ProviderRevert', { data: '0x' }],
     ['a TypeError from a malformed return', new TypeError('malformed return')],
-  ])('isAuthority rejecting with %s on the supplied address: nothing else is read', async (_label, reason) => {
+  ])('isAuthority rejecting with %s on the supplied address: the inference rejects with it and nothing else is read', async (_label, reason) => {
     const { inputs, reads } = rig(
       world(history, { authorities: keySet(key(1)), authorityRejects: new Map([[key(0).toLowerCase(), reason]]), signer: { value: key(2) } }),
       { supplied: key(0) },
       codec,
     );
 
-    await expect(inferRemovedKey(inputs, BLOCK)).resolves.toBe('unread');
+    await expect(inferRemovedKey(inputs, BLOCK)).rejects.toBe(reason);
     expect(kinds(reads)).toEqual(['isAuthority']);
   });
 

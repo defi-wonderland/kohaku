@@ -1,17 +1,6 @@
 import { FORMATS_SAFE_INTEGER_BITS } from '../constants';
-import { assertArray, assertObject, assertUintNumber, normalizeAddress, sameAddress } from '../formats/guards';
+import { assertArray, assertDependency, assertObject, assertUintNumber, normalizeAddress, sameAddress } from '../formats/guards';
 import type { CheckedRemovedKeyInputs, RemovedKeyInputs } from '../types/removed-key';
-
-/** Refuses a member that is not a function. */
-function assertCallable(owner: object, member: string, name: string): void {
-  if (typeof (owner as Readonly<Record<string, unknown>>)[member] !== 'function') throw new TypeError(`${name}.${member} must be a function`);
-}
-
-/** Refuses a dependency that is not an object with every named member callable. */
-function assertDependency(value: unknown, members: readonly string[], name: string): void {
-  assertObject(value, name);
-  members.forEach((member) => assertCallable(value, member, name));
-}
 
 /** The inputs with every address checksummed, refusing malformed ones before anything is read. */
 export function checkedInputs(inputs: unknown): CheckedRemovedKeyInputs {

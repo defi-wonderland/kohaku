@@ -310,3 +310,27 @@ describe('a wallet place whose config holds the zero address', () => {
     expect(built.seen.filter((one) => one.part === 'provider' && one.member === 'code')).toEqual([]);
   });
 });
+
+describe('a paused answer that is not a boolean', () => {
+  it.each(['opening', 'cancel'] as const)('{ answered: true, value: undefined } rejects the %s init', async (init) => {
+    const paused = new Map([[METHOD_ECDSA.toLowerCase(), { answered: true as const, value: undefined as unknown as boolean }]]);
+    const built = rig(world({ paused, state: init === 'cancel' ? WAITING : stateFor() }));
+    const run =
+      init === 'opening'
+        ? built.client.initRecoveryGathering(CONFIGURATION, HANDOVER, ORDER, { window: 3_600 })
+        : built.client.initCancelGathering(CONFIGURATION, { window: 3_600 });
+
+    await expect(run).rejects.toBeDefined();
+  });
+});
+
+describe('the attempt refusals carry the validator values', () => {
+  it('a waiting attempt refuses the opening init with request.attempt-active and { attemptId, consumableAfter, ownRequest: false }', async () => {
+    const thrown = await rejectionOf(openWith(world({ state: stateFor(CONFIGURATION, attemptIn('Waiting', 4n, 1_760_050_000)) })).run);
+    const errors = (thrown as KitRefusalError).findings?.errors ?? [];
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]?.code).toBe('request.attempt-active');
+    expect(errors[0]?.values).toEqual({ attemptId: 4n, consumableAfter: 1_760_050_000, ownRequest: false });
+  });
+});

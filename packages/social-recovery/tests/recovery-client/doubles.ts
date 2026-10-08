@@ -239,6 +239,8 @@ export type World = {
   readonly transactions: ReadonlyMap<string, RawTransaction | undefined>;
   /** Present: the client gets a signer recovery answering this. */
   readonly signer?: { readonly value: Address | undefined };
+  /** Lower-cased keys whose `isAuthority` answers this value instead of a boolean. */
+  readonly authorityAnswers?: ReadonlyMap<string, unknown>;
   /** `part.member` names whose calls reject with the value. */
   readonly failures: ReadonlyMap<string, unknown>;
 };
@@ -344,7 +346,8 @@ export function rig(given: World = world(), configuration: ClientConfiguration =
   } as unknown as IPolicyManagerInteractor;
 
   const action = {
-    isAuthority: async (key: Address, block?: PinnedBlock) => answer('action', 'isAuthority', [key, block], () => given.authorities.has(keyed(key))),
+    isAuthority: async (key: Address, block?: PinnedBlock) => answer('action', 'isAuthority', [key, block], () =>
+        (given.authorityAnswers?.has(keyed(key)) ? given.authorityAnswers.get(keyed(key)) : given.authorities.has(keyed(key))) as boolean),
     holdsAnyPrivilege: async (candidate: Address, block?: PinnedBlock) =>
       answer('action', 'holdsAnyPrivilege', [candidate, block], () => given.privileged.has(keyed(candidate))),
     supportsAccount: unexpected('action', 'supportsAccount'),

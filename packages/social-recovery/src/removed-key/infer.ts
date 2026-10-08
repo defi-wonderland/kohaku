@@ -27,7 +27,8 @@ async function readNotifications(
 /**
  * The key a handover removes for the bound account, each candidate counting only once `isAuthority` confirms it at `block`:
  * a supplied address alone, else the latest consumed handover's new key, else the signer of the latest setup commit.
- * Throws a `TypeError` or `RangeError` on malformed inputs before any read; a failed read resolves to `unread` and nothing after it is read.
+ * Throws a `TypeError` or `RangeError` on malformed inputs before any read. A supplied key's rejected `isAuthority` rejects as itself;
+ * every read the inference makes on its own that fails resolves to `unread`, and nothing after it is read.
  */
 export async function inferRemovedKey(inputs: RemovedKeyInputs, block: PinnedBlock): Promise<RemovedKey> {
   const checked = checkedInputs(inputs);

@@ -1,10 +1,8 @@
-import { FORMATS_SAFE_INTEGER_BITS, FORMATS_VALID_UNTIL_BITS } from '../constants';
-import { configurationBody } from '../client-core';
+import { FORMATS_VALID_UNTIL_BITS } from '../constants';
 import { assertPassword } from '../encryption/cipher';
 import { checkedPaymentOrder } from '../formats/payment-order';
 import { assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import type {
-  Address,
   ClientConfiguration,
   ConfigurationSource,
   Handover,
@@ -31,16 +29,15 @@ export function serializedOrder(order: PaymentOrder): SerializedPaymentOrder {
   return { token: checked.token, amount: checked.amount.toString(), payee: checked.payee };
 }
 
-/** Refuses a malformed source: a password that is not a well-formed string, or a malformed configuration. */
-export function assertSource(source: ConfigurationSource, account: Address): void {
+/** Refuses a source that is not an object, or a password that is not a well-formed string; the restore checks a configuration's shape. */
+export function assertSource(source: ConfigurationSource): void {
   assertObject(source, 'source');
 
   if ('password' in source) assertPassword(source.password);
-  else configurationBody(source, account);
 }
 
 /** The window's width in seconds, refusing a non-integer with a `TypeError` and a zero width or one past `uint48` with a `RangeError`. */
-function windowWidth(window: ValidityWindow): number {
+export function windowWidth(window: ValidityWindow): number {
   assertObject(window, 'window');
   assertUintNumber(window.window, FORMATS_VALID_UNTIL_BITS, 'window.window');
 
@@ -49,14 +46,9 @@ function windowWidth(window: ValidityWindow): number {
   return window.window;
 }
 
-/** An opening gathering's window width. */
-export const openingWindow = (window: ValidityWindow): number => windowWidth(window);
-
 /** A cancel gathering's window width, refusing one longer than the cancel gathering's own duration with a `RangeError`. */
 export function cancellingWindow(window: ValidityWindow, configuration: ClientConfiguration): number {
   const width = windowWidth(window);
-
-  assertUintNumber(configuration.cancelWindow, FORMATS_SAFE_INTEGER_BITS, 'configuration.cancelWindow');
 
   if (width > configuration.cancelWindow) {
     throw new RangeError(`window.window ${width} is longer than configuration.cancelWindow ${configuration.cancelWindow}`);

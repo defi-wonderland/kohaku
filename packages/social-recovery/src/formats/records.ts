@@ -9,7 +9,6 @@ import {
   type RequestWindowBounds,
 } from '../interfaces';
 import {
-  assertArray,
   assertBool,
   assertBytes,
   assertBytes32,
@@ -18,17 +17,11 @@ import {
   assertUintNumber,
   lowerHex,
   normalizeAddress,
+  normalizeAddresses,
 } from './guards';
 
 /** Refuses anything but a non-negative safe integer. */
 const assertSafeUint = (value: unknown, name: string): void => assertUintNumber(value, FORMATS_SAFE_INTEGER_BITS, name);
-
-/** Every address of the list checksummed, refusing a list that is not an array or holds anything but addresses. */
-function normalizedAddresses(value: unknown, name: string): Address[] {
-  assertArray(value, name);
-
-  return Array.from(value, (entry, index) => normalizeAddress(entry, `${name}[${index}]`));
-}
 
 /** Refuses a tag that is not one of the named block tags. */
 function assertNamedTag(value: unknown, name: string): void {
@@ -67,8 +60,8 @@ export function checkedDescriptor(value: unknown, name: string): DeploymentDescr
     deployedAt: descriptor.deployedAt,
     digestVersion: descriptor.digestVersion,
     managerVersion: descriptor.managerVersion,
-    shippedMethods: normalizedAddresses(descriptor.shippedMethods, `${name}.shippedMethods`),
-    auditedActions: normalizedAddresses(descriptor.auditedActions, `${name}.auditedActions`),
+    shippedMethods: normalizeAddresses(descriptor.shippedMethods as readonly Address[], `${name}.shippedMethods`),
+    auditedActions: normalizeAddresses(descriptor.auditedActions as readonly Address[], `${name}.auditedActions`),
   };
 }
 
@@ -112,7 +105,7 @@ function checkedCreation(value: unknown, name: string): CreationRecord {
 
 /** The candidate keys checksummed, refusing two entries that name one address. */
 function checkedCandidateKeys(value: unknown, name: string): Address[] {
-  const keys = normalizedAddresses(value, name);
+  const keys = normalizeAddresses(value as readonly Address[], name);
 
   if (new Set(keys).size !== keys.length) throw new TypeError(`${name} names one address more than once`);
 
@@ -134,6 +127,9 @@ export function checkedConfiguration(value: unknown, name: string): ClientConfig
   assertSafeUint(configuration.cancelWindow, `${name}.cancelWindow`);
   assertSafeUint(configuration.ruleCostBound, `${name}.ruleCostBound`);
   assertSafeUint(configuration.logChunkSize, `${name}.logChunkSize`);
+
+  if (configuration.logChunkSize < 1) throw new RangeError(`${name}.logChunkSize must be at least one block`);
+
   assertBool(configuration.simulate, `${name}.simulate`);
 
   const { creation, accountImplementation } = configuration;
@@ -152,7 +148,7 @@ export function checkedConfiguration(value: unknown, name: string): ClientConfig
     candidateKeys: checkedCandidateKeys(configuration.candidateKeys, `${name}.candidateKeys`),
     blockTags: checkedBlockTags(configuration.blockTags, `${name}.blockTags`),
     logChunkSize: configuration.logChunkSize,
-    tokens: normalizedAddresses(configuration.tokens, `${name}.tokens`),
+    tokens: normalizeAddresses(configuration.tokens, `${name}.tokens`),
     simulate: configuration.simulate,
   };
 }

@@ -200,11 +200,10 @@ describe('readings a naive init would misread', () => {
     expect(record.places.map((entry) => entry.credentialHoldsCode)).toEqual([false, false, true, false, false]);
   });
 
-  it.each([1, 'true', null])('paused answering %j rather than true leaves the method not stopped', async (value) => {
+  it.each([1, 'true', null, undefined])('paused answering %j rather than a boolean rejects the init', async (value) => {
     const paused = new Map([[METHOD_OTHER.toLowerCase(), { answered: true as const, value: value as unknown as boolean }]]);
-    const { places } = await open(world({ paused }));
 
-    expect(places[4]?.standing).toBe('not-stopped');
+    await expect(open(world({ paused }))).rejects.toBeInstanceOf(TypeError);
   });
 
   it('the cancel init records the setup nonce stateOf reads, not the attempt own', async () => {

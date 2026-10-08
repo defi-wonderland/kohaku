@@ -1,5 +1,5 @@
 import { FORMATS_ZERO_ADDRESS, RECOVERY_CLIENT_NO_CODE, RECOVERY_CLIENT_UNANSWERED_READ_MESSAGE } from '../constants';
-import { assertBytes, assertObject, lowerHex, normalizeAddress, sameAddress } from '../formats/guards';
+import { assertBool, assertBytes, assertObject, lowerHex, normalizeAddress, sameAddress } from '../formats/guards';
 import { decodeSigner, isGuardianAddress } from '../method-ecdsa/codec';
 import type { Address, Configuration, Credential, PinnedBlock, ReadResult } from '../interfaces';
 import type { PlaceStanding } from '../types';
@@ -14,26 +14,32 @@ function answerOf<Answer>(result: ReadResult<Answer>, read: string, method: Addr
   return result.value;
 }
 
-/** Each rule method's stop, read once per method in the order of its first place: stopped only on an exact `true`. */
+/** One rule method's stop: stopped where `paused` answers `true`, stoppable where its pause holder is nonzero. */
+async function methodStop(parts: RecoveryClientParts, method: Address, block: PinnedBlock): Promise<MethodStop> {
+  const [pausedRead, partiesRead] = await Promise.all([
+    parts.policyManager.paused(method, block),
+    parts.policyManager.trustedParties(method, block),
+  ]);
+  const paused: unknown = answerOf(pausedRead, 'paused', method);
+  const parties = answerOf(partiesRead, 'trustedParties', method);
+
+  assertBool(paused, `paused(${method})`);
+  assertObject(parties, `trustedParties(${method})`);
+
+  const pauseHolder = normalizeAddress(parties.pauseHolder, `trustedParties(${method}).pauseHolder`);
+
+  return { standing: paused ? 'stopped' : 'not-stopped', stoppable: !sameAddress(pauseHolder, FORMATS_ZERO_ADDRESS) };
+}
+
+/** Each distinct rule method's stop, the methods read in parallel; a stop answer that is not a boolean rejects. */
 async function methodStops(
   parts: RecoveryClientParts,
   methods: readonly Address[],
   block: PinnedBlock,
 ): Promise<Map<Address, MethodStop>> {
-  const stops = new Map<Address, MethodStop>();
+  const stops = await Promise.all(methods.map((method) => methodStop(parts, method, block)));
 
-  for (const method of methods) {
-    const paused = answerOf(await parts.policyManager.paused(method, block), 'paused', method);
-    const parties = answerOf(await parts.policyManager.trustedParties(method, block), 'trustedParties', method);
-
-    assertObject(parties, `trustedParties(${method})`);
-
-    const pauseHolder = normalizeAddress(parties.pauseHolder, `trustedParties(${method}).pauseHolder`);
-
-    stops.set(method, { standing: paused === true ? 'stopped' : 'not-stopped', stoppable: !sameAddress(pauseHolder, FORMATS_ZERO_ADDRESS) });
-  }
-
-  return stops;
+  return new Map(methods.map((method, index) => [method, stops[index] as MethodStop]));
 }
 
 /** The guardian address a wallet config holds, refusing a config that is not one nonzero address word with a `TypeError`. */
@@ -53,20 +59,21 @@ function guardianOf(config: Credential['config'], place: number): Address {
   return guardian;
 }
 
-/** Whether each guardian address holds code at the block, one read per distinct address. */
+/** Whether one guardian address holds code at the block. */
+async function holdsCode(parts: RecoveryClientParts, guardian: Address, block: PinnedBlock): Promise<boolean> {
+  const code: unknown = await parts.provider.code(guardian, block.number);
+
+  assertBytes(code, `code(${guardian})`);
+
+  return lowerHex(code) !== RECOVERY_CLIENT_NO_CODE;
+}
+
+/** Whether each guardian address holds code at the block, one read per distinct address, the addresses read in parallel. */
 async function guardianCode(parts: RecoveryClientParts, guardians: readonly Address[], block: PinnedBlock): Promise<Map<Address, boolean>> {
-  const holds = new Map<Address, boolean>();
+  const distinct = [...new Set(guardians)];
+  const holds = await Promise.all(distinct.map((guardian) => holdsCode(parts, guardian, block)));
 
-  for (const guardian of guardians) {
-    if (holds.has(guardian)) continue;
-
-    const code: unknown = await parts.provider.code(guardian, block.number);
-
-    assertBytes(code, `code(${guardian})`);
-    holds.set(guardian, lowerHex(code) !== RECOVERY_CLIENT_NO_CODE);
-  }
-
-  return holds;
+  return new Map(distinct.map((guardian, index) => [guardian, holds[index] === true]));
 }
 
 /**

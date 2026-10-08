@@ -239,3 +239,53 @@ describe('the removed key left out', () => {
     for (const one of callsTo(built.seen, 'action', 'isAuthority')) expect(one.args[1]).toEqual(pinnedOf(HEADER));
   });
 });
+
+describe('the five reachable resolutions of the removed key', () => {
+  it('named by inference: the inferred key is encoded', async () => {
+    const built = open({ notifications: PREVIOUS }, { newAuthority: KEY_NEW });
+    const record = await built.run;
+
+    if (record.purpose !== 'approval') throw new Error('approval expected');
+
+    expect(built.codec.decode(record.request.payload).removedAuthority).toBe(KEY_OLD);
+  });
+
+  it('supplied and confirmed: the supplied key is encoded and no event is read', async () => {
+    const built = open({ notifications: PREVIOUS }, HANDOVER);
+    const record = await built.run;
+
+    if (record.purpose !== 'approval') throw new Error('approval expected');
+
+    expect(built.codec.decode(record.request.payload)).toEqual(HANDOVER);
+    expect(callsTo(built.seen, 'events', 'fetch')).toEqual([]);
+  });
+
+  it('supplied and denied: handover.removed-not-authority, no removed-unknown', async () => {
+    const { codes } = await refusalCodes({ authorities: new Set() }, HANDOVER);
+
+    expect(codes).toContain('handover.removed-not-authority');
+    expect(codes).not.toContain('handover.removed-unknown');
+  });
+
+  it('nothing named and nothing supplied: handover.removed-unknown, no removed-not-authority', async () => {
+    const { codes } = await refusalCodes({ notifications: [] }, { newAuthority: KEY_NEW });
+
+    expect(codes).toContain('handover.removed-unknown');
+    expect(codes).not.toContain('handover.removed-not-authority');
+  });
+
+  it('supplied but unread (isAuthority answers no boolean): handover.removed-unknown, no removed-not-authority', async () => {
+    const { codes, thrown } = await refusalCodes({ authorityAnswers: new Map([[KEY_OLD.toLowerCase(), 'yes']]) }, HANDOVER);
+
+    expect(thrown).toBeInstanceOf(KitRefusalError);
+    expect(codes).toContain('handover.removed-unknown');
+    expect(codes).not.toContain('handover.removed-not-authority');
+  });
+
+  it('supplied and rejecting: the init rejects with the read error itself', async () => {
+    const failure = new Error('rpc down');
+    const thrown = await rejectionOf(open({ failures: new Map([['action.isAuthority', failure]]) }, HANDOVER).run);
+
+    expect(thrown).toBe(failure);
+  });
+});

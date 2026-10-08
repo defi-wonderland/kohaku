@@ -291,3 +291,22 @@ describe('a wallet place whose config is not one address word', () => {
     expect(await rejectionOf(run)).toBeInstanceOf(TypeError);
   });
 });
+
+describe('a wallet place whose config holds the zero address', () => {
+  const ZERO_GUARDIAN: Configuration = {
+    clauses: [{ threshold: 1, credentials: [{ method: METHOD_ECDSA, config: `0x${'00'.repeat(32)}` }, { method: METHOD_OTHER, config: '0x' }] }],
+    wait: 60,
+    ignoresPause: false,
+  };
+
+  it.each(['opening', 'cancel'] as const)('the %s init refuses it with a TypeError and reads no code', async (init) => {
+    const built = rig(world({ state: stateFor(ZERO_GUARDIAN, init === 'cancel' ? attemptIn('Waiting') : attemptIn('None')) }));
+    const run =
+      init === 'opening'
+        ? built.client.initRecoveryGathering(ZERO_GUARDIAN, HANDOVER, ORDER, { window: 3_600 })
+        : built.client.initCancelGathering(ZERO_GUARDIAN, { window: 3_600 });
+
+    expect(await rejectionOf(run)).toBeInstanceOf(TypeError);
+    expect(built.seen.filter((one) => one.part === 'provider' && one.member === 'code')).toEqual([]);
+  });
+});

@@ -1,6 +1,6 @@
 import { FORMATS_ZERO_ADDRESS, RECOVERY_CLIENT_NO_CODE, RECOVERY_CLIENT_UNANSWERED_READ_MESSAGE } from '../constants';
 import { assertBytes, assertObject, lowerHex, normalizeAddress, sameAddress } from '../formats/guards';
-import { decodeSigner } from '../method-ecdsa/codec';
+import { decodeSigner, isGuardianAddress } from '../method-ecdsa/codec';
 import type { Address, Configuration, Credential, PinnedBlock, ReadResult } from '../interfaces';
 import type { PlaceStanding } from '../types';
 import type { MethodStop, RecoveryClientParts } from '../types/recovery-client';
@@ -36,13 +36,21 @@ async function methodStops(
   return stops;
 }
 
-/** The guardian address a wallet config holds, refusing a config that is not one address word with a `TypeError`. */
+/** The guardian address a wallet config holds, refusing a config that is not one nonzero address word with a `TypeError`. */
 function guardianOf(config: Credential['config'], place: number): Address {
+  let guardian: Address | undefined;
+
   try {
-    return decodeSigner(config);
+    guardian = decodeSigner(config);
   } catch {
-    throw new TypeError(`place ${place} config must be one address word for the wallet method`);
+    guardian = undefined;
   }
+
+  if (guardian === undefined || !isGuardianAddress(guardian)) {
+    throw new TypeError(`place ${place} config must be one nonzero address word for the wallet method`);
+  }
+
+  return guardian;
 }
 
 /** Whether each guardian address holds code at the block, one read per distinct address. */
@@ -64,7 +72,7 @@ async function guardianCode(parts: RecoveryClientParts, guardians: readonly Addr
 /**
  * Each place's standing in body order: its method's stop and pause holder, and for a wallet place whether its guardian
  * address holds code; every other method's place holds none. Every read is pinned to `block`.
- * A wallet place whose config is not one address word throws a `TypeError` before any stop or code is read.
+ * A wallet place whose config is not one nonzero address word throws a `TypeError` before any stop or code is read.
  */
 export async function placeStandings(
   parts: RecoveryClientParts,

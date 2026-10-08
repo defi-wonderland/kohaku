@@ -274,11 +274,13 @@ export type RigOverrides = {
   readonly action?: Address;
   readonly descriptor?: DeploymentDescriptor;
   readonly events?: IEventManager;
+  /** The log every double records into, so a construction that throws still shows what it read. */
+  readonly seen?: Seen[];
 };
 
 /** Builds the client from doubles; `configuration` replaces the client configuration. */
 export function rig(given: World = world(), configuration: ClientConfiguration = CLIENT_CONFIGURATION, overrides: RigOverrides = {}): Rig {
-  const seen: Seen[] = [];
+  const seen: Seen[] = overrides.seen ?? [];
   const filterOptions: (AccountFilterOptions | undefined)[] = [];
   const answer = async <T>(part: Seen['part'], member: string, args: readonly unknown[], value: () => T): Promise<T> => {
     seen.push({ part, member, args });

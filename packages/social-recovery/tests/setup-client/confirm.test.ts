@@ -197,6 +197,25 @@ describe('confirmSetup checks the prepared envelope before any read', () => {
     await expect(client.confirmSetup(DRAFT_EMPTY, { ...single, target: MANAGER.toLowerCase() as Address })).resolves.toBeDefined();
   });
 
+  it.each([
+    ['another block number', { number: PIN.number - 1, hash: PIN.hash }],
+    ['another block hash', { number: PIN.number, hash: `0x${'7d'.repeat(32)}` }],
+  ])('throws a TypeError on a batch whose commit call is pinned to %s than the batch', async (_name, block) => {
+    const prepared = await batchWithCommit({ block });
+    const { client, seen } = build({ world: { header: LATER } });
+
+    await expect(client.confirmSetup(DRAFT_EMPTY, prepared)).rejects.toThrow(TypeError);
+    expect(seen.provider).toEqual([]);
+  });
+
+  it('confirms a batch whose commit call is pinned to the batch block, its hash spelled in upper case', async () => {
+    const prepared = await batchWithCommit({ block: { number: PIN.number, hash: PIN.hash.toUpperCase().replace('0X', '0x') } });
+    const commitment = referenceCommitment(DRAFT_EMPTY, ACCOUNT, ACTION, 1n);
+    const { client } = build({ world: { header: LATER, bound: [committed(1n, commitment, '0x', position(HEADER.number + 1))] } });
+
+    expect((await client.confirmSetup(DRAFT_EMPTY, prepared)).landed).toBe(true);
+  });
+
   it('still accepts the commit at any batch position', async () => {
     const { batch } = await preparedCommits();
     const swapped: PreparedBatch = { ...batch, calls: [...batch.calls].reverse() };

@@ -2,7 +2,7 @@ import { decodeFunctionData } from 'viem';
 import { POLICY_MANAGER_WRITES_ABI, SETUP_CLIENT_COMMITMENT_UNMATCHED_MESSAGE, SETUP_CLIENT_OTHER_MANAGER_MESSAGE } from '../constants';
 import { configurationCommitment, KitRefusalError } from '../client-core';
 import { assertArray, assertBytes, assertObject, checkedBlock, lowerHex, normalizeAddress, sameAddress } from '../formats/guards';
-import type { Hex, KitNotification, PreparedBatch, PreparedCall, SetupConfirmation, SetupDraft } from '../interfaces';
+import type { Hex, KitNotification, PinnedBlock, PreparedBatch, PreparedCall, SetupConfirmation, SetupDraft } from '../interfaces';
 import type { SetupCommitted } from '../types/client-core';
 import type { SetupClientParts } from '../types/setup-client';
 import { checkedDraft, draftConfiguration } from './draft';
@@ -27,15 +27,22 @@ function committedBy(parts: SetupClientParts, call: unknown): { nonce: bigint; s
   }
 }
 
-/** Refuses a commit call that is not a well-formed prepared call sent by the account with no value, or is addressed to another manager. */
-function assertCommitEnvelope(parts: SetupClientParts, call: PreparedCall, name: string): void {
+/**
+ * Refuses a commit call that is not a well-formed prepared call sent by the account with no value, a batch's call pinned to
+ * another block than the batch's, and a call addressed to another manager.
+ */
+function assertCommitEnvelope(parts: SetupClientParts, call: PreparedCall, name: string, batchBlock: PinnedBlock | undefined): void {
   if (call.kind !== 'call') throw new TypeError(`${name}.kind must be 'call'`);
 
   if (call.sender !== 'account') throw new TypeError(`${name}.sender must be 'account'`);
 
   if (call.value !== 0n) throw new TypeError(`${name}.value must be 0n`);
 
-  checkedBlock(call.block, `${name}.block`);
+  const block = checkedBlock(call.block, `${name}.block`);
+
+  if (batchBlock !== undefined && (block.number !== batchBlock.number || block.hash !== batchBlock.hash)) {
+    throw new TypeError(`${name} is pinned to another block than the batch`);
+  }
 
   const target = normalizeAddress(call.target, `${name}.target`);
 
@@ -50,10 +57,12 @@ function preparedCommit(parts: SetupClientParts, prepared: PreparedCall | Prepar
   assertObject(prepared, 'prepared');
 
   let calls: readonly unknown[] = [prepared];
+  let batchBlock: PinnedBlock | undefined;
 
   if (prepared.kind === 'batch') {
     assertArray(prepared.calls, 'prepared.calls');
     calls = prepared.calls;
+    batchBlock = checkedBlock(prepared.block, 'prepared.block');
   } else if (prepared.kind !== 'call') {
     throw new TypeError(`prepared.kind must be 'call' or 'batch'`);
   }
@@ -62,7 +71,7 @@ function preparedCommit(parts: SetupClientParts, prepared: PreparedCall | Prepar
     const committed = committedBy(parts, call);
 
     if (committed !== undefined) {
-      assertCommitEnvelope(parts, call as PreparedCall, prepared.kind === 'batch' ? `prepared.calls[${index}]` : 'prepared');
+      assertCommitEnvelope(parts, call as PreparedCall, prepared.kind === 'batch' ? `prepared.calls[${index}]` : 'prepared', batchBlock);
 
       return committed;
     }

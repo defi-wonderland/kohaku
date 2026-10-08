@@ -19,3 +19,6 @@ export const SETUP_CLIENT_PASSWORD_UNUSED_MESSAGE = 'a password was given, but t
 /** The refusal message when the draft does not recompute to the commitment the prepared commit carries. */
 export const SETUP_CLIENT_COMMITMENT_UNMATCHED_MESSAGE =
   'the draft does not recompute to the setup commitment the prepared commit carries';
+
+/** The refusal message when the prepared commit is addressed to another manager than the client's. */
+export const SETUP_CLIENT_OTHER_MANAGER_MESSAGE = 'the prepared commit is addressed to another manager than this client reads';

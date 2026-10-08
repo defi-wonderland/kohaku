@@ -1,7 +1,7 @@
 import { decodeFunctionData } from 'viem';
-import { POLICY_MANAGER_WRITES_ABI, SETUP_CLIENT_COMMITMENT_UNMATCHED_MESSAGE } from '../constants';
+import { POLICY_MANAGER_WRITES_ABI, SETUP_CLIENT_COMMITMENT_UNMATCHED_MESSAGE, SETUP_CLIENT_OTHER_MANAGER_MESSAGE } from '../constants';
 import { configurationCommitment, KitRefusalError } from '../client-core';
-import { assertArray, assertBytes, assertObject, checkedBlock, lowerHex, sameAddress } from '../formats/guards';
+import { assertArray, assertBytes, assertObject, checkedBlock, lowerHex, normalizeAddress, sameAddress } from '../formats/guards';
 import type { Hex, KitNotification, PreparedBatch, PreparedCall, SetupConfirmation, SetupDraft } from '../interfaces';
 import type { SetupCommitted } from '../types/client-core';
 import type { SetupClientParts } from '../types/setup-client';
@@ -27,7 +27,25 @@ function committedBy(parts: SetupClientParts, call: unknown): { nonce: bigint; s
   }
 }
 
-/** The commit the prepared record carries, alone or within its batch; a record carrying none throws a `TypeError`. */
+/** Refuses a commit call that is not a well-formed prepared call sent by the account with no value, or is addressed to another manager. */
+function assertCommitEnvelope(parts: SetupClientParts, call: PreparedCall, name: string): void {
+  if (call.kind !== 'call') throw new TypeError(`${name}.kind must be 'call'`);
+
+  if (call.sender !== 'account') throw new TypeError(`${name}.sender must be 'account'`);
+
+  if (call.value !== 0n) throw new TypeError(`${name}.value must be 0n`);
+
+  checkedBlock(call.block, `${name}.block`);
+
+  const target = normalizeAddress(call.target, `${name}.target`);
+
+  if (!sameAddress(target, parts.descriptor.manager)) throw new KitRefusalError(SETUP_CLIENT_OTHER_MANAGER_MESSAGE);
+}
+
+/**
+ * The commit the prepared record carries, alone or at any position of its batch, its envelope checked; a record carrying
+ * none, or a malformed one, throws a `TypeError`, and a commit addressed to another manager is refused.
+ */
 function preparedCommit(parts: SetupClientParts, prepared: PreparedCall | PreparedBatch): { nonce: bigint; setupCommitment: Hex } {
   assertObject(prepared, 'prepared');
 
@@ -40,10 +58,14 @@ function preparedCommit(parts: SetupClientParts, prepared: PreparedCall | Prepar
     throw new TypeError(`prepared.kind must be 'call' or 'batch'`);
   }
 
-  for (const call of calls) {
+  for (const [index, call] of calls.entries()) {
     const committed = committedBy(parts, call);
 
-    if (committed !== undefined) return committed;
+    if (committed !== undefined) {
+      assertCommitEnvelope(parts, call as PreparedCall, prepared.kind === 'batch' ? `prepared.calls[${index}]` : 'prepared');
+
+      return committed;
+    }
   }
 
   throw new TypeError('prepared carries no commitSetup under the bound action');

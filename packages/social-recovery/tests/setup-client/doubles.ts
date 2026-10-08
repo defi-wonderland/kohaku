@@ -139,34 +139,47 @@ export const configurationOf = (draft: SetupDraft) => ({
   ignoresPause: draft.ignoresPause,
 });
 
+/** The default salt's preimage layout, written out here rather than imported from the package. */
+const SALT_PARAMETERS = [{ type: 'address' }, { type: 'uint256' }] as const;
+
+/** A credential commitment's preimage layout. */
+const CREDENTIAL_PARAMETERS = [{ type: 'address' }, { type: 'bytes' }, { type: 'bytes32' }] as const;
+
+/** The setup body's layout: the wait, the pause choice and the clauses. */
+const BODY_PARAMETERS = [
+  { type: 'uint48' },
+  { type: 'bool' },
+  {
+    type: 'tuple[]',
+    components: [
+      { name: 'threshold', type: 'uint8' },
+      { name: 'credentials', type: 'bytes32[]' },
+    ],
+  },
+] as const;
+
+/** The setup commitment's preimage layout. */
+const COMMITMENT_PARAMETERS = [{ type: 'address' }, { type: 'address' }, { type: 'uint64' }, { type: 'bytes' }] as const;
+
 /** The default salt recomputed independently: `keccak256(abi.encode(address, uint256))`. */
 export const referenceSalt = (account: Address, place: number): Hex =>
-  keccak256(encodeAbiParameters([{ type: 'address' }, { type: 'uint256' }], [account, BigInt(place)]));
+  keccak256(encodeAbiParameters(SALT_PARAMETERS, [account, BigInt(place)]));
 
 /** A credential commitment recomputed independently: `keccak256(abi.encode(address, bytes, bytes32))`. */
 export const referenceCredential = (method: Address, config: Hex, salt: Hex): Hex =>
-  keccak256(encodeAbiParameters([{ type: 'address' }, { type: 'bytes' }, { type: 'bytes32' }], [method, config, salt]));
+  keccak256(encodeAbiParameters(CREDENTIAL_PARAMETERS, [method, config, salt]));
 
 /** The setup body bytes recomputed independently: `abi.encode(uint48, bool, (uint8, bytes32[])[])`. */
 export const referenceBodyBytes = (wait: number, ignoresPause: boolean, clauses: readonly { threshold: number; credentials: readonly Hex[] }[]): Hex =>
-  encodeAbiParameters(
-    [
-      { type: 'uint48' },
-      { type: 'bool' },
-      {
-        type: 'tuple[]',
-        components: [
-          { name: 'threshold', type: 'uint8' },
-          { name: 'credentials', type: 'bytes32[]' },
-        ],
-      },
-    ],
-    [wait, ignoresPause, clauses.map((clause) => ({ threshold: clause.threshold, credentials: [...clause.credentials] }))],
-  );
+  encodeAbiParameters(BODY_PARAMETERS, [
+    wait,
+    ignoresPause,
+    clauses.map((clause) => ({ threshold: clause.threshold, credentials: [...clause.credentials] })),
+  ]);
 
 /** The setup commitment recomputed independently: `keccak256(abi.encode(address, address, uint64, bytes))`. */
 export const referenceCommitmentOf = (account: Address, action: Address, nonce: bigint, body: Hex): Hex =>
-  keccak256(encodeAbiParameters([{ type: 'address' }, { type: 'address' }, { type: 'uint64' }, { type: 'bytes' }], [account, action, nonce, body]));
+  keccak256(encodeAbiParameters(COMMITMENT_PARAMETERS, [account, action, nonce, body]));
 
 /** The commitment a draft closes over, recomputed independently with flat places and default salts. */
 export function referenceCommitment(

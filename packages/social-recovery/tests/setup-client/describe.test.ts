@@ -76,6 +76,14 @@ describe('describeSetup', () => {
     expect(members(seen)).not.toContain('action.isAuthority');
   });
 
+  it('describes the checked draft: uppercase public metadata comes back lower-cased, the caller\'s draft untouched', async () => {
+    const draft: SetupDraft = { ...DRAFT, privacy: { publicMetadata: '0xDEADBEEF', backup: 'encrypted' } };
+    const description = await build().client.describeSetup(draft);
+
+    expect(description.privacy.publicMetadata).toBe('0xdeadbeef');
+    expect(draft.privacy.publicMetadata).toBe('0xDEADBEEF');
+  });
+
   it('describes under the version escape', async () => {
     await expect(build({ escaped: true }).client.describeSetup(DRAFT)).resolves.toBeDefined();
   });

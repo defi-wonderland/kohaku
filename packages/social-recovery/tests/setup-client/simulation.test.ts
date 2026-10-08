@@ -19,9 +19,12 @@ const EMPTY_DRAFT = withBackup(DRAFT, 'empty');
 
 /** Revert data of a custom error the decoder knows nothing about. */
 const UNKNOWN_REVERT: Hex = '0xdeadbeef';
+/** The standard `Error(string)` revert, written out here rather than imported from the package. */
+const ERROR_STRING_ABI = [{ type: 'error', name: 'Error', inputs: [{ name: 'message', type: 'string' }] }] as const;
+
 /** Revert data of the standard `Error(string)`. */
 const STRING_REVERT: Hex = encodeErrorResult({
-  abi: [{ type: 'error', name: 'Error', inputs: [{ name: 'message', type: 'string' }] }],
+  abi: ERROR_STRING_ABI,
   errorName: 'Error',
   args: ['nope'],
 });

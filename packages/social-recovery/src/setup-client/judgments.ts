@@ -6,7 +6,7 @@ import type { CandidateKeyAuthority } from '../types/description';
 import type { SetupClientParts } from '../types/setup-client';
 import type { PlacedCredential } from '../types/validation';
 import { validateSetup as validateDraft } from '../validation';
-import { distinctMethods } from './draft';
+import { checkedDraftRecord, distinctMethods } from './draft';
 import { accountWideEvents, holdsCode, judgmentReads } from './reads';
 
 /** Every finding the draft reaches against the reads made at the pinned block; no gas cost is known, so the rule's cost goes unjudged. */
@@ -78,7 +78,7 @@ export async function descriptionAt(
   ]);
   const [keys, removed] = await Promise.all([candidateKeys(parts, deployed, block), removedKey(parts, deployed, block)]);
 
-  return describeDraft(draft, {
+  return describeDraft(checkedDraftRecord(draft, credentials), {
     descriptor: parts.descriptor,
     configuration: parts.configuration,
     methods: reads.methods,

@@ -57,3 +57,9 @@ export function draftConfiguration(draft: SetupDraft, credentials: readonly Plac
 
 /** The draft's public metadata, lower-cased, for a draft already checked. */
 export const publicMetadataOf = (draft: SetupDraft): Hex => lowerHex(draft.privacy.publicMetadata);
+
+/** The checked draft as a new record, every method checksummed and every hex lower-cased; the caller's draft is left as given. */
+export const checkedDraftRecord = (draft: SetupDraft, credentials: readonly PlacedCredential[]): SetupDraft => ({
+  ...draftConfiguration(draft, credentials),
+  privacy: { publicMetadata: publicMetadataOf(draft), backup: draft.privacy.backup },
+});

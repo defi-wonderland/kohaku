@@ -6,8 +6,9 @@ import {
 import { KitRefusalError } from '../client-core';
 import { assertPassword } from '../encryption/cipher';
 import { assertArray, assertBool, assertObject, normalizeAddress, sameAddress } from '../formats/guards';
-import { NAMED_BLOCK_TAGS, type Address, type IActionCodec, type PrepareOptions, type SetupDraft } from '../interfaces';
+import { type Address, type IActionCodec, type PrepareOptions, type SetupDraft } from '../interfaces';
 import type { SetupClientParts } from '../types/setup-client';
+import { checkedConfiguration, checkedDescriptor } from './records';
 
 /** Refuses a dependency that is not an object with every named member callable. */
 function assertDependency(value: unknown, members: readonly string[], name: string): void {
@@ -31,18 +32,15 @@ function assertServes(codec: IActionCodec, action: Address): void {
 }
 
 /**
- * The client's inputs with the account and action checksummed, refusing a malformed part or record, a read tag that is
- * not a named block tag, and a codec that does not serve the action.
+ * The client's inputs with the account, the action and the records' addresses checksummed, refusing a malformed part or
+ * record, and a codec that does not serve the action.
  */
 export function checkedParts(parts: SetupClientParts): SetupClientParts {
   const { provider, descriptor, configuration, descriptorOrigin, policyManager, recoveryAction, events, methods, codec } = parts;
 
-  assertDependency(provider, ['block', 'call', 'code'], 'provider');
-  assertObject(descriptor, 'descriptor');
-  assertObject(configuration, 'configuration');
-  assertObject(configuration.blockTags, 'configuration.blockTags');
+  assertDependency(provider, ['block', 'call', 'code', 'transaction'], 'provider');
 
-  if (!NAMED_BLOCK_TAGS.includes(configuration.blockTags.read)) throw new TypeError('configuration.blockTags.read must be a named block tag');
+  const checkedRecords = { descriptor: checkedDescriptor(descriptor), configuration: checkedConfiguration(configuration) };
 
   if (descriptorOrigin !== 'kit' && descriptorOrigin !== 'integrator') throw new TypeError('descriptorOrigin must be kit or integrator');
 
@@ -62,7 +60,7 @@ export function checkedParts(parts: SetupClientParts): SetupClientParts {
 
   assertServes(codec, action);
 
-  return { ...parts, account, action };
+  return { ...parts, ...checkedRecords, account, action };
 }
 
 /** Refuses options that are not an object, or whose `simulate` is present and not a boolean. */

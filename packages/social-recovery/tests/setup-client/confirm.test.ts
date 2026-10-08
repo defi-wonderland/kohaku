@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { PreparedBatch, PreparedCall } from '../../src/index';
+import { getAddress } from 'viem';
+import type { Address, PreparedBatch, PreparedCall } from '../../src/index';
 import {
   ACCOUNT,
   ACTION,
@@ -9,6 +10,7 @@ import {
   committed,
   DRAFT,
   HEADER,
+  MANAGER,
   members,
   PIN,
   position,
@@ -19,6 +21,7 @@ import {
 
 const DRAFT_EMPTY = withBackup(DRAFT, 'empty');
 const LATER = { number: HEADER.number + 12, timestamp: HEADER.timestamp + 144, hash: `0x${'6c'.repeat(32)}` as const };
+const OTHER_MANAGER: Address = getAddress(`0x${'a2'.repeat(20)}`);
 const LATER_PIN = { number: LATER.number, hash: LATER.hash };
 
 /** A first-commit batch and a later single commit, both prepared at `PIN` over doubles. */
@@ -141,5 +144,65 @@ describe('confirmSetup', () => {
     const { client } = build({ world: { header: LATER } });
 
     await expect(client.confirmSetup(DRAFT_EMPTY, clear)).rejects.toThrow();
+  });
+});
+
+describe('confirmSetup checks the prepared envelope before any read', () => {
+  /** The first-commit batch with its commit call replaced by the given changes. */
+  async function batchWithCommit(changes: Record<string, unknown>): Promise<PreparedBatch> {
+    const { batch } = await preparedCommits();
+    const [arming, commit] = batch.calls as [PreparedCall, PreparedCall];
+
+    return { ...batch, calls: [arming, { ...commit, ...changes } as PreparedCall] };
+  }
+
+  it.each([
+    ['a target that is no address', { target: '0x1234' }],
+    ['data that is not hex', { data: 'commitSetup' }],
+    ['an unknown sender', { sender: 'manager' }],
+    ['a value that is not a bigint', { value: 0 }],
+  ])('throws a TypeError on a commit call with %s', async (_name, changes) => {
+    const prepared = await batchWithCommit(changes);
+    const { client, seen } = build({ world: { header: LATER } });
+
+    await expect(client.confirmSetup(DRAFT_EMPTY, prepared)).rejects.toThrow(TypeError);
+    expect(seen.provider).toEqual([]);
+  });
+
+  it.each([
+    ['addressed to another manager', { target: OTHER_MANAGER }],
+    ['sent by anyone rather than the account', { sender: 'anyone' }],
+    ['carrying a non-zero value', { value: 1n }],
+  ])('refuses a commit call %s, reading nothing and never answering landed', async (_name, changes) => {
+    const prepared = await batchWithCommit(changes);
+    const commitment = referenceCommitment(DRAFT_EMPTY, ACCOUNT, ACTION, 1n);
+    const { client, seen } = build({ world: { header: LATER, bound: [committed(1n, commitment, '0x', position(HEADER.number + 1))] } });
+
+    await expect(client.confirmSetup(DRAFT_EMPTY, prepared)).rejects.toThrow();
+    expect(seen.provider).toEqual([]);
+  });
+
+  it('refuses a single commit call addressed to another manager', async () => {
+    const { single } = await preparedCommits();
+    const { client, seen } = build({ world: { header: LATER } });
+
+    await expect(client.confirmSetup(DRAFT_EMPTY, { ...single, target: OTHER_MANAGER })).rejects.toThrow();
+    expect(seen.provider).toEqual([]);
+  });
+
+  it('accepts the bound manager spelled in lower case', async () => {
+    const { single } = await preparedCommits();
+    const { client } = build({ world: { header: LATER } });
+
+    await expect(client.confirmSetup(DRAFT_EMPTY, { ...single, target: MANAGER.toLowerCase() as Address })).resolves.toBeDefined();
+  });
+
+  it('still accepts the commit at any batch position', async () => {
+    const { batch } = await preparedCommits();
+    const swapped: PreparedBatch = { ...batch, calls: [...batch.calls].reverse() };
+    const commitment = referenceCommitment(DRAFT_EMPTY, ACCOUNT, ACTION, 1n);
+    const { client } = build({ world: { header: LATER, bound: [committed(1n, commitment, '0x', position(HEADER.number + 1))] } });
+
+    expect((await client.confirmSetup(DRAFT_EMPTY, swapped)).landed).toBe(true);
   });
 });

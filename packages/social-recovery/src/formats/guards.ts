@@ -1,6 +1,6 @@
 import { checksumAddress, getAddress } from 'viem';
 import { FORMATS_HEX_ADDRESS_PATTERN, FORMATS_HEX_BYTES32_PATTERN, FORMATS_HEX_BYTES_PATTERN, FORMATS_SAFE_INTEGER_BITS } from '../constants';
-import type { Address, Hex, PinnedBlock } from '../interfaces';
+import { REMOVED_KEY_UNNAMED, type Address, type Hex, type PinnedBlock, type RemovedKey, type RemovedKeyUnnamed } from '../interfaces';
 
 /** Refuses anything but whole bytes as 0x-prefixed hex, since an odd digit count would be padded into other bytes. */
 export function assertBytes(value: unknown, name: string): asserts value is Hex {
@@ -102,3 +102,31 @@ export function checkedBlock(value: unknown, name: string): PinnedBlock {
 
   return { number, hash: lowerHex(hash) };
 }
+
+/** Refuses a dependency that is not an object with every named member callable. */
+export function assertDependency(value: unknown, members: readonly string[], name: string): void {
+  assertObject(value, name);
+
+  for (const member of members) {
+    if (typeof (value as Readonly<Record<string, unknown>>)[member] !== 'function') throw new TypeError(`${name}.${member} must be a function`);
+  }
+}
+
+/** The checksummed spellings of a list of addresses, refusing a value that is not an array, a hole in it and a malformed entry. */
+export function normalizeAddresses(values: unknown, name: string): Address[] {
+  assertArray(values, name);
+
+  const normalized: Address[] = [];
+
+  for (let index = 0; index < values.length; index += 1) {
+    if (!(index in values)) throw new TypeError(`${name}[${index}] is missing`);
+
+    normalized.push(normalizeAddress(values[index], `${name}[${index}]`));
+  }
+
+  return normalized;
+}
+
+/** Whether the removed key is one of the reasons no address could be named, rather than an address. */
+export const isRemovedKeyUnnamed = (value: RemovedKey): value is RemovedKeyUnnamed =>
+  (REMOVED_KEY_UNNAMED as readonly unknown[]).includes(value);

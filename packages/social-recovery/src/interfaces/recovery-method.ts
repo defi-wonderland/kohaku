@@ -10,6 +10,7 @@ import type {
   Hex,
   Input,
   Material,
+  MethodTier,
   Params,
   ReplyFailure,
   Verdict,
@@ -32,4 +33,6 @@ export interface IRecoveryMethod {
   describe(ctx: Ctx): DeviceFacts;
   /** The known-answer vector files this implementation's tests replay. */
   readonly vector: readonly string[];
+  /** The tier this implementation places its modules in, absent where it states none. */
+  readonly tier?: MethodTier;
 }

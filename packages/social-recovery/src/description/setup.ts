@@ -1,8 +1,7 @@
 import { FORMATS_SAFE_INTEGER_BITS } from '../constants';
-import { assertArray, assertBool, assertBytes, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
+import { assertArray, assertBool, assertBytes, assertObject, assertUintNumber, isRemovedKeyUnnamed, normalizeAddress } from '../formats/guards';
 import {
   METHOD_TIERS,
-  REMOVED_KEY_UNNAMED,
   type Address,
   type DescribedClause,
   type FailureDomain,
@@ -41,7 +40,7 @@ function assertTiers(methods: readonly MethodDescriptionReads[]): void {
 
 /** The removed key as given: a checksummed address or one of the reasons none could be named. */
 function removedKeyOf(value: RemovedKey): RemovedKey {
-  if ((REMOVED_KEY_UNNAMED as readonly unknown[]).includes(value)) return value;
+  if (isRemovedKeyUnnamed(value)) return value;
 
   return normalizeAddress(value, 'context.removedKey');
 }

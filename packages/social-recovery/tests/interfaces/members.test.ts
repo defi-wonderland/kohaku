@@ -100,6 +100,7 @@ const EXPECTED: Readonly<Record<string, Readonly<Record<string, MemberKind>>>> =
     deviceBinding: 'property',
     describe: 'method',
     vector: 'property',
+    tier: 'property',
   },
   IProvider: {
     chainId: 'method',

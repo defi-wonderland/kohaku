@@ -14,3 +14,4 @@ export * from './recovery-action';
 export * from './policy-manager';
 export * from './client-core';
 export * from './removed-key';
+export * from './setup-client';

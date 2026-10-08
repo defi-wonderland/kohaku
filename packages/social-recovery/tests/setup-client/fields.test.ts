@@ -16,6 +16,16 @@ import {
   METHOD_A,
 } from './doubles';
 
+/** A list of two well-formed addresses with a hole between them. */
+const sparse = (first: string, last: string): string[] => {
+  const list = new Array<string>(3);
+
+  list[0] = first;
+  list[2] = last;
+
+  return list;
+};
+
 /** A well-formed creation record. */
 const CREATION = {
   factory: getAddress('0x00000000000000000000000000000000000fac01'),
@@ -131,6 +141,15 @@ describe('construction-time checks of the consumed fields', () => {
       thrown: expect.any(RangeError),
       reads: 0,
     });
+  });
+
+  it.each([
+    ['configuration.candidateKeys', { configuration: { ...CONFIGURATION, candidateKeys: new Array(1) } }],
+    ['configuration.tokens', { configuration: { ...CONFIGURATION, tokens: sparse(METHOD_A, ACCOUNT) } }],
+    ['descriptor.shippedMethods', { descriptor: { ...DESCRIPTOR, shippedMethods: sparse(METHOD_A, ACCOUNT) } }],
+    ['descriptor.auditedActions', { descriptor: { ...DESCRIPTOR, auditedActions: new Array(2) } }],
+  ])('refuses a hole in %s with a TypeError and no provider read', (_name, overrides) => {
+    expect(construct(overrides)).toEqual({ thrown: expect.any(TypeError), reads: 0 });
   });
 
   it('refuses a logChunkSize of zero with a RangeError and no provider read', () => {

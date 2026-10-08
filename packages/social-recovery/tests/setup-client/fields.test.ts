@@ -126,6 +126,21 @@ describe('construction-time checks of the consumed fields', () => {
     });
   });
 
+  it('refuses a digestVersion past the safe integers with a RangeError and no provider read', () => {
+    expect(construct({ descriptor: { ...DESCRIPTOR, digestVersion: '9007199254740993' } })).toEqual({
+      thrown: expect.any(RangeError),
+      reads: 0,
+    });
+  });
+
+  it('accepts a digestVersion at the largest safe integer', () => {
+    expect(construct({ descriptor: { ...DESCRIPTOR, digestVersion: String(Number.MAX_SAFE_INTEGER) } })).toEqual({ thrown: undefined, reads: 0 });
+  });
+
+  it.each(['v1', '1.0', '', ' 1'])('refuses a non-decimal digestVersion %j with a TypeError', (digestVersion) => {
+    expect(construct({ descriptor: { ...DESCRIPTOR, digestVersion } }).thrown).toBeInstanceOf(TypeError);
+  });
+
   it('refuses a repeated candidate key with a TypeError', () => {
     expect(construct({ configuration: { ...CONFIGURATION, candidateKeys: [KEY_2, KEY_2.toUpperCase().replace('0X', '0x')] } }).thrown).toBeInstanceOf(
       TypeError,

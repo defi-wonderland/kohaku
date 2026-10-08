@@ -8,7 +8,17 @@ import {
   type DeploymentDescriptor,
   type RequestWindowBounds,
 } from '../interfaces';
-import { assertArray, assertBool, assertBytes, assertBytes32, assertObject, assertUintNumber, lowerHex, normalizeAddress } from './guards';
+import {
+  assertArray,
+  assertBool,
+  assertBytes,
+  assertBytes32,
+  assertObject,
+  assertUintBigint,
+  assertUintNumber,
+  lowerHex,
+  normalizeAddress,
+} from './guards';
 
 /** Refuses anything but a non-negative safe integer. */
 const assertSafeUint = (value: unknown, name: string): void => assertUintNumber(value, FORMATS_SAFE_INTEGER_BITS, name);
@@ -40,6 +50,8 @@ export function checkedDescriptor(value: unknown, name: string): DeploymentDescr
   if (typeof descriptor.digestVersion !== 'string' || !FORMATS_DECIMAL_PATTERN.test(descriptor.digestVersion)) {
     throw new TypeError(`${name}.digestVersion must be a non-empty decimal string`);
   }
+
+  assertUintBigint(BigInt(descriptor.digestVersion), FORMATS_SAFE_INTEGER_BITS, `${name}.digestVersion`);
 
   if (typeof descriptor.managerVersion !== 'string') throw new TypeError(`${name}.managerVersion must be a string`);
 

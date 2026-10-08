@@ -60,8 +60,8 @@ export function checkedDescriptor(value: unknown, name: string): DeploymentDescr
     deployedAt: descriptor.deployedAt,
     digestVersion: descriptor.digestVersion,
     managerVersion: descriptor.managerVersion,
-    shippedMethods: normalizeAddresses(descriptor.shippedMethods as readonly Address[], `${name}.shippedMethods`),
-    auditedActions: normalizeAddresses(descriptor.auditedActions as readonly Address[], `${name}.auditedActions`),
+    shippedMethods: normalizeAddresses(descriptor.shippedMethods, `${name}.shippedMethods`),
+    auditedActions: normalizeAddresses(descriptor.auditedActions, `${name}.auditedActions`),
   };
 }
 
@@ -105,7 +105,7 @@ function checkedCreation(value: unknown, name: string): CreationRecord {
 
 /** The candidate keys checksummed, refusing two entries that name one address. */
 function checkedCandidateKeys(value: unknown, name: string): Address[] {
-  const keys = normalizeAddresses(value as readonly Address[], name);
+  const keys = normalizeAddresses(value, name);
 
   if (new Set(keys).size !== keys.length) throw new TypeError(`${name} names one address more than once`);
 

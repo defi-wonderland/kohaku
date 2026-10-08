@@ -178,3 +178,28 @@ describe('the log chunk size', () => {
     expect(construct(DESCRIPTOR, { ...CLIENT_CONFIGURATION, logChunkSize: 1 }).thrown).toBeUndefined();
   });
 });
+
+describe('a hole in an address list', () => {
+  /** A two-entry list whose second slot is a hole. */
+  const holed = (first: `0x${string}`): `0x${string}`[] => {
+    const list = [first, first];
+
+    delete list[1];
+
+    return list;
+  };
+
+  it.each(['candidateKeys', 'tokens'] as const)('configuration %s with a hole throws a TypeError with no read', (member) => {
+    const { thrown, seen } = construct(DESCRIPTOR, { ...CLIENT_CONFIGURATION, [member]: holed(KEY_OLD) });
+
+    expect(thrown).toBeInstanceOf(TypeError);
+    expect(seen).toEqual([]);
+  });
+
+  it.each(['shippedMethods', 'auditedActions'] as const)('descriptor %s with a hole throws a TypeError with no read', (member) => {
+    const { thrown, seen } = construct(descriptorWith(member, holed(METHOD_ECDSA)));
+
+    expect(thrown).toBeInstanceOf(TypeError);
+    expect(seen).toEqual([]);
+  });
+});

@@ -52,7 +52,7 @@ describe('the ten members', () => {
     expect(calls.sort()).toEqual(['configFrom', 'describe', 'enrollInput', 'modules', 'replyFrom', 'signingInput', 'verify']);
   });
 
-  it('exposes no public member beyond the ten, per the type the factory returns', () => {
+  it('exposes no public member beyond the ten and the optional tier the method type declares, per the type the factory returns', () => {
     const program = createSourceProgram();
     const checker = program.getTypeChecker();
     const entry = resolveExports(checker, requireSourceFile(program, join(SRC_ROOT, 'method-aadhaar', 'index.ts')));
@@ -67,7 +67,7 @@ describe('the ten members', () => {
     const returned = signature === undefined ? undefined : checker.getReturnTypeOfSignature(signature);
     const names = returned === undefined ? [] : checker.getPropertiesOfType(returned).map((property) => property.getName());
 
-    expect(names.sort()).toEqual([...TEN]);
+    expect(names.sort()).toEqual([...TEN, 'tier'].sort());
   });
 
   it('the codec carries exactly the four functions of IMethodCodec', () => {

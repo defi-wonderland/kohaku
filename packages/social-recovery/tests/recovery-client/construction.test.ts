@@ -203,3 +203,24 @@ describe('a hole in an address list', () => {
     expect(seen).toEqual([]);
   });
 });
+
+describe('a hole backed by an inherited entry', () => {
+  it('a sparse candidateKeys list is refused even with a valid address planted on Array.prototype at the hole', () => {
+    const list: `0x${string}`[] = [KEY_OLD, KEY_NEW];
+
+    delete list[1];
+
+    const prototype = Array.prototype as unknown as Record<number, unknown>;
+
+    prototype[1] = KEY_NEW;
+
+    try {
+      const { thrown, seen } = construct(DESCRIPTOR, { ...CLIENT_CONFIGURATION, candidateKeys: list });
+
+      expect(thrown).toBeInstanceOf(TypeError);
+      expect(seen).toEqual([]);
+    } finally {
+      delete prototype[1];
+    }
+  });
+});

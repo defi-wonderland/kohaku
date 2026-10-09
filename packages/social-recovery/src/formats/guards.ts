@@ -119,7 +119,7 @@ export function normalizeAddresses(values: unknown, name: string): Address[] {
   const normalized: Address[] = [];
 
   for (let index = 0; index < values.length; index += 1) {
-    if (!(index in values)) throw new TypeError(`${name}[${index}] is missing`);
+    if (!Object.hasOwn(values, index)) throw new TypeError(`${name}[${index}] is missing`);
 
     normalized.push(normalizeAddress(values[index], `${name}[${index}]`));
   }

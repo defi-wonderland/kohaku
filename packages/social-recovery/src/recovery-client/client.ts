@@ -64,8 +64,10 @@ export class RecoveryClient {
 
   /**
    * The approval gathering for a handover, its payload encoded through the codec and its deadline the pinned block's
-   * timestamp plus the window. Throws a `TypeError` or `RangeError` on a malformed argument before any read, and a
-   * `KitRefusalError` while an attempt is waiting, on a restore cause or on a handover the action would refuse.
+   * timestamp plus the window. Throws a `TypeError` or `RangeError` before any read on a malformed handover, order, window,
+   * password or a source that is not an object; a malformed configuration source is refused by the restore after the block
+   * pin and `stateOf`. Throws a `KitRefusalError` while an attempt is waiting, on a restore cause or on a handover the action
+   * would refuse.
    */
   async initRecoveryGathering(
     source: ConfigurationSource,
@@ -94,8 +96,9 @@ export class RecoveryClient {
 
   /**
    * The cancellation gathering for the attempt waiting, its `consumableAfter` copied from the manager.
-   * Throws a `TypeError` or `RangeError` on a malformed argument or a window longer than the configured cancel window
-   * before any read, and a `KitRefusalError` while no attempt is waiting or on a restore cause.
+   * Throws a `TypeError` or `RangeError` before any read on a malformed window, one longer than the configured cancel window,
+   * a malformed password or a source that is not an object; a malformed configuration source is refused by the restore after
+   * the block pin and `stateOf`. Throws a `KitRefusalError` while no attempt is waiting or on a restore cause.
    */
   async initCancelGathering(source: ConfigurationSource, window: ValidityWindow): Promise<Gathering> {
     const { parts } = this;

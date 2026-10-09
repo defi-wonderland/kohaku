@@ -152,6 +152,23 @@ describe('construction-time checks of the consumed fields', () => {
     expect(construct(overrides)).toEqual({ thrown: expect.any(TypeError), reads: 0 });
   });
 
+  it('refuses a hole even where Array.prototype holds a valid address at that index', () => {
+    const prototype = Array.prototype as unknown as Record<number, unknown>;
+
+    prototype[1] = KEY_2;
+
+    try {
+      expect(construct({ configuration: { ...CONFIGURATION, candidateKeys: sparse(KEY_1, ACCOUNT) } })).toEqual({
+        thrown: expect.any(TypeError),
+        reads: 0,
+      });
+    } finally {
+      delete prototype[1];
+    }
+
+    expect(Object.hasOwn(Array.prototype, 1)).toBe(false);
+  });
+
   it('refuses a logChunkSize of zero with a RangeError and no provider read', () => {
     expect(construct({ configuration: { ...CONFIGURATION, logChunkSize: 0 } })).toEqual({ thrown: expect.any(RangeError), reads: 0 });
   });

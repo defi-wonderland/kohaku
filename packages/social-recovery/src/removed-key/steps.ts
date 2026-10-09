@@ -4,17 +4,24 @@ import type { Address, KitNotification, PinnedBlock, RawTransaction } from '../i
 import type { CheckedRemovedKeyInputs, RemovedKeyStepAnswer } from '../types/removed-key';
 import { lastByPosition, latestConsumedStart, ofKind } from './select';
 
-/** The key if `isAuthority` confirms it at the block, `denied` if not, `unread` where the read fails or answers no boolean. */
+/**
+ * The key if `isAuthority` confirms it at the block, `denied` if not, `unread` where the answer is no boolean.
+ * A rejected read answers `unread` for a candidate the inference found itself, and rejects as itself for a supplied one.
+ */
 export async function confirm(key: Address, inputs: CheckedRemovedKeyInputs, block: PinnedBlock): Promise<Exclude<RemovedKeyStepAnswer, undefined>> {
+  let answer: unknown;
+
   try {
-    const answer: unknown = await inputs.action.isAuthority(key, block);
+    answer = await inputs.action.isAuthority(key, block);
+  } catch (thrown) {
+    if (inputs.supplied !== undefined) throw thrown;
 
-    if (typeof answer !== 'boolean') return 'unread';
-
-    return answer ? key : 'denied';
-  } catch {
     return 'unread';
   }
+
+  if (typeof answer !== 'boolean') return 'unread';
+
+  return answer ? key : 'denied';
 }
 
 /** The new key of the highest-id consumed attempt, asked of `isAuthority`; nothing where its payload does not decode or names the zero address. */

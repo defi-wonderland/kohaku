@@ -19,7 +19,7 @@ export type RemovedKeyInputs = {
   readonly provider: Pick<IProvider, 'transaction'>;
   /** Without it no transaction is read and no signer recovered. */
   readonly signerRecovery?: ISignerRecovery;
-  /** When given, the only candidate: no event or transaction is read, and a denial answers `not-a-key`. */
+  /** When given, the only candidate: no event or transaction is read, a denial answers `not-a-key`, and a rejected `isAuthority` rejects as itself. */
   readonly supplied?: Address;
   readonly descriptor: DeploymentDescriptor;
   readonly account: Address;

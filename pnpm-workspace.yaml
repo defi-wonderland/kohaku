@@ -18,5 +18,6 @@ packages:
   - "packages/poseidon"
   - "packages/railgun"
   - "packages/social-recovery"
+  - "packages/social-recovery/examples/clients"
   - "examples/pq-account"
   - "docs"

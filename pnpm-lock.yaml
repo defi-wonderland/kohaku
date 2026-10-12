@@ -399,6 +399,25 @@ importers:
         specifier: ^3.0.0
         version: 3.2.6(@types/debug@4.1.13)(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(supports-color@8.1.1)(tsx@4.22.5)(yaml@2.9.0)
 
+  packages/social-recovery/examples/clients:
+    dependencies:
+      '@kohaku-eth/social-recovery':
+        specifier: workspace:*
+        version: link:../..
+      viem:
+        specifier: ^2.51.3
+        version: 2.54.1(typescript@5.9.3)(zod@4.4.3)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.1.0
+        version: 24.13.2
+      tsx:
+        specifier: ^4.21.0
+        version: 4.22.5
+      typescript:
+        specifier: ^5.9.2
+        version: 5.9.3
+
   packages/tornado-cash:
     dependencies:
       '@kohaku-eth/mimc-tree':

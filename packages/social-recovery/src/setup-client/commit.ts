@@ -1,19 +1,12 @@
 import { bytesToHex } from 'viem';
-import {
-  BACKUP_NONCE_SIZE,
-  BACKUP_PADDING_SIZE,
-  BACKUP_PAYLOAD_VERSION,
-  FORMATS_SETUP_NONCE_BITS,
-  SETUP_CLIENT_VALIDATION_REFUSED_MESSAGE,
-} from '../constants';
-import { configurationCommitment, KitRefusalError, simulatePrepared } from '../client-core';
+import { BACKUP_NONCE_SIZE, BACKUP_PADDING_SIZE, BACKUP_PAYLOAD_VERSION, FORMATS_SETUP_NONCE_BITS } from '../constants';
+import { configurationCommitment, simulatePrepared } from '../client-core';
 import { sealBackup, serializeConfiguration } from '../encryption';
 import { assertObject, assertUintBigint } from '../formats/guards';
 import type { Configuration, Hex, PreparedBatch, PreparedCall, PrepareOptions, SetupDraft } from '../interfaces';
 import type { SetupClientParts } from '../types/setup-client';
 import { assertBackupPassword, assertOptions } from './check';
 import { checkedDraft, draftConfiguration, publicMetadataOf } from './draft';
-import { validationAt } from './judgments';
 import { authorizedAt, pinRead } from './reads';
 
 /** A fresh random AES-GCM nonce, drawn for every seal. */
@@ -50,7 +43,7 @@ async function backupBytes(
 /**
  * The commit of the draft at one pinned block: the arming write and the commit as one atomic batch while the action is not
  * authorized, the commit alone once it is, simulated unless the options or the configuration say otherwise.
- * Refuses with the findings while validation reports an error, before any prepare is made.
+ * It runs no setup validation: the integrator calls `validateSetup` on the draft first.
  */
 export async function prepareCommit(
   parts: SetupClientParts,
@@ -63,15 +56,8 @@ export async function prepareCommit(
   assertBackupPassword(draft, password);
   assertOptions(options);
 
-  const pinned = await pinRead(parts);
-  const { block } = pinned;
-  const [findings, state, authorized] = await Promise.all([
-    validationAt(parts, draft, credentials, pinned),
-    parts.policyManager.stateOf(block),
-    authorizedAt(parts, block),
-  ]);
-
-  if (findings.errors.length > 0) throw new KitRefusalError(SETUP_CLIENT_VALIDATION_REFUSED_MESSAGE, { findings });
+  const { block } = await pinRead(parts);
+  const [state, authorized] = await Promise.all([parts.policyManager.stateOf(block), authorizedAt(parts, block)]);
 
   assertObject(state, 'state');
   assertUintBigint(state.setupNonce, FORMATS_SETUP_NONCE_BITS, 'state.setupNonce');

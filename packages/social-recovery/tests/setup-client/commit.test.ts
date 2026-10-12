@@ -184,28 +184,28 @@ describe('prepareCommitSetup: the backup the draft names', () => {
   });
 });
 
-describe('prepareCommitSetup: validation inside the prepare', () => {
-  it('throws a KitRefusalError carrying every finding validateSetup returns, and prepares nothing', async () => {
-    const reference = build();
-    const findings = await reference.client.validateSetup(BAD_DRAFT);
+describe('prepareCommitSetup: no validation inside the prepare', () => {
+  it('prepares a draft validateSetup refuses, leaving the judgment to the integrator', async () => {
+    const findings = await build().client.validateSetup(BAD_DRAFT);
 
     expect(findings.errors.length).toBeGreaterThan(0);
 
     const { client, seen } = build();
-    const thrown = await client.prepareCommitSetup(BAD_DRAFT, PASSWORD).then(
-      () => undefined,
-      (error: unknown) => error,
-    );
+    const prepared = await client.prepareCommitSetup(BAD_DRAFT, PASSWORD);
 
-    expect(thrown).toBeInstanceOf(KitRefusalError);
-    expect((thrown as KitRefusalError).findings).toEqual(findings);
-    expect((thrown as KitRefusalError).restoreCause).toBeUndefined();
-    expect(members(seen)).not.toContain('manager.prepareCommitSetup');
-    expect(members(seen)).not.toContain('action.armingCall');
-    expect(seen.calls).toEqual([]);
+    expect(prepared.kind).toBe('batch');
+    expect(members(seen)).toContain('manager.prepareCommitSetup');
   });
 
-  it('never blocks on a warning', async () => {
+  it('commits the refused draft under its own commitment', async () => {
+    const { client, seen } = build();
+
+    await client.prepareCommitSetup(withBackup(BAD_DRAFT, 'empty'));
+
+    expect(commitArguments(seen)[1]).toBe(referenceCommitment(BAD_DRAFT, ACCOUNT, ACTION, 1n));
+  });
+
+  it('prepares a draft with a warning as before', async () => {
     const { client } = build();
     const draft = withBackup(DRAFT, 'clear');
     const findings = await client.validateSetup(draft);

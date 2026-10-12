@@ -6,7 +6,7 @@ import type { PlaceStanding } from '../types';
 import type { MethodStop, RecoveryClientParts } from '../types/recovery-client';
 
 /** The read's answer, rejecting where it went unanswered since no standing may be guessed. */
-function answerOf<Answer>(result: ReadResult<Answer>, read: string, method: Address): Answer {
+export function answerOf<Answer>(result: ReadResult<Answer>, read: string, method: Address): Answer {
   assertObject(result, `${read}(${method})`);
 
   if (!result.answered) throw new Error(`${RECOVERY_CLIENT_UNANSWERED_READ_MESSAGE}: ${read}(${method})`);

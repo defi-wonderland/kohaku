@@ -16,6 +16,7 @@ packages:
   - "packages/tornado-cash"
   - "packages/mimc-tree"
   - "packages/social-recovery"
+  - "packages/social-recovery/examples/clients"
   - "examples/pq-account"
   - "crates/railgun-ts"
   - "docs"

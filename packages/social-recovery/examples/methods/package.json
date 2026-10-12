@@ -1,0 +1,25 @@
+{
+  "name": "@kohaku-eth/social-recovery-example-methods",
+  "version": "0.0.0",
+  "description": "The methods playground: the wallet method enrolling, signing and verifying with no chain.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "dev": "vite",
+    "lint": "eslint .",
+    "enroll": "tsx src/enroll.ts",
+    "sign": "tsx src/sign.ts",
+    "verify": "tsx src/verify.ts"
+  },
+  "dependencies": {
+    "@kohaku-eth/social-recovery": "workspace:*",
+    "viem": "^2.51.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.2",
+    "vite": "8.3.3"
+  }
+}

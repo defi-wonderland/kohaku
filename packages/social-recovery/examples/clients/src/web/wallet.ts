@@ -18,10 +18,11 @@ export type Connection = { readonly wallet: InjectedWallet; readonly account: Ad
 /**
  * The cached connection; `session` grows on every reset, so a step that awaited across one drops its result.
  * `observedAccounts` / `observedChainIds` hold every account and chain the wallet reported since Connect last
- * started, the latest last, whether or not a connection is cached.
+ * started, the latest last, whether or not a connection is cached. `lastChainId` is the chain last observed or
+ * connected to, kept across resets, so a chain switch while disconnected still drops what is bound to the chain.
  */
 export const wallet: {
-  session: number; listening: boolean; injected?: InjectedWallet; account?: Address; chainId?: number;
+  session: number; listening: boolean; injected?: InjectedWallet; account?: Address; chainId?: number; lastChainId?: number;
   observedAccounts: (Address | undefined)[]; observedChainIds: number[];
 } = { session: 0, listening: false, observedAccounts: [], observedChainIds: [] };
 
@@ -66,9 +67,12 @@ export function listen(injected: InjectedWallet): void {
   injected.on('chainChanged', (chain) => {
     const chainId = hexToNumber(chain as Hex);
 
-    wallet.observedChainIds.push(chainId);
+    const last = wallet.lastChainId;
 
-    if (wallet.chainId !== undefined && chainId !== wallet.chainId) reset('the wallet switched chain', true);
+    wallet.observedChainIds.push(chainId);
+    wallet.lastChainId = chainId;
+
+    if (last !== undefined && chainId !== last) reset('the wallet switched chain', true);
   });
 }
 
@@ -76,15 +80,6 @@ export function listen(injected: InjectedWallet): void {
 export const ensureSession = (session: number): void => {
   if (session !== wallet.session) throw new Error(SESSION_CHANGED_MESSAGE);
 };
-
-/** Awaits a value, then checks the session, so nothing a switch outdated is cached, shown, filed or sent. */
-export async function settled<T>(session: number, pending: Promise<T>): Promise<T> {
-  const value = await pending;
-
-  ensureSession(session);
-
-  return value;
-}
 
 /**
  * Asks for the account and the chain, reads both again (`eth_accounts`, `eth_chainId`), then caches them.
@@ -99,10 +94,18 @@ export async function connect(injected: InjectedWallet): Promise<Connection> {
   const { session } = wallet;
   const account = firstAccount(await injected.request({ method: 'eth_requestAccounts' }));
 
+  ensureSession(session);
+
   if (account === undefined) throw new Error('the wallet returned no account');
 
   const chainId = hexToNumber((await injected.request({ method: 'eth_chainId' })) as Hex);
+
+  ensureSession(session);
+
   const accountNow = firstAccount(await injected.request({ method: 'eth_accounts' }));
+
+  ensureSession(session);
+
   const chainNow = hexToNumber((await injected.request({ method: 'eth_chainId' })) as Hex);
 
   ensureSession(session);
@@ -118,7 +121,7 @@ export async function connect(injected: InjectedWallet): Promise<Connection> {
 
   if (chainId !== SEPOLIA_CHAIN_ID) throw new Error(`the wallet is on chain ${chainId}; switch it to Sepolia (${SEPOLIA_CHAIN_ID})`);
 
-  Object.assign(wallet, { injected, account, chainId });
+  Object.assign(wallet, { injected, account, chainId, lastChainId: chainId });
   connectionLine.textContent = `Connected ${account} on Sepolia (${chainId}).`;
 
   return { wallet: injected, account, chainId, session };

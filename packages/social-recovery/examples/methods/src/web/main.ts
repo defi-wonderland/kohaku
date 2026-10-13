@@ -33,7 +33,6 @@ async function connect(): Promise<void> {
   const session = state.session;
   const { guardian, chainId } = await requestConnection(wallet, session);
 
-  Object.assign(state, { guardian, chainId });
   pageTrace('connected guardian (eth_requestAccounts, re-read with eth_accounts)', guardian);
   pageTrace("the wallet's chain id (eth_chainId, read twice), used as the request's domain chain id", chainId);
 

@@ -35,7 +35,8 @@ approval** asks the wallet through `eth_signTypedData_v4`, builds the proof and 
 Connect also reads the address's code (`eth_getCode`) and shows `credentialHoldsCode`: an address holding code (a
 contract wallet) gets `not-judged` from `verify`, which does not judge its signature locally, while a plain account gets
 `satisfied` or `rejected`. Switching account or chain in the wallet drops the connection, the request and the verdict;
-connect again. The request's domain uses the wallet's current chain id, since wallets refuse typed data for another
+connect again. Connect reads the account and chain a second time once both answered, and refuses the connection if
+either changed meanwhile. The request's domain uses the wallet's current chain id, since wallets refuse typed data for another
 chain, whereas the Node scripts use chain id 31337; nothing is sent to any chain.
 
 ## Files

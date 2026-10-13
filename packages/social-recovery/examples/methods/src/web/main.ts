@@ -1,55 +1,13 @@
-import { fileReply, requests, walletMethod, type Address, type Ctx, type Gathering, type Hex, type Input, type TypedData } from '@kohaku-eth/social-recovery';
+import { fileReply, requests, walletMethod, type Hex, type Input, type TypedData } from '@kohaku-eth/social-recovery';
 import { generatePrivateKey, privateKeyToAddress } from 'viem/accounts';
-import { getAddress, getTypesForEIP712Domain, hexToNumber, serializeTypedData } from 'viem';
+import { getTypesForEIP712Domain, serializeTypedData } from 'viem';
 import { ctxFor, replyFor } from '../approver';
-import { isFailure, show, type Trace } from '../format';
+import { isFailure } from '../format';
 import { sampleGathering, sampleSetup } from '../setup';
-
-/** The EIP-1193 surface the page calls on the injected wallet. */
-type InjectedWallet = {
-  request(args: { method: string; params?: readonly unknown[] }): Promise<unknown>;
-  on?(event: string, listener: (payload: unknown) => void): void;
-};
-
-const element = <T extends HTMLElement>(selector: string): T => {
-  const found = document.querySelector<T>(selector);
-
-  if (found === null) throw new Error(`missing element ${selector}`);
-
-  return found;
-};
-
-const connectButton = element<HTMLButtonElement>('#connect');
-const signButton = element<HTMLButtonElement>('#sign');
-const connectionLine = element<HTMLParagraphElement>('#connection');
-const verdictLine = element<HTMLParagraphElement>('#verdict');
-const traceBox = element<HTMLDivElement>('#trace');
-
-/** A trace that appends each SDK call and its result to the page. */
-const pageTrace: Trace = (step, value) => {
-  const heading = document.createElement('h3');
-
-  heading.textContent = step;
-  traceBox.append(heading);
-
-  if (value === undefined) return;
-
-  const body = document.createElement('pre');
-
-  body.textContent = show(value);
-  traceBox.append(body);
-};
+import { connectButton, connectionLine, pageTrace, signButton, verdictLine } from './page';
+import { ensureSession, injectedWallet, listen, requestConnection, reset, state } from './session';
 
 const method = walletMethod();
-
-/** The cached connection; `session` grows on every reset, so a step that awaited across one drops its result. */
-const state: {
-  session: number; busy: boolean; listening: boolean;
-  wallet?: InjectedWallet; guardian?: Address; chainId?: number; ctx?: Ctx; record?: Gathering;
-} = { session: 0, busy: false, listening: false };
-
-const injectedWallet = (): InjectedWallet | undefined =>
-  (window as unknown as { ethereum?: InjectedWallet }).ethereum;
 
 /** The typed data as `eth_signTypedData_v4` takes it: the domain's own type added, then serialized to JSON. */
 const v4Payload = (input: Input): string => {
@@ -63,35 +21,6 @@ const v4Payload = (input: Input): string => {
   } as unknown as Parameters<typeof serializeTypedData>[0]);
 };
 
-/** Drops the cached connection, request and verdict; Connect must run again. */
-function reset(reason?: string): void {
-  Object.assign(state, { session: state.session + 1, guardian: undefined, chainId: undefined, ctx: undefined, record: undefined });
-  signButton.disabled = true;
-  connectionLine.textContent = '';
-  verdictLine.textContent = reason === undefined ? '' : `${reason}: connect again`;
-  traceBox.replaceChildren();
-}
-
-/** Resets when the wallet reports an account or chain other than the cached one. */
-function listen(wallet: InjectedWallet): void {
-  if (state.listening || wallet.on === undefined) return;
-
-  state.listening = true;
-  wallet.on('accountsChanged', (accounts) => {
-    const next = Array.isArray(accounts) && typeof accounts[0] === 'string' ? getAddress(accounts[0]) : undefined;
-
-    if (state.guardian !== undefined && next !== state.guardian) reset('the wallet switched account');
-  });
-  wallet.on('chainChanged', (chain) => {
-    if (state.chainId !== undefined && hexToNumber(chain as Hex) !== state.chainId) reset('the wallet switched chain');
-  });
-}
-
-/** Throws when a reset happened since `session` was read. */
-const ensureSession = (session: number): void => {
-  if (session !== state.session) throw new Error('the wallet changed while this step ran; connect again');
-};
-
 /** Connects, reads whether the address holds code, enrols it at place 0 of a sample setup beside two generated guardians, and builds its ctx. */
 async function connect(): Promise<void> {
   const wallet = injectedWallet();
@@ -102,18 +31,11 @@ async function connect(): Promise<void> {
   listen(wallet);
 
   const session = state.session;
-  const accounts = (await wallet.request({ method: 'eth_requestAccounts' })) as readonly string[];
-  const first = accounts[0];
+  const { guardian, chainId } = await requestConnection(wallet, session);
 
-  if (first === undefined) throw new Error('the wallet returned no account');
-
-  const guardian = getAddress(first);
-  const chainId = hexToNumber((await wallet.request({ method: 'eth_chainId' })) as Hex);
-
-  ensureSession(session);
   Object.assign(state, { guardian, chainId });
-  pageTrace('connected guardian (eth_requestAccounts)', guardian);
-  pageTrace("the wallet's chain id (eth_chainId), used as the request's domain chain id", chainId);
+  pageTrace('connected guardian (eth_requestAccounts, re-read with eth_accounts)', guardian);
+  pageTrace("the wallet's chain id (eth_chainId, read twice), used as the request's domain chain id", chainId);
 
   const code = (await wallet.request({ method: 'eth_getCode', params: [guardian, 'latest'] })) as Hex | null;
   const holdsCode = typeof code === 'string' && code !== '0x' && code !== '0x0';

@@ -4,7 +4,8 @@ import { setupDraft } from './draft';
 import type { Env } from './env';
 import { sendAsAccount } from './send';
 import { openSession } from './session';
-import { check, findings, note, runIfMain, show, step } from './trace';
+import { runIfMain } from './run';
+import { check, findings, note, show, step } from './trace';
 
 /**
  * What a setup run ends with: whether the action was authorized before it, what was prepared (absent where the prepare

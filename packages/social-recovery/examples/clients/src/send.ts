@@ -9,7 +9,7 @@ const ACCOUNT_ABI = parseAbi(['function executeBySender((address to, uint256 val
 type Signer = WalletClient & { readonly account: Account };
 
 /** Refuses a prepared call whose simulation failed, naming the decoded error. */
-function assertSimulated(call: PreparedCall): void {
+export function assertSimulated(call: PreparedCall): void {
   const { simulation } = call;
 
   if (simulation === undefined) {
@@ -47,6 +47,13 @@ export async function sendFromSponsor(session: Session, call: PreparedCall): Pro
   return sendAndWait(session, session.sponsor, call.target, call.data, call.value);
 }
 
+/** The calldata of one `executeBySender` to the account carrying `calls` in order, so a batch lands atomically. */
+export const executeBySenderData = (calls: readonly PreparedCall[]): Hex => encodeFunctionData({
+  abi: ACCOUNT_ABI,
+  functionName: 'executeBySender',
+  args: [calls.map((call) => ({ to: call.target, value: call.value, data: call.data }))],
+});
+
 /**
  * Sends the account's own call or batch as one `executeBySender` from the key the account holds, so a batch lands
  * atomically. The EOA stand-in refuses: its flows stop before any account self-call.
@@ -60,11 +67,7 @@ export async function sendAsAccount(session: Session, prepared: PreparedCall | P
 
   calls.forEach(assertSimulated);
 
-  const data = encodeFunctionData({
-    abi: ACCOUNT_ABI,
-    functionName: 'executeBySender',
-    args: [calls.map((call) => ({ to: call.target, value: call.value, data: call.data }))],
-  });
+  const data = executeBySenderData(calls);
 
   note('holder sends executeBySender', `${session.holder.account.address} → ${session.account.address} (${calls.length} call(s))`);
 

@@ -1,7 +1,7 @@
 # Social recovery: the client flows (sample app)
 
-Node scripts that drive `@kohaku-eth/social-recovery`'s setup and recovery clients against the contracts deployed on
-Sepolia. The package is private and never published; it consumes the SDK's built `dist`.
+Node scripts and a browser page that drive `@kohaku-eth/social-recovery`'s setup and recovery clients against the
+contracts deployed on Sepolia. The package is private and never published; it consumes the SDK's built `dist`.
 
 | Script | What it walks through |
 | --- | --- |
@@ -23,7 +23,8 @@ pnpm run setup                                        # `pnpm setup` is pnpm's o
 pnpm run recovery                                     # or: pnpm run recovery --two-step
 pnpm run cancel
 pnpm run e2e
-pnpm build                                            # tsc --noEmit
+pnpm run dev                                          # the page (below)
+pnpm build                                            # tsc --noEmit, then vite build
 ```
 
 ## The holder's account: three modes (`ACCOUNT_MODE`)
@@ -83,6 +84,47 @@ the holder key as the one candidate key and the order's token as the token allow
 - The account: the order's amount of `ORDER_TOKEN` when `ORDER_AMOUNT` is nonzero.
 - The guardians only sign and need nothing.
 
+## The page
+
+`pnpm run dev` serves `index.html` with Vite. It drives the same clients through the connected browser wallet: the
+wallet answers every read (an `IProvider` over its EIP-1193 `request`) and sends every transaction. The page holds no
+key and no RPC URL; the wallet must be on Sepolia (chain id 11155111), or Connect refuses.
+
+- **Deployment**: the manager, the methods, the action, the Ambire implementation, the deploy block, the factory and its
+  deploy function, the optional manager version and the optional existing account. Each field is prefilled from the
+  package's `.env` (the `VITE_` block of `.env.example`) and can be typed. **Apply** checks the descriptor against the
+  chain as the scripts do (chain id, `version()`, the EIP-712 domain) and builds the parts and both clients.
+- **Holder**: the connected account is the account's signer and the sponsor; it sends every transaction.
+  - Account: **Create** builds the account's creation code for the connected address (below), shows the predicted
+    `CREATE2` address and the salt, and sends the factory's deploy when that address holds no code; **Select** takes the
+    form's existing account (it must hold code; the account's own calls are refused unless the connected account is its
+    authority); **EOA stand-in** uses the connected address for reads and prepares only.
+  - State: `setupState()` and `recoveryState()`, read on demand.
+  - Setup: guardian addresses, one clause, the threshold, the wait (default 120 s) and the backup password →
+    `validateSetup` → `describeSetup` → `prepareCommitSetup` → one `executeBySender` to the account → `confirmSetup`.
+  - Attempt: the new authority (another of the wallet's accounts) and the payment order → `initRecoveryGathering` →
+    each approver request as JSON with a Copy button → paste one reply at a time (`addApproverReply`) → `assess` →
+    `complete` → `validateRequest` → `prepareStartAttempt` → the wallet sends.
+  - Execute: **Refresh** compares `consumableAfter` with the latest block's timestamp; **Execute** is enabled once the
+    attempt is ripe and runs `prepareExecuteHandover`, then shows a check line for the consumed attempt, the moved keys,
+    the action still authorized and, for a nonzero order, the payee's payment. Cancels stay in the `cancel` script.
+- **Guardian**: paste an approver request, sign it with the connected account (`eth_signTypedData_v4`), copy the reply
+  into the holder panel. The local `verify` verdict is shown.
+
+Roles: switch accounts in the wallet between the guardian and the holder. Each action reads the connected account when
+it starts and names it in its output. A switch drops the connection (connect again); an account switch keeps the
+deployment, the chosen account and the open gathering, a chain switch drops them too. A step the wallet switched under
+stops before anything is shown, filed or sent. The forms and pasted texts always stay.
+
+The creation code: one privilege entry (`PUSH1 0x01`, `PUSH32 slot`, `SSTORE`, with
+`slot = keccak256(abi.encode(signer, uint256(0)))` for the connected address), then the minimal proxy's deploy code and
+runtime over the Ambire implementation, all from the SDK's public `FORMATS_CREATION_*` constants. The page checks its
+own bytes with the SDK's `creationPrivileges` (one entry, that slot, value 1) before anything is sent. The salt is drawn
+at random (`crypto.getRandomValues`); type one to re-use it.
+
+Never in the bundle: Vite exposes every `VITE_` variable to the browser, so no private key and no RPC URL may carry that
+prefix. `src/env.ts` (the scripts' keys and RPC URL) is not imported by the page.
+
 ## Files
 
 - `src/env.ts` loads and checks the environment; `src/provider.ts` is the viem-backed `IProvider`;
@@ -92,3 +134,8 @@ the holder key as the one candidate key and the order's token as the token allow
 - `src/guardians.ts` builds each guardian's ctx and reply; the SDK's methods orchestrator replaces it later.
 - `src/validation.ts` assembles the request validation context and runs `validateRequest` before every submission.
 - `src/setup.ts`, `src/recovery.ts` (`src/attempt.ts`, `src/handover.ts`), `src/cancel.ts`, `src/e2e.ts`: the flows.
+- `src/trace.ts` prints the trace, to the console or, on the page, to its trace area; `src/run.ts` runs a script's entry.
+- `index.html` and `src/web/`: the page. `wallet.ts` is the connection and its session checks, `provider.ts` and
+  `revert.ts` the wallet's `IProvider`, `config.ts` the deployment form, `kit.ts` the parts and clients, `creation.ts`
+  the account's creation code, `send.ts` the transactions, and `account.ts`, `setup.ts`, `attempt.ts`, `execute.ts`,
+  `guardian.ts` the panels; `main.ts` wires the buttons.

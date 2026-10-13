@@ -8,7 +8,7 @@ import {
   type RequestValidationContext,
   validateRequest,
 } from '@kohaku-eth/social-recovery';
-import { type Address, decodeFunctionResult, encodeFunctionData, erc20Abi, isAddressEqual, type PublicClient, zeroAddress } from 'viem';
+import { type Address, decodeFunctionResult, encodeFunctionData, erc20Abi, isAddressEqual, zeroAddress } from 'viem';
 import type { Kit } from './clients';
 import { findings, note, step } from './trace';
 
@@ -32,16 +32,19 @@ async function handoverReads(kit: Kit, request: AttemptRequest, block: PinnedBlo
   };
 }
 
+/** Reads an address's native balance at a block number; the `IProvider` has no such read. */
+export type NativeBalance = (address: Address, blockNumber: number) => Promise<bigint>;
+
 /**
- * The account's balance in the order's asset at the pinned block: the native balance through the viem client's
- * `getBalance` for the zero-address token, else the ERC-20's `balanceOf`. A zero order has no payment leg and reads nothing.
+ * The account's balance in the order's asset at the pinned block: the native balance through `nativeBalance` for the
+ * zero-address token, else the ERC-20's `balanceOf`. A zero order has no payment leg and reads nothing.
  */
-async function orderBalance(provider: IProvider, client: PublicClient, request: AttemptRequest, block: PinnedBlock): Promise<bigint> {
+async function orderBalance(provider: IProvider, nativeBalance: NativeBalance, request: AttemptRequest, block: PinnedBlock): Promise<bigint> {
   const { token, amount } = request.order;
 
   if (amount === 0n) return 0n;
 
-  if (isAddressEqual(token, zeroAddress)) return client.getBalance({ address: request.account, blockNumber: BigInt(block.number) });
+  if (isAddressEqual(token, zeroAddress)) return nativeBalance(request.account, block.number);
 
   const data = encodeFunctionData({ abi: erc20Abi, functionName: 'balanceOf', args: [request.account] });
   const answer = await provider.call(token, data, request.account, block.number);
@@ -56,7 +59,7 @@ async function orderBalance(provider: IProvider, client: PublicClient, request: 
 export async function checkRequest(
   kit: Kit,
   provider: IProvider,
-  client: PublicClient,
+  nativeBalance: NativeBalance,
   request: AttemptRequest | CancelRequest,
   moment: Moment,
 ): Promise<void> {
@@ -73,7 +76,7 @@ export async function checkRequest(
     configuration: kit.configuration,
     paused: await Promise.all(methods.map(async (method) => ({ method, paused: await kit.policyManager.paused(method, block) }))),
     implementedMethods: kit.method.modules(kit.descriptor),
-    ...(opening ? { handover: await handoverReads(kit, request, block), balance: await orderBalance(provider, client, request, block) } : {}),
+    ...(opening ? { handover: await handoverReads(kit, request, block), balance: await orderBalance(provider, nativeBalance, request, block) } : {}),
   };
 
   note('pinned block', block.number);

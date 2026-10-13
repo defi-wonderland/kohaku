@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Client flows</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 960px; padding: 16px; }
+      fieldset { margin: 12px 0; }
+      label { display: block; margin: 4px 0; }
+      label input, label textarea { display: block; font-family: monospace; width: 100%; box-sizing: border-box; }
+      textarea { min-height: 72px; }
+      button { margin: 4px 8px 4px 0; padding: 6px 12px; }
+      pre { background: #f4f4f4; overflow-x: auto; padding: 8px; white-space: pre-wrap; word-break: break-all; }
+      #status { font-weight: bold; }
+      #trace { max-height: 480px; overflow-y: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>Social recovery: the client flows</h1>
+    <p>
+      The setup and recovery clients against the Sepolia deployment, through your browser wallet. The connected account
+      sends every transaction; switch accounts in the wallet to act as a guardian, then connect again. No key and no RPC
+      URL is in this page: every read and every transaction goes through the wallet.
+    </p>
+    <button id="connect" type="button">Connect wallet</button>
+    <p id="connection">Not connected.</p>
+    <p id="status"></p>
+
+    <h2>1. Deployment</h2>
+    <fieldset>
+      <label>Policy manager <input id="manager" /></label>
+      <label>Wallet (ECDSA) method <input id="method-ecdsa" /></label>
+      <label>Passkey method <input id="method-passkey" /></label>
+      <label>Aadhaar method (empty: the zero address) <input id="method-aadhaar" /></label>
+      <label>zkPassport method (empty: the zero address) <input id="method-zkpassport" /></label>
+      <label>Recovery action <input id="action" /></label>
+      <label>Ambire implementation <input id="implementation" /></label>
+      <label>Deploy block <input id="deploy-block" /></label>
+      <label>Ambire factory (Create only) <input id="factory" /></label>
+      <label>Factory deploy function <input id="factory-deploy" /></label>
+      <label>Expected manager version (optional) <input id="manager-version" /></label>
+      <label>Existing account address (optional; empty: the EOA stand-in) <input id="account-address" /></label>
+      <button id="apply" type="button">Apply</button>
+    </fieldset>
+
+    <h2>2. Holder</h2>
+    <fieldset>
+      <legend>Account</legend>
+      <label>Salt (32 bytes; drawn at random, or typed to re-use one) <input id="salt" /></label>
+      <button id="new-salt" type="button">New salt</button>
+      <button id="create" type="button">Create an Ambire account</button>
+      <button id="select" type="button">Select the existing account</button>
+      <button id="stand-in" type="button">EOA stand-in</button>
+      <p id="account-line"></p>
+    </fieldset>
+    <fieldset>
+      <legend>State</legend>
+      <button id="refresh-state" type="button">Refresh state</button>
+      <pre id="state-out"></pre>
+    </fieldset>
+    <fieldset>
+      <legend>Setup</legend>
+      <label>Guardian addresses (one per line or comma-separated) <textarea id="guardians"></textarea></label>
+      <label>Threshold <input id="threshold" value="2" /></label>
+      <label>Wait in seconds <input id="wait" value="120" /></label>
+      <label>Backup password <input id="password" type="password" /></label>
+      <button id="run-setup" type="button">Validate, describe, prepare and commit</button>
+    </fieldset>
+    <fieldset>
+      <legend>Attempt</legend>
+      <label>New authority (another of your wallet's accounts) <input id="new-authority" /></label>
+      <label>Order token (the zero address for the native asset) <input id="order-token" value="0x0000000000000000000000000000000000000000" /></label>
+      <label>Order amount (base units) <input id="order-amount" value="0" /></label>
+      <label>Order payee (empty: the connected account) <input id="order-payee" /></label>
+      <button id="gather" type="button">Start the gathering</button>
+      <div id="requests"></div>
+      <label>One approver reply (JSON) <textarea id="reply-in"></textarea></label>
+      <button id="file-reply" type="button">File the reply</button>
+      <button id="submit-attempt" type="button">Complete, validate and start the attempt</button>
+    </fieldset>
+    <fieldset>
+      <legend>Execute</legend>
+      <button id="refresh-attempt" type="button">Refresh</button>
+      <button id="execute" type="button" disabled>Execute the handover</button>
+      <pre id="execute-out"></pre>
+    </fieldset>
+
+    <h2>3. Guardian</h2>
+    <fieldset>
+      <label>Approver request (JSON) <textarea id="request-in"></textarea></label>
+      <button id="sign" type="button">Sign with the connected account</button>
+      <pre id="reply-out"></pre>
+      <button id="copy-reply" type="button">Copy the reply</button>
+    </fieldset>
+
+    <h2>Trace</h2>
+    <button id="clear-trace" type="button">Clear</button>
+    <pre id="trace"></pre>
+    <script type="module" src="/src/web/main.ts"></script>
+  </body>
+</html>

@@ -3,7 +3,8 @@ import { assembled, openAttempt } from './attempt';
 import type { Env } from './env';
 import { sendAsAccount, sendFromSponsor } from './send';
 import { openSession, type Session, sponsorAddress } from './session';
-import { check, note, runIfMain, step } from './trace';
+import { runIfMain } from './run';
+import { check, note, step } from './trace';
 
 /** The live attempt, or a fresh one opened for the cancel to stop. */
 async function waitingAttempt(session: Session): Promise<Attempt> {

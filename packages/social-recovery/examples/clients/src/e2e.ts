@@ -3,7 +3,8 @@ import { checkArmingBatch } from './checks';
 import { loadEnv } from './env';
 import { runRecovery } from './recovery';
 import { runSetup } from './setup';
-import { check, runIfMain, step } from './trace';
+import { runIfMain } from './run';
+import { check, step } from './trace';
 
 /**
  * Setup, recovery (default wait mode, polling to the end of the wait) and cancel in one run, each asserting on the

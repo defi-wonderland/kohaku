@@ -26,7 +26,7 @@ const dataOf = (cause: unknown): Hex | undefined => {
   return undefined;
 };
 
-/** A node's message for a call it could not run to its end, never a revert of the contract's own. */
+/** A node's message, carrying no revert data, for a call it could not run to its end. */
 const RESOURCE_FAILURE = /gas required exceeds allowance|out of gas|exceeds block gas limit|gas limit reached/i;
 
 /** A node's message for a revert that carried no bytes. */
@@ -37,9 +37,11 @@ const REVERT_CODE = 3;
 
 /**
  * The raw revert bytes a failed `eth_call` carried, or `undefined` where the failure is not a confirmed revert.
- * A confirmed revert is an RPC error carrying revert data, or one whose node reports a revert with no data (then `0x`).
- * A node's gas-allowance or other resource failure and every transport failure are not reverts: viem classes the
- * allowance message as `ExecutionRevertedError` too, so the class alone is never taken as proof.
+ * The bytes are looked at first: an RPC error carrying non-empty revert data is a confirmed revert whatever its
+ * message says, since a contract's own reason may contain resource words. With no data, a node's gas-allowance or other
+ * resource message is not a revert (viem classes the allowance message as `ExecutionRevertedError` too, so the class
+ * alone is never taken as proof); otherwise a node reporting a revert with no data gives `0x`. Every transport failure
+ * is not a revert.
  */
 function revertData(error: unknown): Hex | undefined {
   if (!(error instanceof BaseError)) return undefined;
@@ -50,11 +52,13 @@ function revertData(error: unknown): Hex | undefined {
 
   const rpc = error.walk((cause) => cause instanceof RpcRequestError);
 
-  if (!(rpc instanceof RpcRequestError) || RESOURCE_FAILURE.test(rpc.details)) return undefined;
+  if (!(rpc instanceof RpcRequestError)) return undefined;
 
   const data = dataOf(rpc);
 
   if (data !== undefined && data !== '0x') return data;
+
+  if (RESOURCE_FAILURE.test(rpc.details)) return undefined;
 
   return rpc.code === REVERT_CODE || REVERTED.test(rpc.details) ? '0x' : undefined;
 }

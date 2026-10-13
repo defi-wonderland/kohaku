@@ -11,12 +11,12 @@ import {
   SetupClient,
   walletMethod,
 } from '@kohaku-eth/social-recovery';
-import type { Address } from 'viem';
+import { type Address, isAddressEqual } from 'viem';
 import type { HolderAccount } from '../account';
 import type { Kit } from '../clients';
 import { signerRecovery } from '../signer-recovery';
 import { note, show, step } from '../trace';
-import { BLOCK_TAGS, clientConfiguration } from './config';
+import { BLOCK_TAGS, clientConfiguration, tokenAllowlist } from './config';
 import { accountLine, button, stateOut } from './page';
 import type { WalletProvider } from './provider';
 import { type Connection, onReset, settled } from './wallet';
@@ -50,7 +50,7 @@ export function buildKit(provider: WalletProvider, descriptor: DeploymentDescrip
   const method = walletMethod();
   const methods: MethodRegistry = new Map([[descriptor.methodEcdsa, method]]);
   const events = new EventManager(provider, descriptor, account.address, action, methods, { logChunkSize: 10000 });
-  const configuration = clientConfiguration(key, account.creation);
+  const configuration = clientConfiguration(key, tokenAllowlist(), account.creation);
   const setup = new SetupClient(
     provider, descriptor, account.address, action, configuration, 'integrator',
     policyManager, recoveryAction, events, methods, codec, signerRecovery,
@@ -78,6 +78,21 @@ export function useAccount(conn: Connection, account: HolderAccount): Kit {
   accountLine.textContent = `Account ${account.address}${account.sendsSelfCalls ? '' : ' (EOA stand-in: reads and prepares only)'}.`;
 
   return kit;
+}
+
+/** The cached kit, rebuilt over the same account and candidate key when the order's token is not in its allowlist. */
+export function kitForOrder(token: Address): Kit {
+  const { kit, provider, account } = requireKit();
+  const [key] = kit.configuration.candidateKeys;
+
+  if (key === undefined || kit.configuration.tokens.some((listed) => isAddressEqual(listed, token))) return kit;
+
+  const rebuilt = buildKit(provider, kit.descriptor, account, key);
+
+  note('token allowlist', rebuilt.configuration.tokens);
+  holder.kit = rebuilt;
+
+  return rebuilt;
 }
 
 /** The cached kit, provider and account; throws until an account is chosen. */

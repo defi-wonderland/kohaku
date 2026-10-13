@@ -137,12 +137,21 @@ export async function deploymentDescriptor(inputs: DeploymentInputs, provider: I
   return { ...descriptor, managerVersion };
 }
 
+/** The token allowlist: the native asset, and the attempt form's order token beside it when one is set. */
+export function tokenAllowlist(): readonly Address[] {
+  const token = valueOf('order-token');
+
+  if (!isAddress(token, { strict: false }) || getAddress(token) === zeroAddress) return [zeroAddress];
+
+  return [zeroAddress, getAddress(token)];
+}
+
 /**
  * The page's client configuration, the Node scripts' values: two-day default and short waits, a thirty-day maximum,
  * a one-day request window (one-hour floor), a twelve-hour cancel window and the rule cost bound; the holder as the
- * one candidate key and the native asset as the token allowlist.
+ * one candidate key and `tokens` as the token allowlist.
  */
-export function clientConfiguration(holder: Address, creation?: CreationRecord): ClientConfiguration {
+export function clientConfiguration(holder: Address, tokens: readonly Address[], creation?: CreationRecord): ClientConfiguration {
   return {
     defaultWait: 172800,
     shortWait: 172800,
@@ -154,7 +163,7 @@ export function clientConfiguration(holder: Address, creation?: CreationRecord):
     candidateKeys: [holder],
     blockTags: BLOCK_TAGS,
     logChunkSize: 10000,
-    tokens: [zeroAddress],
+    tokens,
     simulate: true,
   };
 }

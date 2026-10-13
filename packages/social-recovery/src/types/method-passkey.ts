@@ -29,11 +29,6 @@ export type AssertionCheck =
   | 'rp-id-hash-mismatch'
   | 'user-not-present'
   | 'user-not-verified'
-  | 'client-data-malformed'
-  | 'client-data-type'
-  | 'challenge-mismatch'
+  | 'client-data-prefix'
   | 'signature-out-of-range'
   | 'signature-invalid';
-
-/** Where the top-level `type` and `challenge` members start, each absent when the document lacks it. */
-export type ClientDataMembers = { readonly typeIndex?: number; readonly challengeIndex?: number };

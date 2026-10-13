@@ -2,9 +2,8 @@ import { createPublicKey, verify as nodeVerify } from 'node:crypto';
 import { decodeAbiParameters, hexToString } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { passkeyMethod } from '../../src';
-import type { Hex } from '../../src/interfaces';
-import { checkAssertion } from '../../src/method-passkey/check';
-import { decodePasskeyConfig, decodePasskeyProof } from '../../src/method-passkey/codec';
+import type { Ctx, Hex } from '../../src/interfaces';
+import { CHAIN_CLIENT_DATA_PREFIX, chainAcceptsClientData } from './chain-model';
 import {
   assertionRecord,
   type AssertionParts,
@@ -32,7 +31,7 @@ const key = freshKey();
 const config = configOfKey(key, rpId);
 const ctx = ctxFor(config);
 const expected = base64url(bytesOf(ctx.digest));
-const input = method.signingInput(ctx, { relyingPartyId: rpId });
+const prefix = `${CHAIN_CLIENT_DATA_PREFIX}${expected}"`;
 
 /** Signs this exact text as client data, retrying the counter until s is already low. */
 const signed = (text: string): AssertionParts => {
@@ -72,122 +71,48 @@ const signatureHoldsOverExactText = (signer: Key, parts: AssertionParts): boolea
   );
 };
 
-const judge = async (text: string) => {
+const judge = async (text: string, under: Ctx = ctx) => {
   const parts = signed(text);
   const proof = proofOf(parts);
+  const input = method.signingInput(under, { relyingPartyId: rpId });
 
   return {
     parts,
     signatureValid: signatureHoldsOverExactText(key, parts),
-    check: checkAssertion(decodePasskeyConfig(config), ctx.digest, decodePasskeyProof(proof)),
-    verdict: await method.verify(ctx, proof),
-    reply: await method.replyFrom(ctx, input, { assertion: assertionRecord(parts) }),
+    chain: chainAcceptsClientData(text, bytesOf(under.digest)),
+    verdict: await method.verify(under, proof),
+    reply: await method.replyFrom(under, input, { assertion: assertionRecord(parts) }),
   };
 };
 
+const REFUSED = { kind: 'reply-failure', cause: 'material-rejected' };
+
 const tail = '"origin":"https://wallet.example","crossOrigin":false';
 
-describe('client data: only top-level members count, and only one well-formed object', () => {
-  const rejected: readonly (readonly [string, string, string])[] = [
-    [
-      'the expected type and challenge nested under "extra", the top-level ones wrong',
-      `{"extra":{"type":"webauthn.get","challenge":"${expected}"},"type":"webauthn.create","challenge":"wrong",${tail}}`,
-      'client-data-type',
-    ],
-    [
-      'type and challenge only nested, none at the top level',
-      `{"extra":{"type":"webauthn.get","challenge":"${expected}"},${tail}}`,
-      'client-data-type',
-    ],
-    [
-      'a nested type alone beside a correct top-level challenge',
-      `{"challenge":"${expected}","inner":{"type":"webauthn.get"},${tail}}`,
-      'client-data-type',
-    ],
-    [
-      'duplicate top-level type, good first and bad last',
-      `{"type":"webauthn.get","challenge":"${expected}",${tail},"type":"webauthn.create"}`,
-      'client-data-malformed',
-    ],
-    [
-      'duplicate top-level type, bad first and good last',
-      `{"type":"webauthn.create","challenge":"${expected}",${tail},"type":"webauthn.get"}`,
-      'client-data-malformed',
-    ],
-    [
-      'duplicate top-level challenge with conflicting values',
-      `{"type":"webauthn.get","challenge":"${expected}",${tail},"challenge":"wrong"}`,
-      'client-data-malformed',
-    ],
-    [
-      'a duplicate type spelled with an escape, \\u0074ype',
-      `{"type":"webauthn.get","challenge":"${expected}",${tail},"\\u0074ype":"webauthn.create"}`,
-      'client-data-malformed',
-    ],
-    [
-      'a valid object followed by garbage',
-      `{"type":"webauthn.get","challenge":"${expected}",${tail}}garbage`,
-      'client-data-malformed',
-    ],
-    [
-      'a valid object followed by whitespace (stricter than JSON.parse)',
-      `{"type":"webauthn.get","challenge":"${expected}",${tail}} `,
-      'client-data-malformed',
-    ],
-    [
-      'a valid object followed by a newline',
-      `{"type":"webauthn.get","challenge":"${expected}",${tail}}\n`,
-      'client-data-malformed',
-    ],
-    [
-      'a valid object preceded by whitespace',
-      ` {"type":"webauthn.get","challenge":"${expected}",${tail}}`,
-      'client-data-malformed',
-    ],
-  ];
-
-  for (const [name, text, reason] of rejected) {
-    it(`${name}: validly signed, still ${reason}, rejected, and a typed ReplyFailure`, async () => {
-      const outcome = await judge(text);
-
-      expect(outcome.signatureValid).toBe(true);
-      expect(outcome.check).toBe(reason);
-      expect(outcome.verdict).toBe('rejected');
-      expect(outcome.reply).toEqual({ kind: 'reply-failure', cause: 'material-rejected' });
-    });
-  }
-
-  it('the escaped spelling really is a duplicate name to JSON.parse, which keeps the last', () => {
-    const text = `{"type":"webauthn.get","\\u0074ype":"webauthn.create"}`;
-
-    expect(JSON.parse(text)).toEqual({ type: 'webauthn.create' });
+describe('client data: the exact opening the chain requires', () => {
+  it('the opening is the type member, then the challenge member holding the unpadded base64url digest and its closing quote', () => {
+    expect(prefix).toBe(`{"type":"webauthn.get","challenge":"${expected}"`);
+    expect(expected).toHaveLength(43);
+    expect(expected).not.toMatch(/[=+/]/);
   });
 
   const satisfied: readonly (readonly [string, string])[] = [
+    ['the opening and the browser\'s usual members', `${prefix},${tail}}`],
+    ['the opening alone, closed at once', `${prefix}}`],
     [
-      'the first member is a nested object holding "type":"x"',
-      `{"note":{"type":"x"},"type":"webauthn.get","challenge":"${expected}",${tail}}`,
+      'the opening, then Chrome\'s own extra member',
+      `${prefix},${tail},"other_keys_can_be_added_here":"do not compare clientDataJSON against a template. See https://goo.gl/yabPex"}`,
     ],
-    [
-      'the first member nests a full wrong type and challenge',
-      `{"note":{"type":"webauthn.create","challenge":"wrong"},"type":"webauthn.get","challenge":"${expected}",${tail}}`,
-    ],
-    [
-      'extra top-level members in an unusual order, spaced and escaped, type and challenge last',
-      `{"crossOrigin":false, "zeta": [1, {"type": "n", "challenge": "m"}], "origin":"https://wallet.example","al\\u0070ha":"x\\"y","challenge":"${expected}","type":"webauthn.get"}`,
-    ],
-    [
-      'an unrelated top-level key repeated is still permitted',
-      `{"type":"webauthn.get","challenge":"${expected}","origin":"a","origin":"b"}`,
-    ],
+    ['the opening, then a nested object holding other type and challenge members', `${prefix},"note":{"type":"webauthn.create","challenge":"wrong"},${tail}}`],
+    ['the opening, then an unrelated member repeated', `${prefix},"origin":"a","origin":"b"}`],
   ];
 
   for (const [name, text] of satisfied) {
-    it(`${name}: ok, satisfied, and the reply carries the exact bytes`, async () => {
+    it(`${name}: the chain accepts it, verify is satisfied, and the reply carries the exact bytes`, async () => {
       const outcome = await judge(text);
 
       expect(outcome.signatureValid).toBe(true);
-      expect(outcome.check).toBe('ok');
+      expect(outcome.chain).toBe(true);
       expect(outcome.verdict).toBe('satisfied');
       expect(typeof outcome.reply).toBe('string');
 
@@ -201,19 +126,94 @@ describe('client data: only top-level members count, and only one well-formed ob
     });
   }
 
-  it('the signed hash is over the original text: a re-serialised document differs and the signature over the original is what verifies', async () => {
-    const text = satisfied[2]?.[1] ?? '';
+  const rejected: readonly (readonly [string, string])[] = [
+    ['the first member is a nested object holding "type":"x" (accepted before, refused on chain)', `{"note":{"type":"x"},"type":"webauthn.get","challenge":"${expected}",${tail}}`],
+    [
+      'the first member nests a full wrong type and challenge (accepted before, refused on chain)',
+      `{"note":{"type":"webauthn.create","challenge":"wrong"},"type":"webauthn.get","challenge":"${expected}",${tail}}`,
+    ],
+    [
+      'extra members first, spaced and escaped, challenge and type last (accepted before, refused on chain)',
+      `{"crossOrigin":false, "zeta": [1, {"type": "n", "challenge": "m"}], "origin":"https://wallet.example","al\\u0070ha":"x\\"y","challenge":"${expected}","type":"webauthn.get"}`,
+    ],
+    ['the members reordered: challenge first, then type', `{"challenge":"${expected}","type":"webauthn.get",${tail}}`],
+    ['the challenge with base64 padding', `{"type":"webauthn.get","challenge":"${expected}=",${tail}}`],
+    ['one leading space', ` ${prefix},${tail}}`],
+    ['a leading newline', `\n${prefix},${tail}}`],
+    ['a leading byte-order mark', `\uFEFF${prefix},${tail}}`],
+    ['the type member\'s name upper-cased', `{"TYPE":"webauthn.get","challenge":"${expected}",${tail}}`],
+    ['the type value upper-cased', `{"type":"WEBAUTHN.GET","challenge":"${expected}",${tail}}`],
+    ['a space after a colon in the opening', `{"type": "webauthn.get","challenge":"${expected}",${tail}}`],
+    ['a space after the comma in the opening', `{"type":"webauthn.get", "challenge":"${expected}",${tail}}`],
+    ['a newline after the brace', `{\n"type":"webauthn.get","challenge":"${expected}",${tail}}`],
+    ['the type spelled with an escape, \\u0074ype', `{"\\u0074ype":"webauthn.get","challenge":"${expected}",${tail}}`],
+    ['the challenge not followed by its closing quote', `{"type":"webauthn.get","challenge":"${expected},${tail}}`],
+    ['the challenge with one more character', `{"type":"webauthn.get","challenge":"${expected}A",${tail}}`],
+    ['the challenge one character short', `{"type":"webauthn.get","challenge":"${expected.slice(0, -1)}",${tail}}`],
+    ['the creation type', `{"type":"webauthn.create","challenge":"${expected}",${tail}}`],
+    ['a member between type and challenge', `{"type":"webauthn.get","origin":"https://wallet.example","challenge":"${expected}","crossOrigin":false}`],
+    ['the expected type and challenge nested under "extra", the top-level ones wrong', `{"extra":{"type":"webauthn.get","challenge":"${expected}"},"type":"webauthn.create","challenge":"wrong",${tail}}`],
+    ['type and challenge only nested', `{"extra":{"type":"webauthn.get","challenge":"${expected}"},${tail}}`],
+    ['a duplicate type, the bad one first', `{"type":"webauthn.create","challenge":"${expected}",${tail},"type":"webauthn.get"}`],
+    ['the opening cut before the closing quote', `${CHAIN_CLIENT_DATA_PREFIX}${expected}`],
+    ['empty text', ''],
+  ];
+
+  for (const [name, text] of rejected) {
+    it(`${name}: validly signed, the chain refuses it, verify is rejected and replyFrom a typed failure`, async () => {
+      const outcome = await judge(text);
+
+      expect(outcome.signatureValid).toBe(true);
+      expect(outcome.chain).toBe(false);
+      expect(outcome.verdict).toBe('rejected');
+      expect(outcome.reply).toEqual(REFUSED);
+    });
+  }
+
+  it('the standard base64 alphabet in place of the url alphabet is rejected, the url spelling satisfied', async () => {
+    const digest = `0x${'fb'.repeat(32)}` as Hex;
+    const under = ctxFor(config, { digest });
+    const url = Buffer.from(bytesOf(digest)).toString('base64url');
+    const standard = Buffer.from(bytesOf(digest)).toString('base64').replace(/=+$/, '');
+
+    expect(url).not.toBe(standard);
+    expect((await judge(`{"type":"webauthn.get","challenge":"${standard}",${tail}}`, under)).verdict).toBe('rejected');
+    expect((await judge(`{"type":"webauthn.get","challenge":"${url}",${tail}}`, under)).verdict).toBe('satisfied');
+  });
+
+  it('the signed hash is over the original text: the same signature over a re-serialised document is rejected', async () => {
+    const text = `${prefix}, "origin" : "https://wallet.example"}`;
     const reserialised = JSON.stringify(JSON.parse(text));
     const parts = signed(text);
 
     expect(reserialised).not.toBe(text);
-    expect(Buffer.from(sha256(reserialised)).equals(Buffer.from(sha256(text)))).toBe(false);
     expect(await method.verify(ctx, proofOf(parts))).toBe('satisfied');
-
-    // The same signature presented with the re-serialised text fails the signature, not the document.
-    const swapped = { ...parts, clientDataJSON: reserialised };
-
-    expect(checkAssertion(decodePasskeyConfig(config), ctx.digest, decodePasskeyProof(proofOf(swapped)))).toBe('signature-invalid');
-    expect(await method.verify(ctx, proofOf(swapped))).toBe('rejected');
+    expect(await method.verify(ctx, proofOf({ ...parts, clientDataJSON: reserialised }))).toBe('rejected');
   });
+});
+
+describe('client data: what follows the opening, which the chain signs but does not read', () => {
+  const unruled: readonly (readonly [string, string])[] = [
+    ['trailing whitespace after the object', `${prefix},${tail}} `],
+    ['a trailing newline after the object', `${prefix},${tail}}\n`],
+    ['garbage after the object', `${prefix},${tail}}garbage`],
+    ['a second challenge after the opening', `${prefix},${tail},"challenge":"wrong"}`],
+    ['a second type after the opening', `${prefix},${tail},"type":"webauthn.create"}`],
+    ['a second type spelled with an escape', `${prefix},${tail},"\\u0074ype":"webauthn.create"}`],
+    ['bytes that are not JSON right after the opening', `${prefix}garbage`],
+    ['the opening and nothing more', prefix],
+  ];
+
+  for (const [name, text] of unruled) {
+    it(`${name}: the chain accepts it; verify and replyFrom agree, and the SDK is never wider`, async () => {
+      const outcome = await judge(text);
+
+      expect(outcome.signatureValid).toBe(true);
+      expect(outcome.chain).toBe(true);
+      expect(['satisfied', 'rejected']).toContain(outcome.verdict);
+
+      if (outcome.verdict === 'satisfied') expect(outcome.reply).toBe(proofOf(outcome.parts));
+      else expect(outcome.reply).toEqual(REFUSED);
+    });
+  }
 });

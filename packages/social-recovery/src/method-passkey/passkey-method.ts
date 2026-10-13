@@ -15,13 +15,23 @@ import type {
   Verdict,
 } from '../interfaces';
 import {
+  METHOD_PASSKEY_ASSERTION_MATERIAL,
+  METHOD_PASSKEY_CREDENTIAL_ID_PARAM,
+  METHOD_PASSKEY_CREDENTIAL_MATERIAL,
   METHOD_PASSKEY_DEVICE_BINDING,
   METHOD_PASSKEY_DEVICE_KIND,
+  METHOD_PASSKEY_ENROLL_INPUT_NAME,
   METHOD_PASSKEY_ERROR_PREFIX,
   METHOD_PASSKEY_MATERIAL_REJECTED,
+  METHOD_PASSKEY_OPTIONS_MEMBER,
+  METHOD_PASSKEY_PARAMS_NAME,
+  METHOD_PASSKEY_RELYING_PARTY_ID_PARAM,
+  METHOD_PASSKEY_TEXT_PARAM_MESSAGE,
+  METHOD_PASSKEY_USER_NAME_PARAM,
   METHOD_PASSKEY_VECTOR_FILES,
 } from '../constants';
-import type { PasskeyConfig } from '../types';
+import { assertObject } from '../formats/guards';
+import type { PasskeyConfig } from '../types/method-passkey';
 import { readAssertion } from './assertion';
 import { memberOf, rpIdHashOf } from './bytes';
 import { checkAssertion } from './check';
@@ -39,7 +49,7 @@ const configOf = (config: Hex): PasskeyConfig | undefined => {
 
 const text = (value: unknown, name: string): string => {
   if (typeof value !== 'string' || value.length === 0) {
-    throw new TypeError(`${METHOD_PASSKEY_ERROR_PREFIX}: "${name}" must be a non-empty string`);
+    throw new TypeError(`${METHOD_PASSKEY_ERROR_PREFIX}: "${name}" ${METHOD_PASSKEY_TEXT_PARAM_MESSAGE}`);
   }
 
   return value;
@@ -54,7 +64,7 @@ export class PasskeyMethod implements IRecoveryMethod {
 
   readonly deviceBinding: DeviceBinding = METHOD_PASSKEY_DEVICE_BINDING;
 
-  readonly vector: readonly string[] = [...METHOD_PASSKEY_VECTOR_FILES];
+  readonly vector: readonly string[] = METHOD_PASSKEY_VECTOR_FILES;
 
   /** The `method-passkey` address the descriptor names. */
   modules(descriptor: DeploymentDescriptor): readonly Address[] {
@@ -63,25 +73,37 @@ export class PasskeyMethod implements IRecoveryMethod {
 
   /**
    * A ceremony carrying the creation options and the relying-party id `configFrom` reads back.
-   * Throws unless `params.relyingPartyId` and `params.userName` are non-empty strings.
+   * A `TypeError` unless `params` is an object whose `relyingPartyId` and `userName` are non-empty strings.
    */
   enrollInput(params: Params): EnrollInput {
-    const relyingPartyId = text(params['relyingPartyId'], 'relyingPartyId');
-    const userName = text(params['userName'], 'userName');
+    assertObject(params, `${METHOD_PASSKEY_ERROR_PREFIX} ${METHOD_PASSKEY_PARAMS_NAME}`);
 
-    return { kind: 'ceremony', relyingPartyId, userName, options: creationOptions(relyingPartyId, userName) };
+    const relyingPartyId = text(params[METHOD_PASSKEY_RELYING_PARTY_ID_PARAM], METHOD_PASSKEY_RELYING_PARTY_ID_PARAM);
+    const userName = text(params[METHOD_PASSKEY_USER_NAME_PARAM], METHOD_PASSKEY_USER_NAME_PARAM);
+
+    return {
+      kind: 'ceremony',
+      [METHOD_PASSKEY_RELYING_PARTY_ID_PARAM]: relyingPartyId,
+      [METHOD_PASSKEY_USER_NAME_PARAM]: userName,
+      [METHOD_PASSKEY_OPTIONS_MEMBER]: creationOptions(relyingPartyId, userName),
+    };
   }
 
-  /** The config of the key in `material.credential`, or `EnrollFailure` where it is not P-256 or has another rp hash. */
+  /**
+   * The config of the key in `material.credential`, or `EnrollFailure` where it is not P-256 or has another rp hash.
+   * A `TypeError` where `input` is not an object.
+   */
   async configFrom(input: EnrollInput, material: Material): Promise<Hex | EnrollFailure> {
-    const relyingPartyId: unknown = input['relyingPartyId'];
+    assertObject(input, `${METHOD_PASSKEY_ERROR_PREFIX} ${METHOD_PASSKEY_ENROLL_INPUT_NAME}`);
+
+    const relyingPartyId: unknown = input[METHOD_PASSKEY_RELYING_PARTY_ID_PARAM];
 
     if (input.kind !== 'ceremony' || typeof relyingPartyId !== 'string' || relyingPartyId.length === 0) {
       return METHOD_PASSKEY_MATERIAL_REJECTED;
     }
 
     try {
-      const key = enrolledKey(memberOf(material, 'credential'));
+      const key = enrolledKey(memberOf(material, METHOD_PASSKEY_CREDENTIAL_MATERIAL));
       const rpIdHash = rpIdHashOf(relyingPartyId);
 
       if (key === undefined || key.rpIdHash !== rpIdHash) return METHOD_PASSKEY_MATERIAL_REJECTED;
@@ -94,16 +116,16 @@ export class PasskeyMethod implements IRecoveryMethod {
 
   /**
    * The request options with the digest as the challenge.
-   * Throws before any device is asked unless `params.relyingPartyId`, and `params.credentialId` where given, are non-empty strings.
+   * A `TypeError` before any device is asked unless `params.relyingPartyId`, and `params.credentialId` where given, are non-empty strings.
    */
   signingInput(ctx: Ctx, params?: Params): Input {
-    const relyingPartyId = text(params?.['relyingPartyId'], 'relyingPartyId');
-    const credentialId = optionalText(params?.['credentialId'], 'credentialId');
+    const relyingPartyId = text(params?.[METHOD_PASSKEY_RELYING_PARTY_ID_PARAM], METHOD_PASSKEY_RELYING_PARTY_ID_PARAM);
+    const credentialId = optionalText(params?.[METHOD_PASSKEY_CREDENTIAL_ID_PARAM], METHOD_PASSKEY_CREDENTIAL_ID_PARAM);
 
     return {
-      relyingPartyId,
-      ...(credentialId === undefined ? {} : { credentialId }),
-      options: requestOptions(ctx.digest, relyingPartyId, credentialId),
+      [METHOD_PASSKEY_RELYING_PARTY_ID_PARAM]: relyingPartyId,
+      ...(credentialId === undefined ? {} : { [METHOD_PASSKEY_CREDENTIAL_ID_PARAM]: credentialId }),
+      [METHOD_PASSKEY_OPTIONS_MEMBER]: requestOptions(ctx.digest, relyingPartyId, credentialId),
     };
   }
 
@@ -113,7 +135,7 @@ export class PasskeyMethod implements IRecoveryMethod {
 
     try {
       const config = configOf(ctx.request.config);
-      const proof = readAssertion(memberOf(material, 'assertion'));
+      const proof = readAssertion(memberOf(material, METHOD_PASSKEY_ASSERTION_MATERIAL));
 
       if (config === undefined || proof === undefined) return METHOD_PASSKEY_MATERIAL_REJECTED;
 

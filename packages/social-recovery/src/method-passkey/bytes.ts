@@ -1,18 +1,7 @@
 import * as Base64 from 'ox/Base64';
-import { bytesToHex, hexToBytes, isHex, sha256, stringToHex } from 'viem';
-import { METHOD_PASSKEY_ARRAY_BUFFER_TAG, METHOD_PASSKEY_UINT256_LIMIT, METHOD_PASSKEY_WORD_HEX_LENGTH } from '../constants';
+import { bytesToHex, hexToBytes, sha256, stringToHex } from 'viem';
+import { METHOD_PASSKEY_ARRAY_BUFFER_TAG } from '../constants';
 import type { Hex } from '../interfaces';
-
-/** An even-length `0x` hex string, either case. */
-export const isHexBytes = (value: unknown): value is Hex =>
-  typeof value === 'string' && isHex(value, { strict: true }) && value.length % 2 === 0;
-
-/** A 32-byte word as hex. */
-export const isWord = (value: unknown): value is Hex => isHexBytes(value) && value.length === METHOD_PASSKEY_WORD_HEX_LENGTH;
-
-/** A `uint256` value. */
-export const isUint256 = (value: unknown): value is bigint =>
-  typeof value === 'bigint' && value >= 0n && value < METHOD_PASSKEY_UINT256_LIMIT;
 
 /** The relying-party hash, `sha256` of the id's UTF-8 bytes. */
 export const rpIdHashOf = (relyingPartyId: string): Hex => sha256(stringToHex(relyingPartyId));

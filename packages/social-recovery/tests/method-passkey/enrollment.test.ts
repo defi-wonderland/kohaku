@@ -77,10 +77,12 @@ describe('enrollInput', () => {
   });
 
   it('refuses parameters that are not two non-empty strings by throwing, before any device is asked', () => {
-    expect(() => method.enrollInput({ relyingPartyId: rpId })).toThrow();
-    expect(() => method.enrollInput({ userName: 'alice' })).toThrow();
-    expect(() => method.enrollInput({ relyingPartyId: '', userName: 'alice' })).toThrow();
-    expect(() => method.enrollInput({ relyingPartyId: 7, userName: 'alice' })).toThrow();
+    expect(() => method.enrollInput({ relyingPartyId: rpId })).toThrow(TypeError);
+    expect(() => method.enrollInput({ relyingPartyId: rpId })).toThrow(/userName/);
+    expect(() => method.enrollInput({ userName: 'alice' })).toThrow(TypeError);
+    expect(() => method.enrollInput({ userName: 'alice' })).toThrow(/relyingPartyId/);
+    expect(() => method.enrollInput({ relyingPartyId: '', userName: 'alice' })).toThrow(TypeError);
+    expect(() => method.enrollInput({ relyingPartyId: 7, userName: 'alice' })).toThrow(TypeError);
   });
 });
 

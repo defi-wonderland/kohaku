@@ -3,6 +3,8 @@ import * as CoseKey from 'ox/CoseKey';
 import * as P256 from 'ox/P256';
 import {
   METHOD_PASSKEY_AAGUID_LENGTH,
+  METHOD_PASSKEY_ATTESTATION_OBJECT_MEMBER,
+  METHOD_PASSKEY_AUTH_DATA_MEMBER,
   METHOD_PASSKEY_AUTHENTICATOR_DATA_FLAGS_OFFSET,
   METHOD_PASSKEY_AUTHENTICATOR_DATA_MIN_LENGTH,
   METHOD_PASSKEY_COSE_ALGORITHM_ES256,
@@ -16,10 +18,11 @@ import {
   METHOD_PASSKEY_CREDENTIAL_ID_LENGTH_SIZE,
   METHOD_PASSKEY_FLAG_ATTESTED_CREDENTIAL,
   METHOD_PASSKEY_P256_COORDINATE_LENGTH,
+  METHOD_PASSKEY_RESPONSE_MEMBER,
   METHOD_PASSKEY_RP_ID_HASH_LENGTH,
 } from '../constants';
 import type { Hex } from '../interfaces';
-import type { EnrolledKey } from '../types';
+import type { EnrolledKey } from '../types/method-passkey';
 import { bufferBytes, hexOf, memberOf } from './bytes';
 
 const decodeCbor = (bytes: Uint8Array): unknown => {
@@ -66,11 +69,11 @@ const onCurve = (x: bigint, y: bigint): { x: bigint; y: bigint } | undefined => 
  * Read from the attestation object, since the Android WebView exposes no `getPublicKey()`.
  */
 export const enrolledKey = (credential: unknown): EnrolledKey | undefined => {
-  const attestationObject = bufferBytes(memberOf(memberOf(credential, 'response'), 'attestationObject'));
+  const attestationObject = bufferBytes(memberOf(memberOf(credential, METHOD_PASSKEY_RESPONSE_MEMBER), METHOD_PASSKEY_ATTESTATION_OBJECT_MEMBER));
 
   if (attestationObject === undefined) return undefined;
 
-  const authData = memberOf(decodeCbor(attestationObject), 'authData');
+  const authData = memberOf(decodeCbor(attestationObject), METHOD_PASSKEY_AUTH_DATA_MEMBER);
   const keyOffset = METHOD_PASSKEY_AUTHENTICATOR_DATA_MIN_LENGTH + METHOD_PASSKEY_AAGUID_LENGTH + METHOD_PASSKEY_CREDENTIAL_ID_LENGTH_SIZE;
 
   if (!(authData instanceof Uint8Array) || authData.length <= keyOffset) return undefined;

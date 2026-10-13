@@ -40,25 +40,40 @@ export const METHOD_PASSKEY_P256_COORDINATE_LENGTH = 32;
 /** The prefix byte of an uncompressed public key. */
 export const METHOD_PASSKEY_UNCOMPRESSED_POINT_PREFIX = 4;
 
-/** The type an assertion's client data carries (WebAuthn L2 §5.8.1). */
-export const METHOD_PASSKEY_WEBAUTHN_GET_TYPE = 'webauthn.get';
+/**
+ * The exact bytes an assertion's client data must begin with, as the deployed module requires: the type, then the
+ * challenge member up to the opening quote of its value. The digest's unpadded base64url and a closing quote follow.
+ */
+export const METHOD_PASSKEY_CLIENT_DATA_PREFIX = '{"type":"webauthn.get","challenge":"';
 
-/** The client data member names the check reads. */
+/** The quote that closes the challenge value right after the digest's base64url. */
+export const METHOD_PASSKEY_CLIENT_DATA_CHALLENGE_CLOSE = '"';
+
+/** The client data member names whose positions ox is handed. */
 export const METHOD_PASSKEY_CLIENT_DATA_TYPE_KEY = 'type';
 export const METHOD_PASSKEY_CLIENT_DATA_CHALLENGE_KEY = 'challenge';
 
-/** The exact type member an assertion's client data carries. */
-export const METHOD_PASSKEY_CLIENT_DATA_ASSERTION_TYPE_MEMBER = `"${METHOD_PASSKEY_CLIENT_DATA_TYPE_KEY}":"${METHOD_PASSKEY_WEBAUTHN_GET_TYPE}"`;
+/** Where the type member starts inside the required prefix. */
+export const METHOD_PASSKEY_CLIENT_DATA_TYPE_INDEX = METHOD_PASSKEY_CLIENT_DATA_PREFIX.indexOf(`"${METHOD_PASSKEY_CLIENT_DATA_TYPE_KEY}"`);
 
-/** The opening of the challenge member, which the digest's base64url text and a closing quote follow. */
-export const METHOD_PASSKEY_CLIENT_DATA_CHALLENGE_MEMBER_PREFIX = `"${METHOD_PASSKEY_CLIENT_DATA_CHALLENGE_KEY}":"`;
+/** Where the challenge member starts inside the required prefix. */
+export const METHOD_PASSKEY_CLIENT_DATA_CHALLENGE_INDEX = METHOD_PASSKEY_CLIENT_DATA_PREFIX.indexOf(
+  `"${METHOD_PASSKEY_CLIENT_DATA_CHALLENGE_KEY}"`,
+);
 
-/** Matches a JSON string or a structural character, skipping numbers and literals. */
-export const METHOD_PASSKEY_CLIENT_DATA_TOKEN = /"(?:[^"\\]|\\.)*"|[{}[\],]/g;
+/** The member of a WebAuthn credential holding the authenticator's response. */
+export const METHOD_PASSKEY_RESPONSE_MEMBER = 'response';
 
-/** The structural characters that open and close a JSON object or array. */
-export const METHOD_PASSKEY_CLIENT_DATA_OPENERS: ReadonlySet<string> = new Set(['{', '[']);
-export const METHOD_PASSKEY_CLIENT_DATA_CLOSERS: ReadonlySet<string> = new Set(['}', ']']);
+/** The member of a creation's response holding the CBOR attestation object. */
+export const METHOD_PASSKEY_ATTESTATION_OBJECT_MEMBER = 'attestationObject';
+
+/** The member of the decoded attestation object holding the authenticator data. */
+export const METHOD_PASSKEY_AUTH_DATA_MEMBER = 'authData';
+
+/** The members of an assertion's response the proof is read from. */
+export const METHOD_PASSKEY_AUTHENTICATOR_DATA_MEMBER = 'authenticatorData';
+export const METHOD_PASSKEY_CLIENT_DATA_JSON_MEMBER = 'clientDataJSON';
+export const METHOD_PASSKEY_SIGNATURE_MEMBER = 'signature';
 
 /** The tag `Object.prototype.toString` gives an `ArrayBuffer` from any realm. */
 export const METHOD_PASSKEY_ARRAY_BUFFER_TAG = '[object ArrayBuffer]';
@@ -70,8 +85,8 @@ export const METHOD_PASSKEY_ATTESTATION = 'none';
 export const METHOD_PASSKEY_USER_VERIFICATION = 'required';
 
 /** The authenticator selection every creation asks for. */
-export const METHOD_PASSKEY_AUTHENTICATOR_SELECTION = {
+export const METHOD_PASSKEY_AUTHENTICATOR_SELECTION = Object.freeze({
   residentKey: 'required',
   requireResidentKey: true,
   userVerification: METHOD_PASSKEY_USER_VERIFICATION,
-} as const;
+} as const);

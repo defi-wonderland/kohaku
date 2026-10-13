@@ -86,9 +86,10 @@ describe('signingInput', () => {
   });
 
   it('refuses a missing rp id by throwing, before any device is asked', () => {
-    expect(() => method.signingInput(ctx)).toThrow();
-    expect(() => method.signingInput(ctx, {})).toThrow();
-    expect(() => method.signingInput(ctx, { relyingPartyId: '' })).toThrow();
+    expect(() => method.signingInput(ctx)).toThrow(TypeError);
+    expect(() => method.signingInput(ctx)).toThrow(/relyingPartyId/);
+    expect(() => method.signingInput(ctx, {})).toThrow(TypeError);
+    expect(() => method.signingInput(ctx, { relyingPartyId: '' })).toThrow(TypeError);
   });
 });
 

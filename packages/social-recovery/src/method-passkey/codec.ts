@@ -1,92 +1,110 @@
 import { decodeAbiParameters, encodeAbiParameters, hexToBytes, stringToHex } from 'viem';
 import {
-  METHOD_PASSKEY_P256_HALF_ORDER,
+  DESCRIPTION_PASSKEY_CONFIG_ABI,
   METHOD_PASSKEY_CODEC_REFUSALS,
-  METHOD_PASSKEY_CONFIG_ABI,
   METHOD_PASSKEY_CONFIG_FIELDS,
   METHOD_PASSKEY_CONFIG_HEX_LENGTH,
   METHOD_PASSKEY_ERROR_PREFIX,
   METHOD_PASSKEY_LAYOUT_CONFIG,
   METHOD_PASSKEY_LAYOUT_PROOF,
+  METHOD_PASSKEY_P256_HALF_ORDER,
   METHOD_PASSKEY_PROOF_ABI,
   METHOD_PASSKEY_PROOF_FIELDS,
+  METHOD_PASSKEY_WORD_BITS,
 } from '../constants';
+import { assertBytes, assertBytes32, assertObject, assertUintBigint, lowerHex } from '../formats/guards';
 import type { IMethodCodec } from '../interfaces';
 import type { Fields, Hex } from '../interfaces';
-import type { PasskeyConfig, PasskeyProof } from '../types';
-import { isHexBytes, isUint256, isWord, utf8Text } from './bytes';
+import type { PasskeyConfig, PasskeyProof } from '../types/method-passkey';
+import { utf8Text } from './bytes';
 
-const fail = (layout: string, why: string): never => {
-  throw new Error(`${METHOD_PASSKEY_ERROR_PREFIX} ${layout}: ${why}`);
+const [X_FIELD, Y_FIELD, RP_ID_HASH_FIELD] = METHOD_PASSKEY_CONFIG_FIELDS;
+const [AUTHENTICATOR_DATA_FIELD, CLIENT_DATA_FIELD, R_FIELD, S_FIELD] = METHOD_PASSKEY_PROOF_FIELDS;
+
+/** The name a refused layout, or one field of it, is reported under. */
+const named = (layout: string, field?: string): string =>
+  `${METHOD_PASSKEY_ERROR_PREFIX} ${layout}${field === undefined ? '' : ` ${field}`}`;
+
+const shapeFault = (layout: string, why: string): never => {
+  throw new TypeError(`${named(layout)}: ${why}`);
 };
 
-const exactly = (fields: Fields, names: readonly string[], layout: string): void => {
+const rangeFault = (layout: string, why: string): never => {
+  throw new RangeError(`${named(layout)}: ${why}`);
+};
+
+const exactly = (fields: unknown, names: readonly string[], layout: string): void => {
+  assertObject(fields, named(layout));
+
   const given = Object.keys(fields).sort();
   const wanted = [...names].sort();
 
   if (given.length !== wanted.length || given.some((name, index) => name !== wanted[index])) {
-    fail(layout, `expected exactly the fields ${wanted.join(', ')}`);
+    shapeFault(layout, `${METHOD_PASSKEY_CODEC_REFUSALS.fields} ${wanted.join(', ')}`);
   }
 };
 
-/** `abi.encode(x, y, rpIdHash)`, lower-case hex; throws on a value the layout cannot hold. */
+/** `abi.encode(x, y, rpIdHash)`, lower-case hex; a `TypeError` on a wrong type, a `RangeError` on a value out of `uint256`. */
 export const encodePasskeyConfig = (config: PasskeyConfig): Hex => {
-  if (!isUint256(config.x) || !isUint256(config.y)) fail(METHOD_PASSKEY_LAYOUT_CONFIG, METHOD_PASSKEY_CODEC_REFUSALS.configUint256);
+  assertUintBigint(config.x, METHOD_PASSKEY_WORD_BITS, named(METHOD_PASSKEY_LAYOUT_CONFIG, X_FIELD));
+  assertUintBigint(config.y, METHOD_PASSKEY_WORD_BITS, named(METHOD_PASSKEY_LAYOUT_CONFIG, Y_FIELD));
+  assertBytes32(config.rpIdHash, named(METHOD_PASSKEY_LAYOUT_CONFIG, RP_ID_HASH_FIELD));
 
-  if (!isWord(config.rpIdHash)) fail(METHOD_PASSKEY_LAYOUT_CONFIG, METHOD_PASSKEY_CODEC_REFUSALS.configRpIdHash);
-
-  return encodeAbiParameters(METHOD_PASSKEY_CONFIG_ABI, [config.x, config.y, config.rpIdHash.toLowerCase() as Hex]);
+  return encodeAbiParameters(DESCRIPTION_PASSKEY_CONFIG_ABI, [config.x, config.y, lowerHex(config.rpIdHash)]);
 };
 
-/** The config's fields; throws on any bytes `encodePasskeyConfig` would not reproduce. */
+/** The config's fields; a `TypeError` on bytes that are not hex, a `RangeError` on any length but three words. */
 export const decodePasskeyConfig = (config: Hex): PasskeyConfig => {
-  if (!isHexBytes(config) || config.length !== METHOD_PASSKEY_CONFIG_HEX_LENGTH) {
-    fail(METHOD_PASSKEY_LAYOUT_CONFIG, METHOD_PASSKEY_CODEC_REFUSALS.configWords);
+  assertBytes(config, named(METHOD_PASSKEY_LAYOUT_CONFIG));
+
+  if (config.length !== METHOD_PASSKEY_CONFIG_HEX_LENGTH) rangeFault(METHOD_PASSKEY_LAYOUT_CONFIG, METHOD_PASSKEY_CODEC_REFUSALS.configWords);
+
+  const [x, y, rpIdHash] = decodeAbiParameters(DESCRIPTION_PASSKEY_CONFIG_ABI, config);
+
+  return { x, y, rpIdHash: lowerHex(rpIdHash) };
+};
+
+/** `abi.encode(authenticatorData, clientDataJSON, r, s)`, lower-case hex; a `RangeError` on a high `s`. */
+export const encodePasskeyProof = (proof: PasskeyProof): Hex => {
+  assertBytes(proof.authenticatorData, named(METHOD_PASSKEY_LAYOUT_PROOF, AUTHENTICATOR_DATA_FIELD));
+
+  if (typeof proof.clientDataJSON !== 'string') {
+    throw new TypeError(`${named(METHOD_PASSKEY_LAYOUT_PROOF, CLIENT_DATA_FIELD)} ${METHOD_PASSKEY_CODEC_REFUSALS.proofClientDataText}`);
   }
 
-  const [x, y, rpIdHash] = decodeAbiParameters(METHOD_PASSKEY_CONFIG_ABI, config);
+  assertUintBigint(proof.r, METHOD_PASSKEY_WORD_BITS, named(METHOD_PASSKEY_LAYOUT_PROOF, R_FIELD));
+  assertUintBigint(proof.s, METHOD_PASSKEY_WORD_BITS, named(METHOD_PASSKEY_LAYOUT_PROOF, S_FIELD));
 
-  return { x, y, rpIdHash: rpIdHash.toLowerCase() as Hex };
-};
-
-/** `abi.encode(authenticatorData, clientDataJSON, r, s)`, lower-case hex; throws on a high `s`. */
-export const encodePasskeyProof = (proof: PasskeyProof): Hex => {
-  if (!isHexBytes(proof.authenticatorData)) fail(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofAuthenticatorData);
-
-  if (typeof proof.clientDataJSON !== 'string') fail(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofClientDataText);
-
-  if (!isUint256(proof.r) || !isUint256(proof.s)) fail(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofUint256);
-
-  if (proof.s > METHOD_PASSKEY_P256_HALF_ORDER) fail(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofHighS);
+  if (proof.s > METHOD_PASSKEY_P256_HALF_ORDER) rangeFault(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofHighS);
 
   return encodeAbiParameters(METHOD_PASSKEY_PROOF_ABI, [
-    proof.authenticatorData.toLowerCase() as Hex,
+    lowerHex(proof.authenticatorData),
     stringToHex(proof.clientDataJSON),
     proof.r,
     proof.s,
   ]);
 };
 
-/** The proof's fields; throws on any bytes `encodePasskeyProof` would not reproduce. */
+/** The proof's fields; a `TypeError` on any bytes `encodePasskeyProof` would not reproduce, a `RangeError` on a high `s`. */
 export const decodePasskeyProof = (proof: Hex): PasskeyProof => {
-  if (!isHexBytes(proof)) fail(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofHex);
+  assertBytes(proof, named(METHOD_PASSKEY_LAYOUT_PROOF));
 
   let decoded: readonly [Hex, Hex, bigint, bigint];
 
   try {
     decoded = decodeAbiParameters(METHOD_PASSKEY_PROOF_ABI, proof);
   } catch {
-    return fail(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofLayout);
+    return shapeFault(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofLayout);
   }
 
   const [authenticatorData, clientDataBytes, r, s] = decoded;
   const clientDataJSON = utf8Text(hexToBytes(clientDataBytes));
 
-  if (clientDataJSON === undefined) return fail(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofClientDataUtf8);
+  if (clientDataJSON === undefined) return shapeFault(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofClientDataUtf8);
 
-  const fields: PasskeyProof = { authenticatorData: authenticatorData.toLowerCase() as Hex, clientDataJSON, r, s };
+  const fields: PasskeyProof = { authenticatorData: lowerHex(authenticatorData), clientDataJSON, r, s };
 
-  if (encodePasskeyProof(fields) !== proof.toLowerCase()) fail(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofCanonical);
+  if (encodePasskeyProof(fields) !== lowerHex(proof)) shapeFault(METHOD_PASSKEY_LAYOUT_PROOF, METHOD_PASSKEY_CODEC_REFUSALS.proofCanonical);
 
   return fields;
 };

@@ -23,6 +23,23 @@ const TEN = [
   'verify',
 ] as const;
 
+/** Building a TypeScript program over src takes seconds under a loaded full run. */
+const PROGRAM_TIMEOUT = 60_000;
+
+/** The types an integrator needs to inject a stack or configure the installed one. */
+const INTEGRATOR_TYPES = [
+  'AadhaarArgsOptions',
+  'AadhaarGroth16',
+  'AadhaarMaterial',
+  'AadhaarPcd',
+  'AadhaarProgress',
+  'AadhaarProverArgs',
+  'AadhaarStackProof',
+  'AnonAadhaarArtifacts',
+  'AnonAadhaarMethodOptions',
+  'AnonAadhaarStack',
+] as const;
+
 const method: IRecoveryMethod = anonAadhaarMethod({ stack: stackDouble().stack });
 
 const addr = (byte: string): `0x${string}` => `0x${byte.repeat(20)}`;
@@ -68,7 +85,7 @@ describe('the ten members', () => {
     const names = returned === undefined ? [] : checker.getPropertiesOfType(returned).map((property) => property.getName());
 
     expect(names.sort()).toEqual([...TEN, 'tier'].sort());
-  });
+  }, PROGRAM_TIMEOUT);
 
   it('the codec carries exactly the four functions of IMethodCodec', () => {
     expect(Object.keys(method.codec).sort()).toEqual(['decodeConfig', 'decodeProof', 'encodeConfig', 'encodeProof']);
@@ -77,6 +94,24 @@ describe('the ten members', () => {
   it('modules(descriptor) is the descriptor own methodAadhaar address and nothing else', () => {
     expect(method.modules(DESCRIPTOR)).toEqual([addr('04')]);
     expect(method.modules({ ...DESCRIPTOR, methodAadhaar: addr('aa') })).toEqual([addr('aa')]);
+  });
+
+  it('modules(descriptor) is empty on a deployment without the Aadhaar method, whose descriptor carries the zero address', () => {
+    expect(method.modules({ ...DESCRIPTOR, methodAadhaar: addr('00') })).toEqual([]);
+  });
+
+  it('modules(descriptor) answers a checksummed mixed-case address as that same address', () => {
+    const mixed = '0x52908400098527886E0F7030069857D2E4169EE7' as const;
+    const answered = method.modules({ ...DESCRIPTOR, methodAadhaar: mixed });
+
+    expect(answered).toHaveLength(1);
+    expect(answered[0]?.toLowerCase()).toBe(mixed.toLowerCase());
+  });
+
+  it('modules(descriptor) answers an address one bit from zero, not the empty list', () => {
+    const lowest = `0x${'00'.repeat(19)}01` as const;
+
+    expect(method.modules({ ...DESCRIPTOR, methodAadhaar: lowest })).toEqual([lowest]);
   });
 
   it('deviceBinding is in-browser-prover, a member of DEVICE_BINDINGS', () => {
@@ -120,14 +155,21 @@ describe('the package surface', () => {
     expect(() => anonAadhaarMethod({ artifacts: { ...artifacts, artifactsOrigin: 'ftp' as never } })).toThrow(TypeError);
   });
 
-  it('the folder index exports the factory alone, as a value and as a type', () => {
+  it('the folder index exports the factory as its one value, and the integrator-facing types beside it', () => {
     expect(Object.keys(folder)).toEqual(['anonAadhaarMethod']);
 
     const program = createSourceProgram();
     const entry = resolveExports(program.getTypeChecker(), requireSourceFile(program, join(SRC_ROOT, 'method-aadhaar', 'index.ts')));
 
-    expect([...entry.keys()]).toEqual(['anonAadhaarMethod']);
-  });
+    expect([...entry.keys()].sort()).toEqual(['anonAadhaarMethod', ...INTEGRATOR_TYPES].sort());
+  }, PROGRAM_TIMEOUT);
+
+  it('the core entry src/index.ts exports no Aadhaar name', () => {
+    const program = createSourceProgram();
+    const entry = resolveExports(program.getTypeChecker(), requireSourceFile(program, join(SRC_ROOT, 'index.ts')));
+
+    expect([...entry.keys()].filter((name) => /aadhaar/i.test(name))).toEqual([]);
+  }, PROGRAM_TIMEOUT);
 
   it('the ./recovery-methods entry exports the same factory', () => {
     expect(recoveryMethods.anonAadhaarMethod).toBe(anonAadhaarMethod);

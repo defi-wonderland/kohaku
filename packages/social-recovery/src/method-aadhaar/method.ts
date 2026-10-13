@@ -1,4 +1,19 @@
-import { METHOD_AADHAAR_ARTIFACT_ORIGINS, METHOD_AADHAAR_DEVICE_BINDING, METHOD_AADHAAR_DEVICE_FACTS, METHOD_AADHAAR_VECTOR_FILES } from '../constants/method-aadhaar';
+import { FORMATS_ZERO_ADDRESS } from '../constants/formats';
+import {
+  METHOD_AADHAAR_ARTIFACT_ORIGIN_MESSAGE,
+  METHOD_AADHAAR_ARTIFACT_ORIGINS,
+  METHOD_AADHAAR_ARTIFACT_URL_MESSAGE,
+  METHOD_AADHAAR_DEVICE_BINDING,
+  METHOD_AADHAAR_DEVICE_FACTS,
+  METHOD_AADHAAR_ENROLL_KIND,
+  METHOD_AADHAAR_MATERIAL_REJECTED,
+  METHOD_AADHAAR_REQUEST_UNSUPPORTED,
+  METHOD_AADHAAR_SEED_MISMATCH_MESSAGE,
+  METHOD_AADHAAR_SEED_PARAM,
+  METHOD_AADHAAR_STACK_AND_ARTIFACTS_MESSAGE,
+  METHOD_AADHAAR_VECTOR_FILES,
+} from '../constants/method-aadhaar';
+import { sameAddress } from '../formats/guards';
 import type {
   Address,
   Ctx,
@@ -16,10 +31,10 @@ import type {
   ReplyFailure,
   Verdict,
 } from '../interfaces';
-import type { AadhaarConfig, AnonAadhaarArtifacts, AnonAadhaarMethodOptions, AnonAadhaarStack } from '../types';
+import type { AadhaarConfig, AnonAadhaarArtifacts, AnonAadhaarMethodOptions, AnonAadhaarStack } from '../types/method-aadhaar';
 import { aadhaarCodec, decodeConfig, encodeConfig, encodeProof } from './codec';
 import { argsOptions, readInput, readMaterial, readParams } from './inputs';
-import { abortFailure, failure, isFailure, packProof, runProver, untilSettled } from './prover';
+import { abortFailure, isFailure, packProof, runProver, untilSettled } from './prover';
 import { isDigest, signalFromDigest, signalHashFromDigest } from './signal';
 import { coreStack } from './stack';
 import { bindsTo, judge } from './verdict';
@@ -35,23 +50,24 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
     this.#stack = stack;
   }
 
+  /** The deployed module, or none where the deployment carries the zero address for this method. */
   modules(descriptor: DeploymentDescriptor): readonly Address[] {
-    return [descriptor.methodAadhaar];
+    return sameAddress(descriptor.methodAadhaar, FORMATS_ZERO_ADDRESS) ? [] : [descriptor.methodAadhaar];
   }
 
   /** The enrollment ceremony's proving arguments, all but the QR code. */
   enrollInput(params: Params): EnrollInput {
     const { nullifierSeed, certificateFile } = readParams(params);
 
-    return { kind: 'ceremony', nullifierSeed, certificateFile, fieldsToRevealArray: [] };
+    return { kind: METHOD_AADHAAR_ENROLL_KIND, nullifierSeed, certificateFile, fieldsToRevealArray: [] };
   }
 
   /** Proves once, under the stack's default signal, and returns the nullifier with its seed as the config. */
   async configFrom(input: EnrollInput, material: Material): Promise<Hex | EnrollFailure> {
-    const params = input?.kind === 'ceremony' ? readInput(input) : undefined;
+    const params = input?.kind === METHOD_AADHAAR_ENROLL_KIND ? readInput(input) : undefined;
     const supplied = readMaterial(material);
 
-    if (params === undefined || supplied === undefined) return failure('material-rejected');
+    if (params === undefined || supplied === undefined) return METHOD_AADHAAR_MATERIAL_REJECTED;
 
     const pcd = await runProver(this.#stack, argsOptions(params, supplied.qrData), supplied);
 
@@ -61,18 +77,18 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
     const nullifier = packed === undefined ? undefined : inputAt(packed.inputs, 'nullifier');
     const seedKept = packed !== undefined && inputAt(packed.inputs, 'nullifierSeed') === params.nullifierSeed;
 
-    if (nullifier === undefined || !seedKept) return failure('material-rejected');
+    if (nullifier === undefined || !seedKept) return METHOD_AADHAAR_MATERIAL_REJECTED;
 
     return encodeConfig({ nullifier, nullifierSeed: params.nullifierSeed });
   }
 
-  /** The proving arguments with the digest as the signal; throws before any device is asked. */
+  /** The proving arguments with the digest as the signal; a `TypeError` or `RangeError` for malformed params or a seed the config does not hold. */
   signingInput(ctx: Ctx, params?: Params): Input {
     const { nullifierSeed, certificateFile } = readParams(params);
     const config = decodeConfig(ctx.request.config);
 
     if (config.nullifierSeed !== nullifierSeed) {
-      throw new Error('nullifierSeed is not the seed the config was enrolled under');
+      throw new TypeError(`${METHOD_AADHAAR_SEED_PARAM} ${METHOD_AADHAAR_SEED_MISMATCH_MESSAGE}`);
     }
 
     return {
@@ -92,7 +108,7 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
     const params = readInput(input);
     const supplied = readMaterial(material);
 
-    if (params === undefined || supplied === undefined) return failure('material-rejected');
+    if (params === undefined || supplied === undefined) return METHOD_AADHAAR_MATERIAL_REJECTED;
 
     const aborted = abortFailure(supplied.signal);
 
@@ -103,12 +119,12 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
     try {
       config = decodeConfig(ctx.request.config);
     } catch {
-      return failure('request-unsupported');
+      return METHOD_AADHAAR_REQUEST_UNSUPPORTED;
     }
 
-    if (!isDigest(ctx.digest)) return failure('request-unsupported');
+    if (!isDigest(ctx.digest)) return METHOD_AADHAAR_REQUEST_UNSUPPORTED;
 
-    if (config.nullifierSeed !== params.nullifierSeed) return failure('material-rejected');
+    if (config.nullifierSeed !== params.nullifierSeed) return METHOD_AADHAAR_MATERIAL_REJECTED;
 
     const options = argsOptions(params, supplied.qrData, signalFromDigest(ctx.digest));
     const pcd = await runProver(this.#stack, options, supplied);
@@ -117,7 +133,7 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
 
     const packed = packProof(pcd);
 
-    if (packed === undefined || !bindsTo(packed, config, ctx.digest)) return failure('material-rejected');
+    if (packed === undefined || !bindsTo(packed, config, ctx.digest)) return METHOD_AADHAAR_MATERIAL_REJECTED;
 
     const proof = encodeProof(packed);
 
@@ -125,7 +141,7 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
 
     if (isFailure(verdict)) return verdict;
 
-    return verdict === 'rejected' ? failure('material-rejected') : proof;
+    return verdict === 'rejected' ? METHOD_AADHAAR_MATERIAL_REJECTED : proof;
   }
 
   verify(ctx: Ctx, proof: Hex): Promise<Verdict> {
@@ -138,24 +154,26 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
   }
 }
 
+/** The artifacts' four members, copied by name so no other member reaches the stack. */
 function readArtifacts(artifacts: AnonAadhaarArtifacts): AnonAadhaarArtifacts {
-  const urls = [artifacts.wasmURL, artifacts.zkeyURL, artifacts.vkeyURL];
+  const { wasmURL, zkeyURL, vkeyURL, artifactsOrigin } = artifacts;
+  const urls = [wasmURL, zkeyURL, vkeyURL];
 
   if (!urls.every((url) => typeof url === 'string' && url !== '')) {
-    throw new TypeError('an artifact URL is not a non-empty string');
+    throw new TypeError(METHOD_AADHAAR_ARTIFACT_URL_MESSAGE);
   }
 
-  if (!(METHOD_AADHAAR_ARTIFACT_ORIGINS as readonly unknown[]).includes(artifacts.artifactsOrigin)) {
-    throw new TypeError(`artifactsOrigin is not one of ${METHOD_AADHAAR_ARTIFACT_ORIGINS.join(', ')}`);
+  if (!(METHOD_AADHAAR_ARTIFACT_ORIGINS as readonly unknown[]).includes(artifactsOrigin)) {
+    throw new TypeError(`${METHOD_AADHAAR_ARTIFACT_ORIGIN_MESSAGE} ${METHOD_AADHAAR_ARTIFACT_ORIGINS.join(', ')}`);
   }
 
-  return { ...artifacts };
+  return { wasmURL, zkeyURL, vkeyURL, artifactsOrigin };
 }
 
 /** The Aadhaar method, over an injected stack or the installed `@anon-aadhaar/core`; passing both throws. */
 export function anonAadhaarMethod(options: AnonAadhaarMethodOptions = {}): IRecoveryMethod {
   if (options.stack !== undefined && options.artifacts !== undefined) {
-    throw new TypeError('pass a stack or the artifacts for the installed stack, not both');
+    throw new TypeError(METHOD_AADHAAR_STACK_AND_ARTIFACTS_MESSAGE);
   }
 
   return new AnonAadhaarMethod(options.stack ?? coreStack(options.artifacts && readArtifacts(options.artifacts)));

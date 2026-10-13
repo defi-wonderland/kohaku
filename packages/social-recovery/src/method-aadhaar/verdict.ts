@@ -1,15 +1,16 @@
 import {
-  METHOD_AADHAAR_DIGEST_ERROR,
+  METHOD_AADHAAR_DIGEST_NAME,
   METHOD_AADHAAR_G1_PROJECTIVE,
   METHOD_AADHAAR_G2_PROJECTIVE,
   METHOD_AADHAAR_GROTH16_CURVE,
   METHOD_AADHAAR_GROTH16_PROTOCOL,
   METHOD_AADHAAR_PUBLIC_INPUTS,
 } from '../constants/method-aadhaar';
+import { assertBytes32 } from '../formats/guards';
 import type { Hex, Verdict } from '../interfaces';
-import type { AadhaarConfig, AadhaarPcd, AadhaarProof, AadhaarStackProof, AnonAadhaarStack } from '../types';
+import type { AadhaarConfig, AadhaarPcd, AadhaarProof, AadhaarStackProof, AnonAadhaarStack } from '../types/method-aadhaar';
 import { decodeConfig, decodeProof } from './codec';
-import { isDigest, signalHashFromDigest } from './signal';
+import { signalHashFromDigest } from './signal';
 import { inputAt } from './words';
 
 /** Whether the public inputs carry the config's nullifier and seed and the digest's signal hash. */
@@ -47,7 +48,7 @@ export function toPcd(proof: AadhaarProof): AadhaarPcd {
  * bindings that fail, else the stack's answer, or `not-judged` when the stack throws.
  */
 export async function judge(stack: AnonAadhaarStack, config: Hex, digest: Hex, proof: Hex): Promise<Verdict> {
-  if (!isDigest(digest)) throw new TypeError(METHOD_AADHAAR_DIGEST_ERROR);
+  assertBytes32(digest, METHOD_AADHAAR_DIGEST_NAME);
 
   let decoded: AadhaarProof;
 

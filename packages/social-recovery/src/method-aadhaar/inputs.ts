@@ -1,42 +1,61 @@
-import { METHOD_AADHAAR_SNARK_SCALAR_FIELD } from '../constants/method-aadhaar';
+import {
+  METHOD_AADHAAR_CERTIFICATE_INPUT,
+  METHOD_AADHAAR_CERTIFICATE_MESSAGE,
+  METHOD_AADHAAR_CERTIFICATE_PARAM,
+  METHOD_AADHAAR_SEED_PARAM,
+  METHOD_AADHAAR_SEED_RANGE_MESSAGE,
+  METHOD_AADHAAR_SEED_TYPE_MESSAGE,
+  METHOD_AADHAAR_SIGNAL_CALLS,
+  METHOD_AADHAAR_SIGNAL_FLAG,
+  METHOD_AADHAAR_SNARK_SCALAR_FIELD,
+} from '../constants/method-aadhaar';
 import type { Input, Material, Params } from '../interfaces';
-import type { AadhaarArgsOptions, AadhaarMaterial, AadhaarParams, AadhaarProgress } from '../types';
+import type { AadhaarArgsOptions, AadhaarMaterial, AadhaarParams, AadhaarProgress } from '../types/method-aadhaar';
 
-const isRecord = (value: unknown): value is { readonly [name: string]: unknown } =>
+/** Whether a value is a non-null object whose members can be read by name. */
+export const isRecord = (value: unknown): value is { readonly [name: string]: unknown } =>
   typeof value === 'object' && value !== null;
 
-function readSeed(value: unknown): bigint | undefined {
-  const seed = typeof value === 'number' && Number.isSafeInteger(value) ? BigInt(value) : value;
+/** A safe integer as a bigint; any other value unchanged. */
+const seedOf = (value: unknown): unknown => (typeof value === 'number' && Number.isSafeInteger(value) ? BigInt(value) : value);
 
-  return typeof seed === 'bigint' && seed >= 0n && seed < METHOD_AADHAAR_SNARK_SCALAR_FIELD ? seed : undefined;
+/** Whether a seed enters the circuit unreduced. */
+const inField = (seed: bigint): boolean => seed >= 0n && seed < METHOD_AADHAAR_SNARK_SCALAR_FIELD;
+
+function readSeed(value: unknown): bigint | undefined {
+  const seed = seedOf(value);
+
+  return typeof seed === 'bigint' && inField(seed) ? seed : undefined;
 }
 
 const readCertificate = (value: unknown): string | undefined =>
   typeof value === 'string' && value.trim() !== '' ? value : undefined;
 
 /**
- * The seed and the certificate from the integrator's parameters. Throws a
- * TypeError for a seed that is not an integer inside the circuit's field or an empty certificate.
+ * The seed and the certificate from the integrator's parameters: a `TypeError` for a seed that is
+ * not an integer or an empty certificate, a `RangeError` for a seed outside the circuit's field.
  */
 export function readParams(params: Params | undefined): AadhaarParams {
-  const nullifierSeed = readSeed(params?.['nullifierSeed']);
-  const certificateFile = readCertificate(params?.['issuerCertificate']);
+  const seed = seedOf(params?.[METHOD_AADHAAR_SEED_PARAM]);
+  const certificateFile = readCertificate(params?.[METHOD_AADHAAR_CERTIFICATE_PARAM]);
 
-  if (nullifierSeed === undefined) {
-    throw new TypeError('nullifierSeed is not a non-negative integer below the circuit field');
+  if (typeof seed !== 'bigint') throw new TypeError(`${METHOD_AADHAAR_SEED_PARAM} ${METHOD_AADHAAR_SEED_TYPE_MESSAGE}`);
+
+  if (!inField(seed)) throw new RangeError(`${METHOD_AADHAAR_SEED_PARAM} ${METHOD_AADHAAR_SEED_RANGE_MESSAGE}`);
+
+  if (certificateFile === undefined) {
+    throw new TypeError(`${METHOD_AADHAAR_CERTIFICATE_PARAM} ${METHOD_AADHAAR_CERTIFICATE_MESSAGE}`);
   }
 
-  if (certificateFile === undefined) throw new TypeError('issuerCertificate is not a non-empty PEM string');
-
-  return { nullifierSeed, certificateFile };
+  return { nullifierSeed: seed, certificateFile };
 }
 
 /** The seed and the certificate off an input this method returned, or `undefined`. */
 export function readInput(input: Input | undefined): AadhaarParams | undefined {
   if (!isRecord(input)) return undefined;
 
-  const nullifierSeed = readSeed(input['nullifierSeed']);
-  const certificateFile = readCertificate(input['certificateFile']);
+  const nullifierSeed = readSeed(input[METHOD_AADHAAR_SEED_PARAM]);
+  const certificateFile = readCertificate(input[METHOD_AADHAAR_CERTIFICATE_INPUT]);
 
   return nullifierSeed === undefined || certificateFile === undefined ? undefined : { nullifierSeed, certificateFile };
 }
@@ -46,9 +65,8 @@ function isAbortSignal(value: unknown): value is AbortSignal {
   try {
     return (
       isRecord(value) &&
-      typeof value['aborted'] === 'boolean' &&
-      typeof value['addEventListener'] === 'function' &&
-      typeof value['removeEventListener'] === 'function'
+      typeof value[METHOD_AADHAAR_SIGNAL_FLAG] === 'boolean' &&
+      METHOD_AADHAAR_SIGNAL_CALLS.every((name) => typeof value[name] === 'function')
     );
   } catch {
     return false;

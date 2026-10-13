@@ -1,5 +1,13 @@
-import { METHOD_AADHAAR_ABORT_EVENT, METHOD_AADHAAR_PAIR_WORDS, METHOD_AADHAAR_PUBLIC_INPUT_COUNT, METHOD_AADHAAR_PUBLIC_INPUTS } from '../constants/method-aadhaar';
-import type { ReplyFailure, ReplyFailureCause } from '../interfaces';
+import {
+  METHOD_AADHAAR_ABORT_EVENT,
+  METHOD_AADHAAR_DEVICE_REFUSED,
+  METHOD_AADHAAR_DEVICE_UNAVAILABLE,
+  METHOD_AADHAAR_MATERIAL_REJECTED,
+  METHOD_AADHAAR_PUBLIC_INPUTS,
+  METHOD_AADHAAR_PUBLIC_INPUT_COUNT,
+  METHOD_AADHAAR_SIGNAL_FAULT_MESSAGE,
+} from '../constants/method-aadhaar';
+import type { ReplyFailure } from '../interfaces';
 import type {
   AadhaarArgsOptions,
   AadhaarGroth16,
@@ -7,18 +15,16 @@ import type {
   AadhaarPcd,
   AadhaarProof,
   AnonAadhaarStack,
-} from '../types';
+} from '../types/method-aadhaar';
 import { AadhaarStackUnavailable } from './stack';
-import { parseWord } from './words';
-
-export const failure = (cause: ReplyFailureCause): ReplyFailure => ({ kind: 'reply-failure', cause });
+import { parsePair, parseWords } from './words';
 
 const ABORTED: unique symbol = Symbol('aborted');
 
 /** A signal that threw while this module used it, read as malformed material. */
 class AadhaarSignalFault extends Error {
   constructor(cause: unknown) {
-    super('the material signal threw while this module read it or added or removed its abort listener', { cause });
+    super(METHOD_AADHAAR_SIGNAL_FAULT_MESSAGE, { cause });
     this.name = 'AadhaarSignalFault';
   }
 }
@@ -38,9 +44,9 @@ function isAborted(signal: AbortSignal | undefined): boolean {
 /** `device-refused` for an aborted signal, `material-rejected` for one whose getter throws, else `undefined`. */
 export function abortFailure(signal: AbortSignal | undefined): ReplyFailure | undefined {
   try {
-    return isAborted(signal) ? failure('device-refused') : undefined;
+    return isAborted(signal) ? METHOD_AADHAAR_DEVICE_REFUSED : undefined;
   } catch {
-    return failure('material-rejected');
+    return METHOD_AADHAAR_MATERIAL_REJECTED;
   }
 }
 
@@ -96,16 +102,16 @@ export async function untilSettled<T>(work: Promise<T>, signal: AbortSignal | un
   try {
     const value = await untilAborted(work, signal);
 
-    return value === ABORTED || isAborted(signal) ? failure('device-refused') : value;
+    return value === ABORTED || isAborted(signal) ? METHOD_AADHAAR_DEVICE_REFUSED : value;
   } catch (error) {
-    if (error instanceof AadhaarSignalFault) return failure('material-rejected');
+    if (error instanceof AadhaarSignalFault) return METHOD_AADHAAR_MATERIAL_REJECTED;
 
     throw error;
   }
 }
 
-const causeOf = (error: unknown): ReplyFailureCause =>
-  error instanceof AadhaarStackUnavailable ? 'device-unavailable' : 'material-rejected';
+const failureOf = (error: unknown): ReplyFailure =>
+  error instanceof AadhaarStackUnavailable ? METHOD_AADHAAR_DEVICE_UNAVAILABLE : METHOD_AADHAAR_MATERIAL_REJECTED;
 
 /**
  * Runs the prover once. A QR code whose signature fails under the certificate is
@@ -128,24 +134,16 @@ export async function runProver(
 
     return await untilSettled(stack.prove(args, onProgress, signal), signal);
   } catch (error) {
-    return failure(causeOf(error));
+    return failureOf(error);
   }
 }
 
 export const isFailure = (value: unknown): value is ReplyFailure =>
-  typeof value === 'object' && value !== null && (value as ReplyFailure).kind === 'reply-failure';
-
-function words(values: readonly unknown[] | undefined, count: number): bigint[] | undefined {
-  if (!Array.isArray(values) || values.length < count) return undefined;
-
-  const parsed = values.slice(0, count).map(parseWord);
-
-  return parsed.every((word) => word !== undefined) ? (parsed as bigint[]) : undefined;
-}
+  typeof value === 'object' && value !== null && (value as ReplyFailure).kind === METHOD_AADHAAR_MATERIAL_REJECTED.kind;
 
 /**
  * The stack's proof in the proof layout, each `pi_b` pair swapped into the order
- * the verifier takes, or `undefined` when a value is not a `uint256`.
+ * the verifier takes, or `undefined` for a hole or a value that is not a `uint256`.
  */
 export function packProof(pcd: AadhaarPcd): AadhaarProof | undefined {
   const proof: unknown = pcd?.proof;
@@ -153,21 +151,22 @@ export function packProof(pcd: AadhaarPcd): AadhaarProof | undefined {
   if (typeof proof !== 'object' || proof === null) return undefined;
 
   const { groth16Proof: groth16, ...signals } = proof as { groth16Proof?: AadhaarGroth16; [name: string]: unknown };
-  const a = words(groth16?.pi_a, METHOD_AADHAAR_PAIR_WORDS);
-  const b0 = words(groth16?.pi_b?.[0], METHOD_AADHAAR_PAIR_WORDS);
-  const b1 = words(groth16?.pi_b?.[1], METHOD_AADHAAR_PAIR_WORDS);
-  const c = words(groth16?.pi_c, METHOD_AADHAAR_PAIR_WORDS);
-  const inputs = words(METHOD_AADHAAR_PUBLIC_INPUTS.map((name) => signals[name]), METHOD_AADHAAR_PUBLIC_INPUT_COUNT);
+  const rows = Array.isArray(groth16?.pi_b) ? groth16.pi_b : [];
+  const a = parsePair(groth16?.pi_a);
+  const b0 = Object.hasOwn(rows, 0) ? parsePair(rows[0]) : undefined;
+  const b1 = Object.hasOwn(rows, 1) ? parsePair(rows[1]) : undefined;
+  const c = parsePair(groth16?.pi_c);
+  const inputs = parseWords(METHOD_AADHAAR_PUBLIC_INPUTS.map((name) => signals[name]), METHOD_AADHAAR_PUBLIC_INPUT_COUNT);
 
   if (a === undefined || b0 === undefined || b1 === undefined || c === undefined || inputs === undefined) return undefined;
 
   return {
-    a: [a[0] ?? 0n, a[1] ?? 0n],
+    a,
     b: [
-      [b0[1] ?? 0n, b0[0] ?? 0n],
-      [b1[1] ?? 0n, b1[0] ?? 0n],
+      [b0[1], b0[0]],
+      [b1[1], b1[0]],
     ],
-    c: [c[0] ?? 0n, c[1] ?? 0n],
+    c,
     inputs,
   };
 }

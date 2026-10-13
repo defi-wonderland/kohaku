@@ -25,7 +25,7 @@ export async function assembled(session: Session, start: Gathering): Promise<{ r
   const request = kit.recovery.complete(gathering, undefined, now);
 
   note('request', { attemptId: request.attemptId, validUntil: request.validUntil, places: request.proofs.map((proof) => proof.place) });
-  await checkRequest(kit, session.provider, request, now);
+  await checkRequest(kit, session.provider, session.client, request, now);
 
   return { request, now };
 }

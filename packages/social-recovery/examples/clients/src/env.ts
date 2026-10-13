@@ -142,6 +142,10 @@ function guardianKeys(): readonly Hex[] {
 
   if (keys.some((entry) => !PRIVATE_KEY.test(entry))) throw new Error('env GUARDIAN_PRIVATE_KEYS must be comma-separated private keys');
 
+  if (new Set(keys.map((entry) => entry.toLowerCase())).size !== keys.length) {
+    throw new Error('env GUARDIAN_PRIVATE_KEYS repeats a key; each guardian needs its own');
+  }
+
   return keys as Hex[];
 }
 

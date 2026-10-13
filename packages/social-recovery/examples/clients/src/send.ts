@@ -1,7 +1,7 @@
 import type { PreparedBatch, PreparedCall } from '@kohaku-eth/social-recovery';
 import { type Account, encodeFunctionData, type Hex, parseAbi, type TransactionReceipt, type WalletClient } from 'viem';
 import type { Session } from './session';
-import { note } from './trace';
+import { note, show } from './trace';
 
 /** Ambire's batch entry for a caller holding a privilege, the call the holder sends to its own account. */
 const ACCOUNT_ABI = parseAbi(['function executeBySender((address to, uint256 value, bytes data)[] calls) payable']);
@@ -19,7 +19,7 @@ function assertSimulated(call: PreparedCall): void {
   }
 
   if (!simulation.success) {
-    throw new Error(`the prepared call to ${call.target} fails in simulation from ${simulation.from}: ${JSON.stringify(simulation.error)}`);
+    throw new Error(`the prepared call to ${call.target} fails in simulation from ${simulation.from}: ${show(simulation.error)}`);
   }
 }
 

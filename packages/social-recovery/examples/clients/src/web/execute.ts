@@ -5,14 +5,18 @@ import { holder, requireKit } from './kit';
 import { checkLine, executeOut } from './page';
 import { walletNativeBalance } from './provider';
 import { type MinedReceipt, sendFromConnected } from './send';
-import { type Connection, settled } from './wallet';
+import { type Connection, ensureSession } from './wallet';
 
 /** The waiting attempt and the chain's clock, the latest block's timestamp; `ripe` once the clock reached `consumableAfter`. */
 async function waitingAttempt(conn: Connection): Promise<{ attempt: Attempt; now: number; ripe: boolean } | undefined> {
   const { kit, provider } = requireKit();
-  const state = await settled(conn.session, kit.recovery.recoveryState());
-  const now = (await settled(conn.session, provider.block('latest'))).timestamp;
+  const state = await kit.recovery.recoveryState();
 
+  ensureSession(conn.session);
+
+  const now = (await provider.block('latest')).timestamp;
+
+  ensureSession(conn.session);
   note('recoveryState', state);
 
   if (state.attempt.state !== 'Waiting') return undefined;
@@ -26,6 +30,7 @@ export async function refreshAttempt(conn: Connection): Promise<void> {
 
   const waiting = await waitingAttempt(conn);
 
+  ensureSession(conn.session);
   holder.ripe = waiting?.ripe ?? false;
 
   if (waiting === undefined) {
@@ -43,14 +48,23 @@ export async function refreshAttempt(conn: Connection): Promise<void> {
 /** The opening notification's payload for the attempt, fetched through the event manager from the setup's block on. */
 async function openingPayload(conn: Connection, attempt: Attempt): Promise<Hex> {
   const { kit, provider } = requireKit();
-  const state = await settled(conn.session, kit.policyManager.stateOf());
-  const latest = await settled(conn.session, provider.block(kit.configuration.blockTags.watch));
+  const state = await kit.policyManager.stateOf();
+
+  ensureSession(conn.session);
+
+  const latest = await provider.block(kit.configuration.blockTags.watch);
+
+  ensureSession(conn.session);
+
   const range = { from: state.setupCommittedAtBlock, to: latest.number };
 
   step('events.fetch (the opening notification)');
   note('range', range);
 
-  const notifications = await settled(conn.session, kit.events.fetch(kit.events.accountFilter(), range));
+  const notifications = await kit.events.fetch(kit.events.accountFilter(), range);
+
+  ensureSession(conn.session);
+
   const opening = notifications.find((entry) => entry.kind === 'attempt-started' && entry.attemptId === attempt.attemptId);
 
   if (opening === undefined || opening.kind !== 'attempt-started') throw new Error(`no attempt-started notification for attempt ${attempt.attemptId}`);
@@ -65,10 +79,18 @@ async function balanceAt(conn: Connection, attempt: Attempt, payee: Address, blo
   const { provider } = requireKit();
   const { token } = attempt.order;
 
-  if (isAddressEqual(token, zeroAddress)) return settled(conn.session, walletNativeBalance(conn.wallet)(payee, block));
+  if (isAddressEqual(token, zeroAddress)) {
+    const native = await walletNativeBalance(conn.wallet)(payee, block);
+
+    ensureSession(conn.session);
+
+    return native;
+  }
 
   const data = encodeFunctionData({ abi: erc20Abi, functionName: 'balanceOf', args: [payee] });
-  const answer = await settled(conn.session, provider.call(token, data, payee, block));
+  const answer = await provider.call(token, data, payee, block);
+
+  ensureSession(conn.session);
 
   return decodeFunctionResult({ abi: erc20Abi, functionName: 'balanceOf', data: answer });
 }
@@ -81,7 +103,13 @@ async function paymentLine(conn: Connection, attempt: Attempt, receipt: MinedRec
 
   const payee = isAddressEqual(ordered, zeroAddress) ? conn.account : ordered;
   const before = await balanceAt(conn, attempt, payee, receipt.blockNumber - 1);
+
+  ensureSession(conn.session);
+
   const after = await balanceAt(conn, attempt, payee, receipt.blockNumber);
+
+  ensureSession(conn.session);
+
   const gas = isAddressEqual(token, zeroAddress) && isAddressEqual(payee, conn.account) ? receipt.gasUsed * receipt.effectiveGasPrice : 0n;
 
   note('payee balance before / after', { payee, before, after, gasCountedBack: gas });
@@ -98,35 +126,59 @@ export async function executeHandover(conn: Connection): Promise<void> {
   const { kit } = requireKit();
   const waiting = await waitingAttempt(conn);
 
+  ensureSession(conn.session);
+
   if (waiting === undefined) throw new Error('no attempt is waiting');
 
   if (!waiting.ripe) throw new Error(`the attempt is not ripe for ${waiting.attempt.consumableAfter - waiting.now} s`);
 
   const { attempt } = waiting;
   const payload = await openingPayload(conn, attempt);
+
+  ensureSession(conn.session);
+
   const handover = kit.codec.decode(payload);
 
   step(`prepareExecuteHandover (from ${conn.account})`);
 
-  const prepared = await settled(conn.session, kit.recovery.prepareExecuteHandover(attempt, payload, { from: conn.account }));
+  const prepared = await kit.recovery.prepareExecuteHandover(attempt, payload, { from: conn.account });
 
+  ensureSession(conn.session);
   note('describes', prepared.describes ?? []);
 
   const receipt = await sendFromConnected(conn, prepared);
 
+  ensureSession(conn.session);
   holder.ripe = false;
   step('checks');
 
-  const state = await settled(conn.session, kit.recovery.recoveryState());
+  const { removedAuthority: removed, newAuthority } = handover;
+  const state = await kit.recovery.recoveryState();
+
+  ensureSession(conn.session);
+
+  const newHolds = await kit.recoveryAction.isAuthority(newAuthority);
+
+  ensureSession(conn.session);
+
+  const removedHolds = removed === undefined ? false : await kit.recoveryAction.isAuthority(removed);
+
+  ensureSession(conn.session);
+
+  const { isAuthorized } = await kit.setup.setupState();
+
+  ensureSession(conn.session);
+
+  const payment = await paymentLine(conn, attempt, receipt);
+
+  ensureSession(conn.session);
+
   const lines = [
     { holds: state.attempt.state === 'Consumed', message: 'the attempt is consumed' },
-    { holds: await settled(conn.session, kit.recoveryAction.isAuthority(handover.newAuthority)), message: `the new key ${handover.newAuthority} holds the account` },
-    ...(handover.removedAuthority === undefined ? [] : [{
-      holds: !(await settled(conn.session, kit.recoveryAction.isAuthority(handover.removedAuthority))),
-      message: `the old key ${handover.removedAuthority} no longer does`,
-    }]),
-    { holds: (await settled(conn.session, kit.setup.setupState())).isAuthorized, message: 'the action is still authorized on the account' },
-    await paymentLine(conn, attempt, receipt),
+    { holds: newHolds, message: `the new key ${newAuthority} holds the account` },
+    ...(removed === undefined ? [] : [{ holds: !removedHolds, message: `the old key ${removed} no longer does` }]),
+    { holds: isAuthorized, message: 'the action is still authorized on the account' },
+    payment,
   ];
 
   executeOut.textContent = `executed by ${conn.account} in ${receipt.hash}\n`;

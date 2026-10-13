@@ -12,7 +12,7 @@ import { getTypesForEIP712Domain, isAddressEqual, serializeTypedData } from 'vie
 import { ctxFor, replyFor } from '../guardians';
 import { note, step } from '../trace';
 import { replyOut, statusLine, valueOf } from './page';
-import { type Connection, settled } from './wallet';
+import { type Connection, ensureSession } from './wallet';
 
 const method = walletMethod();
 
@@ -49,12 +49,20 @@ export async function signRequest(conn: Connection): Promise<void> {
   if (!isAddressEqual(named, conn.account)) note(`the request names guardian ${named}, not the connected ${conn.account}: verify will reject`);
 
   const input = method.signingInput(ctx);
-  const signature = await settled(conn.session, conn.wallet.request({ method: 'eth_signTypedData_v4', params: [conn.account, v4Payload(input)] }) as Promise<Hex>);
-  const proof = await settled(conn.session, method.replyFrom(ctx, input, { [METHOD_ECDSA_PROOF_FIELD]: signature }));
+  const signature = (await conn.wallet.request({ method: 'eth_signTypedData_v4', params: [conn.account, v4Payload(input)] })) as Hex;
+
+  ensureSession(conn.session);
+
+  const proof = await method.replyFrom(ctx, input, { [METHOD_ECDSA_PROOF_FIELD]: signature });
+
+  ensureSession(conn.session);
 
   if (typeof proof !== 'string') throw new Error(`the wallet method refused the signature: ${proof.cause}`);
 
-  const verdict = await settled(conn.session, method.verify(ctx, proof));
+  const verdict = await method.verify(ctx, proof);
+
+  ensureSession(conn.session);
+
   const reply = replyFor(ctx, proof);
 
   note('eth_signTypedData_v4', signature);

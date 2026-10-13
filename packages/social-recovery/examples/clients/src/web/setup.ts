@@ -7,7 +7,7 @@ import { wholeField } from './config';
 import { requireKit } from './kit';
 import { field, valueOf } from './page';
 import { sendAsAccount } from './send';
-import { type Connection, settled } from './wallet';
+import { type Connection, ensureSession } from './wallet';
 
 /** The guardian addresses typed in the setup form, one per line or comma-separated. */
 function guardianAddresses(): readonly Address[] {
@@ -70,23 +70,34 @@ export async function runSetup(conn: Connection): Promise<void> {
 
   step(`validateSetup (as ${conn.account})`);
 
-  const validation = await settled(conn.session, setup.validateSetup(draft));
+  const validation = await setup.validateSetup(draft);
 
+  ensureSession(conn.session);
   findings(validation);
 
   if (validation.errors.length > 0 && sends) throw new Error('validateSetup found errors; the setup is not committed');
 
   step('describeSetup');
-  printDescription(await settled(conn.session, setup.describeSetup(draft)));
+
+  const description = await setup.describeSetup(draft);
+
+  ensureSession(conn.session);
+  printDescription(description);
   step('prepareCommitSetup');
 
-  const prepared = await settled(conn.session, setup.prepareCommitSetup(draft, password).catch((error: unknown) => {
+  let prepared;
+
+  try {
+    prepared = await setup.prepareCommitSetup(draft, password);
+  } catch (error) {
+    ensureSession(conn.session);
+
     if (sends) throw error;
 
     note('prepare refused on the EOA stand-in', error instanceof Error ? error.message : String(error));
+  }
 
-    return undefined;
-  }));
+  ensureSession(conn.session);
 
   if (prepared !== undefined) printPrepared(prepared);
 
@@ -98,17 +109,20 @@ export async function runSetup(conn: Connection): Promise<void> {
 
   step('send the commit from the connected account');
   await sendAsAccount(conn, prepared);
+  ensureSession(conn.session);
   step('confirmSetup');
 
-  const confirmation = await settled(conn.session, setup.confirmSetup(draft, prepared));
+  const confirmation = await setup.confirmSetup(draft, prepared);
 
+  ensureSession(conn.session);
   note('confirmation', confirmation);
   check(confirmation.landed, 'the setup event landed with the predicted commitment');
   check(confirmation.isAuthorized, 'the action is authorized on the account');
   step('setupState');
 
-  const state = await settled(conn.session, setup.setupState());
+  const state = await setup.setupState();
 
+  ensureSession(conn.session);
   note('state', state);
   check(state.hasSetup && state.setupCommitment.toLowerCase() === confirmation.setupCommitment.toLowerCase(), 'the committed setup stands');
 }

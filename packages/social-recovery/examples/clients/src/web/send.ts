@@ -3,7 +3,7 @@ import { hexToBigInt, hexToNumber, toHex } from 'viem';
 import { assertSimulated, executeBySenderData } from '../send';
 import { note } from '../trace';
 import { requireKit } from './kit';
-import { type Connection, ensureSession, settled, wallet } from './wallet';
+import { type Connection, ensureSession, wallet } from './wallet';
 
 /** How often the page asks the wallet for a pending transaction's receipt. */
 export const RECEIPT_POLL_MS = 4000;
@@ -20,7 +20,10 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 
 /** Waits one polling interval, throwing within `SESSION_CHECK_MS` of a switch instead of sleeping on. */
 async function pause(session: number): Promise<void> {
-  for (let waited = 0; waited < RECEIPT_POLL_MS; waited += SESSION_CHECK_MS) await settled(session, sleep(SESSION_CHECK_MS));
+  for (let waited = 0; waited < RECEIPT_POLL_MS; waited += SESSION_CHECK_MS) {
+    await sleep(SESSION_CHECK_MS);
+    ensureSession(session);
+  }
 }
 
 /**
@@ -86,7 +89,9 @@ export async function sendAsAccount(conn: Connection, prepared: PreparedCall | P
 
   calls.forEach(assertSimulated);
 
-  const authority = await settled(conn.session, kit.recoveryAction.isAuthority(conn.account));
+  const authority = await kit.recoveryAction.isAuthority(conn.account);
+
+  ensureSession(conn.session);
 
   if (!authority) throw new Error(`the connected account ${conn.account} is not an authority of ${account.address}; connect the account's key`);
 

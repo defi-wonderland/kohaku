@@ -8,7 +8,7 @@ import { copyableBlock, requestsBox, valueOf } from './page';
 import { walletNativeBalance } from './provider';
 import { sendFromConnected } from './send';
 import { backupPassword } from './setup';
-import { type Connection, settled } from './wallet';
+import { type Connection, ensureSession } from './wallet';
 
 /** The order amount typed in base units; blank is zero. */
 function orderAmount(): bigint {
@@ -34,12 +34,15 @@ export async function startGathering(conn: Connection): Promise<void> {
   note('handover', handover);
   note('order', order);
 
-  const gathering = await settled(conn.session, kit.recovery.initRecoveryGathering(
+  const gathering = await kit.recovery.initRecoveryGathering(
     { password: backupPassword() },
     handover,
     order,
     { window: kit.configuration.requestWindow.default },
-  ));
+  );
+
+  ensureSession(conn.session);
+
   const requests = kit.recovery.getApproverRequests(gathering);
 
   holder.gathering = gathering;
@@ -89,8 +92,9 @@ export async function submitAttempt(conn: Connection): Promise<void> {
 
   if (gathering === undefined) throw new Error('start a gathering first');
 
-  const now = (await settled(conn.session, provider.block('latest'))).timestamp;
+  const now = (await provider.block('latest')).timestamp;
 
+  ensureSession(conn.session);
   step('assess');
 
   const assessment = kit.recovery.assess(gathering, now);
@@ -104,16 +108,20 @@ export async function submitAttempt(conn: Connection): Promise<void> {
   if (!('payload' in request)) throw new Error('complete returned a cancellation for an approval gathering');
 
   note('request', { attemptId: request.attemptId, validUntil: request.validUntil, places: request.proofs.map((proof) => proof.place) });
-  await settled(conn.session, checkRequest(kit, provider, walletNativeBalance(conn.wallet), request, now));
+  await checkRequest(kit, provider, walletNativeBalance(conn.wallet), request, now, () => ensureSession(conn.session));
+  ensureSession(conn.session);
   step(`prepareStartAttempt (from ${conn.account})`);
 
-  const prepared = await settled(conn.session, kit.recovery.prepareStartAttempt(request, now, { from: conn.account }));
+  const prepared = await kit.recovery.prepareStartAttempt(request, now, { from: conn.account });
 
+  ensureSession(conn.session);
   await sendFromConnected(conn, prepared);
+  ensureSession(conn.session);
   step('recoveryState');
 
-  const state = await settled(conn.session, kit.recovery.recoveryState());
+  const state = await kit.recovery.recoveryState();
 
+  ensureSession(conn.session);
   note('attempt', state.attempt);
   check(state.attempt.state === 'Waiting' && state.attempt.attemptId === request.attemptId, 'the attempt is waiting');
   holder.gathering = undefined;

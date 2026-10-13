@@ -1,6 +1,7 @@
 import { FORMATS_SAFE_INTEGER_BITS, RECOVERY_CLIENT_PAYLOAD_MALFORMED_MESSAGE, RECOVERY_CLIENT_VERSION_ESCAPED_MESSAGE } from '../constants';
 import { KitRefusalError } from '../client-core';
 import { assertUintNumber } from '../formats/guards';
+import { sortedProofPlaces } from '../formats/proof-place';
 import type { AttemptRequest, CancelRequest, Hex, Moment } from '../interfaces';
 import { assertBoundRequest } from '../policy-manager/calldata';
 import type { RecoveryClientParts } from '../types/recovery-client';
@@ -13,7 +14,8 @@ export function assertPreparesServed(versionEscaped: boolean): void {
 
 /**
  * Refuses with a `TypeError` or `RangeError` a submission whose members are not the shapes its record declares, an opening
- * passed where a cancellation is expected or the reverse, a moment that is not a non-negative safe integer, and a request
+ * passed where a cancellation is expected or the reverse, proofs repeating a place (the encoder's `RangeError`; proofs out of
+ * order are not refused, since the encoder sorts them), a moment that is not a non-negative safe integer, and a request
  * naming another account or action than the client is bound to.
  */
 export function assertSubmission(parts: RecoveryClientParts, request: AttemptRequest | CancelRequest, opening: boolean, now: Moment): void {
@@ -23,6 +25,7 @@ export function assertSubmission(parts: RecoveryClientParts, request: AttemptReq
     throw new TypeError(opening ? 'request must be an opening request with a payload and an order' : 'request must be a cancel request');
   }
 
+  sortedProofPlaces(request.proofs);
   assertUintNumber(now, FORMATS_SAFE_INTEGER_BITS, 'now');
   assertBoundRequest(request, parts.account, parts.action);
 }

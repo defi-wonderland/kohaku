@@ -1,6 +1,14 @@
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { decodeRevert, KitRefusalError, type Address, type AttemptRequest, type CancelRequest, type Hex, type PreparedCall } from '../../src/index';
+import {
+  decodeRevert,
+  encodeAttemptRequest,
+  encodeCancelRequest,
+  KitRefusalError,
+  type Address, type AttemptRequest, type CancelRequest, type Hex,
+  type PreparedCall,
+  type ProofPlace,
+} from '../../src/index';
 import {
   ACCOUNT,
   ACTION,
@@ -33,11 +41,24 @@ type Submit = {
   readonly member: 'prepareStartAttempt' | 'prepareCancelByProofs';
   readonly request: () => AttemptRequest | CancelRequest;
   readonly data: (request: never) => Hex;
+  readonly encode: (request: never) => Hex;
 };
 
 const SUBMITS: readonly Submit[] = [
-  { name: 'prepareStartAttempt', member: 'prepareStartAttempt', request: boundAttempt, data: startAttemptData as (request: never) => Hex },
-  { name: 'prepareCancelByProofs', member: 'prepareCancelByProofs', request: boundCancel, data: cancelByProofsData as (request: never) => Hex },
+  {
+    name: 'prepareStartAttempt',
+    member: 'prepareStartAttempt',
+    request: boundAttempt,
+    data: startAttemptData as (request: never) => Hex,
+    encode: encodeAttemptRequest as (request: never) => Hex,
+  },
+  {
+    name: 'prepareCancelByProofs',
+    member: 'prepareCancelByProofs',
+    request: boundCancel,
+    data: cancelByProofsData as (request: never) => Hex,
+    encode: encodeCancelRequest as (request: never) => Hex,
+  },
 ];
 
 const submit = (built: ReturnType<typeof rig>, s: Submit, request: unknown, now: unknown = NOW, options?: unknown): Promise<PreparedCall> =>
@@ -241,6 +262,69 @@ describe.each(SUBMITS)('$name', (s) => {
 
     await expect(submit(built, s, s.request())).rejects.toBe(INJECTED);
     expect(callsTo(built.seen, 'manager', s.member)).toEqual([]);
+  });
+});
+
+/** The request with its proofs replaced. */
+const withProofs = (request: AttemptRequest | CancelRequest, proofs: readonly ProofPlace[]): AttemptRequest | CancelRequest => ({ ...request, proofs });
+
+/** The request's proofs with a second proof at a place no other proof holds, so the list has at least two. */
+const twoOrMore = (request: AttemptRequest | CancelRequest): readonly ProofPlace[] => {
+  const [first] = request.proofs;
+
+  if (first === undefined) throw new Error('the fixture carries no proof');
+
+  if (request.proofs.length > 1) return request.proofs;
+
+  return [first, { ...first, place: first.place + 1 }];
+};
+
+/** The encoder's own refusal of a request. */
+const encoderRefusal = (s: Submit, request: AttemptRequest | CancelRequest): unknown => {
+  try {
+    s.encode(request as never);
+  } catch (error: unknown) {
+    return error;
+  }
+
+  return undefined;
+};
+
+describe.each(SUBMITS)('$name: a repeated proof place before the pin', (s) => {
+  const DUPLICATES: readonly (readonly [string, (request: AttemptRequest | CancelRequest) => readonly ProofPlace[]])[] = [
+    ['one proof given twice', (request) => [...twoOrMore(request), twoOrMore(request)[0] as ProofPlace]],
+    [
+      'two proofs sharing one place',
+      (request) => {
+        const [first, second] = twoOrMore(request) as [ProofPlace, ProofPlace];
+
+        return [first, { ...second, place: first.place }];
+      },
+    ],
+    ['a repeat out of order', (request) => [...twoOrMore(request)].reverse().concat(twoOrMore(request).slice(-1))],
+  ];
+
+  it.each(DUPLICATES)('refuses %s with the encoder\'s RangeError and zero provider calls, simulating or not', async (_name, proofsOf) => {
+    for (const options of [undefined, { simulate: true }, { simulate: false }]) {
+      const built = rig(world(), { ...CLIENT_CONFIGURATION, simulate: true });
+      const request = withProofs(s.request(), proofsOf(s.request()));
+      const expected = encoderRefusal(s, request);
+      const thrown = await rejectionOf(submit(built, s, request, NOW, options));
+
+      expect(expected).toBeInstanceOf(RangeError);
+      expect(thrown).toBeInstanceOf(RangeError);
+      expect((thrown as RangeError).message).toBe((expected as RangeError).message);
+      expect(built.seen).toEqual([]);
+    }
+  });
+
+  it('prepares unique proofs given out of order, the bytes those of the sorted request', async () => {
+    const sorted = twoOrMore(s.request());
+    const request = withProofs(s.request(), [...sorted].reverse());
+    const built = rig();
+    const prepared = await submit(built, s, request);
+
+    expect(prepared.data.toLowerCase()).toBe(s.data(withProofs(s.request(), sorted) as never).toLowerCase());
   });
 });
 

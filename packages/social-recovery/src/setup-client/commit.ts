@@ -5,8 +5,8 @@ import { sealBackup, serializeConfiguration } from '../encryption';
 import { assertObject, assertUintBigint } from '../formats/guards';
 import type { Configuration, Hex, PreparedBatch, PreparedCall, PrepareOptions, SetupDraft } from '../interfaces';
 import type { SetupClientParts } from '../types/setup-client';
-import { assertBackupPassword, assertOptions } from './check';
-import { checkedDraft, draftConfiguration, publicMetadataOf } from './draft';
+import { assertBackupFits, assertBackupPassword, assertOptions } from './check';
+import { assertBodyEncodes, checkedDraft, draftConfiguration, publicMetadataOf } from './draft';
 import { authorizedAt, pinRead } from './reads';
 
 /** A fresh random AES-GCM nonce, drawn for every seal. */
@@ -43,7 +43,9 @@ async function backupBytes(
 /**
  * The commit of the draft at one pinned block: the arming write and the commit as one atomic batch while the action is not
  * authorized, the commit alone once it is, simulated unless the options or the configuration say otherwise.
- * It runs no setup validation: the integrator calls `validateSetup` on the draft first.
+ * It runs no setup validation: the integrator calls `validateSetup` on the draft first. Before any read it refuses with a
+ * `RangeError` a body past its ABI widths, and with a `KitRefusalError` carrying `backup.too-wide` an encrypted backup too
+ * wide to seal.
  */
 export async function prepareCommit(
   parts: SetupClientParts,
@@ -56,6 +58,11 @@ export async function prepareCommit(
   assertBackupPassword(draft, password);
   assertOptions(options);
 
+  const configuration = draftConfiguration(draft, credentials);
+
+  assertBodyEncodes(configuration, parts.account);
+  assertBackupFits(draft, configuration);
+
   const { block } = await pinRead(parts);
   const [state, authorized] = await Promise.all([parts.policyManager.stateOf(block), authorizedAt(parts, block)]);
 
@@ -65,7 +72,6 @@ export async function prepareCommit(
   const nonce = state.setupNonce + 1n;
 
   assertUintBigint(nonce, FORMATS_SETUP_NONCE_BITS, 'the next setup nonce');
-  const configuration = draftConfiguration(draft, credentials);
   const setupCommitment = configurationCommitment(configuration, parts.account, parts.action, nonce);
   const privateMetadata = await backupBytes(parts, draft, configuration, password, setupCommitment, nonce);
   const arming = authorized ? undefined : await parts.recoveryAction.armingCall(block);

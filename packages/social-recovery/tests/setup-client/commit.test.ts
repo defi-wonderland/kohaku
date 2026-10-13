@@ -2,6 +2,7 @@ import { decodeFunctionData } from 'viem';
 import { describe, expect, it } from 'vitest';
 import {
   BACKUP_PAYLOAD_VERSION,
+  configurationCommitment,
   KitRefusalError,
   openBackup,
   POLICY_MANAGER_WRITES_ABI,
@@ -9,6 +10,7 @@ import {
   type Hex,
   type PreparedBatch,
   type PreparedCall,
+  type SetupDraft,
 } from '../../src/index';
 import {
   ACCOUNT,
@@ -214,6 +216,59 @@ describe('prepareCommitSetup: no validation inside the prepare', () => {
     expect(findings.warnings.map((warning) => warning.code)).toContain('backup.clear');
 
     await expect(build().client.prepareCommitSetup(draft)).resolves.toBeDefined();
+  });
+});
+
+/** The commitment's own refusal of the draft's configuration, the width check the prepare runs before the pin. */
+const encoderRefusal = (draft: SetupDraft): unknown => {
+  try {
+    configurationCommitment(configurationOf(draft), ACCOUNT, ACTION, 1n);
+  } catch (error: unknown) {
+    return error;
+  }
+
+  return undefined;
+};
+
+const WIDTH_CASES: readonly (readonly [string, SetupDraft])[] = [
+  ['a threshold of 256', { ...DRAFT, clauses: [{ threshold: 256, credentials: DRAFT.clauses[0]?.credentials ?? [] }] }],
+  ['a wait of 2^48', { ...DRAFT, wait: 2 ** 48 }],
+  [
+    'a second clause with a threshold of 256',
+    { ...DRAFT, clauses: [...DRAFT.clauses, { threshold: 256, credentials: DRAFT.clauses[0]?.credentials ?? [] }] },
+  ],
+];
+
+describe('prepareCommitSetup: the ABI widths before the pin', () => {
+  it.each(WIDTH_CASES.flatMap(([name, draft]) => (['empty', 'clear', 'encrypted'] as const).map((backup) => [name, backup, draft] as const)))(
+    'refuses %s (%s backup) with the commitment\'s RangeError and zero provider calls',
+    async (_name, backup, draft) => {
+      const expected = encoderRefusal(draft);
+      const { client, seen } = build();
+      const thrown = await client.prepareCommitSetup(withBackup(draft, backup), backup === 'encrypted' ? PASSWORD : undefined).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+      expect(expected).toBeInstanceOf(RangeError);
+      expect(thrown).toBeInstanceOf(RangeError);
+      expect((thrown as RangeError).message).toBe((expected as RangeError).message);
+      expect(seen.provider).toEqual([]);
+      expect(seen.parts).toEqual([]);
+    },
+  );
+
+  it('prepares at the widest values the fields hold, an unsatisfiable threshold left to validateSetup', async () => {
+    const draft: SetupDraft = {
+      ...withBackup(DRAFT, 'empty'),
+      wait: 2 ** 48 - 1,
+      clauses: [{ threshold: 255, credentials: DRAFT.clauses[0]?.credentials ?? [] }],
+    };
+    const { client, seen } = build();
+
+    await expect(client.prepareCommitSetup(draft)).resolves.toBeDefined();
+    expect(members(seen)).toContain('manager.prepareCommitSetup');
+    expect(commitArguments(seen)[1]).toBe(referenceCommitment(draft, ACCOUNT, ACTION, 1n));
   });
 });
 

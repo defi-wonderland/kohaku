@@ -347,6 +347,53 @@ describe.each(SUBMITS)('$name: a repeated proof place before the pin', (s) => {
   });
 });
 
+describe.each(SUBMITS)('$name: a proof array with a hole before the pin', (s) => {
+  const HOLES: readonly (readonly [string, (request: AttemptRequest | CancelRequest) => readonly ProofPlace[], number])[] = [
+    ['an entirely sparse array', () => new Array<ProofPlace>(1), 0],
+    [
+      'a middle hole',
+      (request) => {
+        const [first, , third] = atOffsets(request, [0, 1, 2]);
+
+        // eslint-disable-next-line no-sparse-arrays
+        return [first, , third] as ProofPlace[];
+      },
+      1,
+    ],
+    [
+      'a trailing hole',
+      (request) => {
+        const proofs = [...atOffsets(request, [0, 1])];
+
+        proofs.length = 3;
+
+        return proofs;
+      },
+      2,
+    ],
+  ];
+
+  it.each(HOLES)('refuses %s with a TypeError naming the first hole and zero calls, simulating or not', async (_name, proofsOf, index) => {
+    for (const options of [undefined, { simulate: true }, { simulate: false }]) {
+      const built = rig(world(), { ...CLIENT_CONFIGURATION, simulate: true });
+      const thrown = await rejectionOf(submit(built, s, withProofs(s.request(), proofsOf(s.request())), NOW, options));
+
+      expect(thrown).toBeInstanceOf(TypeError);
+      expect((thrown as TypeError).message).toContain(`request.proofs[${index}]`);
+      expect(built.seen).toEqual([]);
+    }
+  });
+
+  it.each(HOLES)('refuses %s without reaching a block read that would reject', async (_name, proofsOf) => {
+    const built = rig(world({ failures: new Map([['provider.block', INJECTED]]) }));
+    const thrown = await rejectionOf(submit(built, s, withProofs(s.request(), proofsOf(s.request()))));
+
+    expect(thrown).toBeInstanceOf(TypeError);
+    expect(thrown).not.toBe(INJECTED);
+    expect(built.seen).toEqual([]);
+  });
+});
+
 describe('prepareStartAttempt: the opening payload', () => {
   it.each([
     ['three bytes', '0xabcdef'],

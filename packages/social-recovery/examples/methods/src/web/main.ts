@@ -59,7 +59,7 @@ async function connect(): Promise<void> {
   connectionLine.textContent = `Connected ${guardian} on chain ${chainId}; credentialHoldsCode: ${holdsCode}`;
 }
 
-/** Signs through the wallet, builds the proof and the reply, files it and verifies it locally. */
+/** Signs through the wallet, builds the proof and the reply, files it and verifies it locally; the session is checked after the signature, after the proof and after the verdict. */
 async function sign(): Promise<void> {
   const { session, wallet, guardian, ctx, record } = state;
 
@@ -76,6 +76,7 @@ async function sign(): Promise<void> {
 
   const proof = await method.replyFrom(ctx, input, { signature });
 
+  ensureSession(session);
   pageTrace('method.replyFrom(ctx, input, { signature })', proof);
 
   if (isFailure(proof)) throw new Error(`reply refused: ${proof.cause}`);

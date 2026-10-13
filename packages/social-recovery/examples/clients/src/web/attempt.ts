@@ -3,7 +3,7 @@ import { zeroAddress } from 'viem';
 import { check, note, step } from '../trace';
 import { checkRequest } from '../validation';
 import { addressField } from './config';
-import { holder, requireKit } from './kit';
+import { holder, kitForOrder, requireKit } from './kit';
 import { copyableBlock, requestsBox, valueOf } from './page';
 import { walletNativeBalance } from './provider';
 import { sendFromConnected } from './send';
@@ -26,9 +26,9 @@ function orderAmount(): bigint {
  * approver request as JSON with a Copy button. The gathering stays cached across an account switch.
  */
 export async function startGathering(conn: Connection): Promise<void> {
-  const { kit } = requireKit();
   const handover = { newAuthority: addressField('new-authority'), removedAuthority: conn.account };
   const order = { token: addressField('order-token', zeroAddress), amount: orderAmount(), payee: addressField('order-payee', conn.account) };
+  const kit = kitForOrder(order.token);
 
   step(`initRecoveryGathering (as ${conn.account})`);
   note('handover', handover);

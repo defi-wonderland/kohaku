@@ -3,7 +3,6 @@ import { hexToBigInt, hexToNumber, toHex } from 'viem';
 import { assertSimulated, executeBySenderData } from '../send';
 import { note } from '../trace';
 import { requireKit } from './kit';
-import { SESSION_CHANGED_MESSAGE } from './provider';
 import { type Connection, ensureSession, settled, wallet } from './wallet';
 
 /** How often the page asks the wallet for a pending transaction's receipt. */
@@ -14,11 +13,20 @@ export type MinedReceipt = { readonly hash: Hex; readonly blockNumber: number; r
 
 type RpcReceipt = { readonly status: Hex; readonly blockNumber: Hex; readonly gasUsed: Hex; readonly effectiveGasPrice?: Hex };
 
+/** How often a pause between receipt polls looks at the session. */
+const SESSION_CHECK_MS = 250;
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Waits one polling interval, throwing within `SESSION_CHECK_MS` of a switch instead of sleeping on. */
+async function pause(session: number): Promise<void> {
+  for (let waited = 0; waited < RECEIPT_POLL_MS; waited += SESSION_CHECK_MS) await settled(session, sleep(SESSION_CHECK_MS));
+}
 
 /**
  * Sends one transaction from the connected account through the wallet and polls its receipt until it is mined.
- * The session is checked before sending, once the wallet answers and after the receipt; a reverted receipt throws.
+ * The session is checked before sending and every polling round: a switch stops the poll at once and throws naming
+ * no hash; the hash and the receipt are shown only while the session holds. A reverted receipt throws.
  */
 export async function sendTransaction(conn: Connection, to: Address, data: Hex, value: bigint): Promise<MinedReceipt> {
   ensureSession(conn.session);
@@ -28,18 +36,16 @@ export async function sendTransaction(conn: Connection, to: Address, data: Hex, 
     params: [{ from: conn.account, to, data, value: toHex(value) }],
   })) as Hex;
 
-  if (conn.session !== wallet.session) {
-    throw new Error(`${SESSION_CHANGED_MESSAGE} (the wallet returned ${hash}, which the page does not follow)`);
-  }
-
-  note('tx sent', `${hash} from ${conn.account}`);
+  if (conn.session === wallet.session) note('tx sent', `${hash} from ${conn.account}`);
 
   let receipt: RpcReceipt | null = null;
 
   while (receipt === null) {
-    receipt = await settled(conn.session, conn.wallet.request({ method: 'eth_getTransactionReceipt', params: [hash] }) as Promise<RpcReceipt | null>);
+    ensureSession(conn.session);
+    receipt = (await conn.wallet.request({ method: 'eth_getTransactionReceipt', params: [hash] })) as RpcReceipt | null;
+    ensureSession(conn.session);
 
-    if (receipt === null) await settled(conn.session, sleep(RECEIPT_POLL_MS));
+    if (receipt === null) await pause(conn.session);
   }
 
   const mined = {

@@ -112,15 +112,17 @@ key and no RPC URL; the wallet must be on Sepolia (chain id 11155111), or Connec
   into the holder panel. The local `verify` verdict is shown.
 
 Roles: switch accounts in the wallet between the guardian and the holder. Each action reads the connected account when
-it starts and names it in its output. A switch drops the connection (connect again); an account switch keeps the
-deployment, the chosen account and the open gathering, a chain switch drops them too. A step the wallet switched under
-stops before anything is shown, filed or sent. The forms and pasted texts always stay.
+it starts and names it in its output. Any switch drops the connection (connect again). A chain switch also drops the
+applied deployment, the chosen account and the open gathering, while an account switch keeps them, so the holder can
+sign as a guardian and come back to the same gathering. A step the wallet switched under stops before anything is
+shown, filed or sent. The forms and pasted texts always stay.
 
 The creation code: one privilege entry (`PUSH1 0x01`, `PUSH32 slot`, `SSTORE`, with
 `slot = keccak256(abi.encode(signer, uint256(0)))` for the connected address), then the minimal proxy's deploy code and
 runtime over the Ambire implementation, all from the SDK's public `FORMATS_CREATION_*` constants. The page checks its
 own bytes with the SDK's `creationPrivileges` (one entry, that slot, value 1) before anything is sent. The salt is drawn
-at random (`crypto.getRandomValues`); type one to re-use it.
+at random (`crypto.getRandomValues`); type one to re-use it. **Create** on an address that already holds code uses that account
+but keeps no creation record, since the page does not know the block it was created in.
 
 Never in the bundle: Vite exposes every `VITE_` variable to the browser, so no private key and no RPC URL may carry that
 prefix. `src/env.ts` (the scripts' keys and RPC URL) is not imported by the page.

@@ -13,7 +13,7 @@ import type { Kit } from './clients';
 import { findings, note, step } from './trace';
 
 /** The opening request's handover reads: the payload decoded by the codec and the action's two answers about its keys. */
-async function handoverReads(kit: Kit, request: AttemptRequest, block: PinnedBlock): Promise<HandoverReads> {
+async function handoverReads(kit: Kit, request: AttemptRequest, block: PinnedBlock, settle: () => void): Promise<HandoverReads> {
   let handover;
 
   try {
@@ -23,12 +23,19 @@ async function handoverReads(kit: Kit, request: AttemptRequest, block: PinnedBlo
   }
 
   const removed = handover.removedAuthority;
+  const removedIsAuthority = removed === undefined ? undefined : await kit.recoveryAction.isAuthority(removed, block);
+
+  settle();
+
+  const newHoldsAnyPrivilege = await kit.recoveryAction.holdsAnyPrivilege(handover.newAuthority, block);
+
+  settle();
 
   return {
     handover,
     layoutDecodes: true,
-    ...(removed === undefined ? {} : { removedIsAuthority: await kit.recoveryAction.isAuthority(removed, block) }),
-    newHoldsAnyPrivilege: await kit.recoveryAction.holdsAnyPrivilege(handover.newAuthority, block),
+    ...(removedIsAuthority === undefined ? {} : { removedIsAuthority }),
+    newHoldsAnyPrivilege,
   };
 }
 
@@ -39,15 +46,29 @@ export type NativeBalance = (address: Address, blockNumber: number) => Promise<b
  * The account's balance in the order's asset at the pinned block: the native balance through `nativeBalance` for the
  * zero-address token, else the ERC-20's `balanceOf`. A zero order has no payment leg and reads nothing.
  */
-async function orderBalance(provider: IProvider, nativeBalance: NativeBalance, request: AttemptRequest, block: PinnedBlock): Promise<bigint> {
+async function orderBalance(
+  provider: IProvider,
+  nativeBalance: NativeBalance,
+  request: AttemptRequest,
+  block: PinnedBlock,
+  settle: () => void,
+): Promise<bigint> {
   const { token, amount } = request.order;
 
   if (amount === 0n) return 0n;
 
-  if (isAddressEqual(token, zeroAddress)) return nativeBalance(request.account, block.number);
+  if (isAddressEqual(token, zeroAddress)) {
+    const native = await nativeBalance(request.account, block.number);
+
+    settle();
+
+    return native;
+  }
 
   const data = encodeFunctionData({ abi: erc20Abi, functionName: 'balanceOf', args: [request.account] });
   const answer = await provider.call(token, data, request.account, block.number);
+
+  settle();
 
   return decodeFunctionResult({ abi: erc20Abi, functionName: 'balanceOf', data: answer });
 }
@@ -55,6 +76,7 @@ async function orderBalance(provider: IProvider, nativeBalance: NativeBalance, r
 /**
  * Assembles the request's validation context from the parts' reads at one pinned block, runs the pure `validateRequest`,
  * prints its findings and throws on any error, so the prepare is reached only with a clean request.
+ * `settle` runs after each awaited read, before anything is traced; a page passes its session check, which throws.
  */
 export async function checkRequest(
   kit: Kit,
@@ -62,21 +84,38 @@ export async function checkRequest(
   nativeBalance: NativeBalance,
   request: AttemptRequest | CancelRequest,
   moment: Moment,
+  settle: () => void = () => undefined,
 ): Promise<void> {
   step('validateRequest (pure, context from the parts\' reads)');
 
   const header = await provider.block(kit.configuration.blockTags.read);
+
+  settle();
+
   const block: PinnedBlock = { number: header.number, hash: header.hash };
   const methods = [...new Set(request.proofs.map((proof) => proof.method))] as Address[];
-  const opening = 'payload' in request;
+  const state = await kit.policyManager.stateOf(block);
+
+  settle();
+
+  const paused = await Promise.all(methods.map(async (method) => ({ method, paused: await kit.policyManager.paused(method, block) })));
+
+  settle();
+
+  const opening = 'payload' in request
+    ? { handover: await handoverReads(kit, request, block, settle), balance: await orderBalance(provider, nativeBalance, request, block, settle) }
+    : {};
+
+  settle();
+
   const context: RequestValidationContext = {
-    state: await kit.policyManager.stateOf(block),
+    state,
     block: header,
     moment,
     configuration: kit.configuration,
-    paused: await Promise.all(methods.map(async (method) => ({ method, paused: await kit.policyManager.paused(method, block) }))),
+    paused,
     implementedMethods: kit.method.modules(kit.descriptor),
-    ...(opening ? { handover: await handoverReads(kit, request, block), balance: await orderBalance(provider, nativeBalance, request, block) } : {}),
+    ...opening,
   };
 
   note('pinned block', block.number);

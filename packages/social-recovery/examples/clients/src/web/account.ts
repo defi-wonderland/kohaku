@@ -6,7 +6,7 @@ import { holder, useAccount } from './kit';
 import { field, valueOf } from './page';
 import { WalletProvider } from './provider';
 import { sendTransaction } from './send';
-import { type Connection, settled, wallet } from './wallet';
+import { type Connection, ensureSession, wallet } from './wallet';
 
 /** Fills the salt field with a fresh random salt. */
 export function newSalt(): void {
@@ -17,8 +17,9 @@ export function newSalt(): void {
 export async function applyDeployment(conn: Connection): Promise<void> {
   const inputs = deploymentInputs();
   const provider = new WalletProvider(conn.wallet, () => wallet.session);
-  const descriptor = await settled(conn.session, deploymentDescriptor(inputs, provider));
+  const descriptor = await deploymentDescriptor(inputs, provider, conn.session);
 
+  ensureSession(conn.session);
   Object.assign(holder, { descriptor, provider, account: undefined, kit: undefined, gathering: undefined, ripe: false });
 
   if (inputs.account === undefined) {
@@ -28,6 +29,7 @@ export async function applyDeployment(conn: Connection): Promise<void> {
   }
 
   await selectAccount(conn);
+  ensureSession(conn.session);
 }
 
 function requireDeployment(): { descriptor: NonNullable<typeof holder.descriptor>; provider: WalletProvider } {
@@ -45,14 +47,17 @@ export async function selectAccount(conn: Connection): Promise<void> {
 
   step('select the existing account');
 
-  const code = await settled(conn.session, provider.code(address, 'latest'));
+  const code = await provider.code(address, 'latest');
+
+  ensureSession(conn.session);
 
   if (code === '0x') throw new Error(`the account ${address} holds no code`);
 
   const account: HolderAccount = { address, sendsSelfCalls: true };
   const kit = useAccount(conn, account);
-  const authority = await settled(conn.session, kit.recoveryAction.isAuthority(conn.account));
+  const authority = await kit.recoveryAction.isAuthority(conn.account);
 
+  ensureSession(conn.session);
   note(`isAuthority(${conn.account})`, authority);
 
   if (!authority) note('the connected account is not an authority: the account\'s own calls are refused until one connects');
@@ -88,7 +93,11 @@ export async function createAccount(conn: Connection): Promise<void> {
   note('salt', salt);
   note('predicted account (CREATE2)', account);
 
-  if ((await settled(conn.session, provider.code(account, 'latest'))) !== '0x') {
+  const existing = await provider.code(account, 'latest');
+
+  ensureSession(conn.session);
+
+  if (existing !== '0x') {
     note('the account already exists; its creation block is unknown here, so no creation record is kept');
     useAccount(conn, { address: account, sendsSelfCalls: true });
 
@@ -96,8 +105,12 @@ export async function createAccount(conn: Connection): Promise<void> {
   }
 
   const receipt = await sendTransaction(conn, factory, deployCalldata(deployFunction, code, salt), 0n);
-  const deployed = await settled(conn.session, provider.code(account, 'latest'));
 
+  ensureSession(conn.session);
+
+  const deployed = await provider.code(account, 'latest');
+
+  ensureSession(conn.session);
   check(deployed !== '0x', `the factory deployed code at ${account}`);
 
   const creation = { factory, bytecode: code, salt, block: receipt.blockNumber };

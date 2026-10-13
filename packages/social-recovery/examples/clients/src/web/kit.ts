@@ -19,7 +19,7 @@ import { note, show, step } from '../trace';
 import { BLOCK_TAGS, clientConfiguration, tokenAllowlist } from './config';
 import { accountLine, button, stateOut } from './page';
 import type { WalletProvider } from './provider';
-import { type Connection, onReset, settled } from './wallet';
+import { type Connection, ensureSession, onReset } from './wallet';
 
 /**
  * What the holder panel cached: the checked deployment, the chosen account and the kit over it, the open gathering
@@ -65,6 +65,8 @@ export function buildKit(provider: WalletProvider, descriptor: DeploymentDescrip
 
 /** Caches the chosen account and its kit, naming the connected key as the one candidate key. */
 export function useAccount(conn: Connection, account: HolderAccount): Kit {
+  ensureSession(conn.session);
+
   const { descriptor, provider } = holder;
 
   if (descriptor === undefined || provider === undefined) throw new Error('apply the deployment first');
@@ -110,9 +112,13 @@ export async function refreshState(conn: Connection): Promise<void> {
 
   step('setupState / recoveryState');
 
-  const setupState = await settled(conn.session, kit.setup.setupState());
-  const recoveryState = await settled(conn.session, kit.recovery.recoveryState());
+  const setupState = await kit.setup.setupState();
 
+  ensureSession(conn.session);
+
+  const recoveryState = await kit.recovery.recoveryState();
+
+  ensureSession(conn.session);
   note('setupState', setupState);
   note('recoveryState', recoveryState);
   stateOut.textContent = `read as ${conn.account}\nsetupState ${show(setupState)}\nrecoveryState ${show(recoveryState)}`;

@@ -9,7 +9,7 @@ import {
 import { type Address, getAddress, isAddress, zeroAddress } from 'viem';
 import { note, step } from '../trace';
 import { field, valueOf } from './page';
-import { SEPOLIA_CHAIN_ID } from './wallet';
+import { ensureSession, SEPOLIA_CHAIN_ID } from './wallet';
 
 /** The factory's deploy function when `VITE_AMBIRE_FACTORY_DEPLOY_FUNCTION` names none. */
 export const DEFAULT_DEPLOY_FUNCTION = 'function deploy(bytes code, uint256 salt) returns (address)';
@@ -97,10 +97,12 @@ export function deploymentInputs(): DeploymentInputs {
  * The descriptor from the form, checked against the chain as the Node scripts check theirs: the wallet's chain id must
  * be Sepolia's, and the deployed manager's `version()` and EIP-712 domain must match what the descriptor states.
  */
-export async function deploymentDescriptor(inputs: DeploymentInputs, provider: IProvider): Promise<DeploymentDescriptor> {
+export async function deploymentDescriptor(inputs: DeploymentInputs, provider: IProvider, session: number): Promise<DeploymentDescriptor> {
   step('deployment descriptor');
 
   const chainId = await provider.chainId();
+
+  ensureSession(session);
 
   if (chainId !== SEPOLIA_CHAIN_ID) throw new Error(`the wallet answers chain id ${chainId}, the descriptor names ${SEPOLIA_CHAIN_ID}`);
 
@@ -121,8 +123,12 @@ export async function deploymentDescriptor(inputs: DeploymentInputs, provider: I
   };
   const probe = new PolicyManager(provider, descriptor, inputs.action, inputs.action, BLOCK_TAGS);
   const managerVersion = await probe.version();
+
+  ensureSession(session);
+
   const domain = await probe.eip712Domain();
 
+  ensureSession(session);
   note('manager version()', managerVersion);
   note('manager eip712Domain().version', domain.version);
 

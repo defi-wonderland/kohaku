@@ -1,12 +1,23 @@
-import type { PreparedBatch, PreparedCall, SetupConfirmation, SetupState } from '@kohaku-eth/social-recovery';
+import type { Address, PreparedBatch, PreparedCall, SetupConfirmation, SetupState } from '@kohaku-eth/social-recovery';
+import { printDescription } from './describe';
 import { setupDraft } from './draft';
 import type { Env } from './env';
 import { sendAsAccount } from './send';
 import { openSession } from './session';
 import { check, findings, note, runIfMain, step } from './trace';
 
-/** What a setup run ends with; `confirmation` is absent where the EOA stand-in stopped before sending. */
-export type SetupOutcome = { readonly state: SetupState; readonly confirmation?: SetupConfirmation };
+/**
+ * What a setup run ends with: whether the action was authorized before it, what was prepared (absent where the prepare
+ * was refused on the EOA stand-in) and the confirmation (absent where the EOA stand-in stopped before sending).
+ */
+export type SetupOutcome = {
+  readonly account: Address;
+  readonly manager: Address;
+  readonly armedBefore: boolean;
+  readonly prepared?: PreparedCall | PreparedBatch;
+  readonly state: SetupState;
+  readonly confirmation?: SetupConfirmation;
+};
 
 function printPrepared(prepared: PreparedCall | PreparedBatch): void {
   const calls = prepared.kind === 'batch' ? prepared.calls : [prepared];
@@ -23,7 +34,13 @@ export async function runSetup(given?: Env): Promise<SetupOutcome> {
   const { setup } = session.kit;
   const draft = setupDraft(session);
   const sends = session.account.sendsSelfCalls;
+  const shape = { account: session.account.address, manager: session.kit.descriptor.manager };
 
+  step('setupState (before the setup)');
+
+  const armedBefore = (await setup.setupState()).isAuthorized;
+
+  note('action authorized before the setup', armedBefore);
   step('validateSetup');
 
   const validation = await setup.validateSetup(draft);
@@ -36,10 +53,7 @@ export async function runSetup(given?: Env): Promise<SetupOutcome> {
 
   const description = await setup.describeSetup(draft);
 
-  note('rule', description.rule);
-  note('wait', description.wait);
-  note('wallet guardians', description.parties.walletGuardians);
-  note('candidate keys', description.candidateKeys);
+  printDescription(description);
 
   step('prepareCommitSetup');
 
@@ -61,7 +75,7 @@ export async function runSetup(given?: Env): Promise<SetupOutcome> {
 
     note('state', state);
 
-    return { state };
+    return { ...shape, armedBefore, ...(prepared === undefined ? {} : { prepared }), state };
   }
 
   step('send the commit from the holder');
@@ -80,7 +94,7 @@ export async function runSetup(given?: Env): Promise<SetupOutcome> {
   note('state', state);
   check(state.hasSetup && state.setupCommitment.toLowerCase() === confirmation.setupCommitment.toLowerCase(), 'the committed setup stands');
 
-  return { state, confirmation };
+  return { ...shape, armedBefore, prepared, state, confirmation };
 }
 
 runIfMain(import.meta.url, async () => {

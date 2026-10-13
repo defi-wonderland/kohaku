@@ -20,7 +20,7 @@ import { isAddressEqual } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { note, step } from './trace';
 
-// The approver side's ctx and reply, built here until the methods orchestrator (PT-027) replaces this file.
+// The approver side's ctx and reply for wallet guardians, built by hand in this one file; a methods orchestrator would build them instead.
 
 /** The members a request's digest closes over, its decimal strings read back as numbers and bigints. */
 function membersOf(request: ApproverRequest): CancellationMembers {

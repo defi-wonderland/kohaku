@@ -36,7 +36,11 @@ export type Kit = {
 
 const BLOCK_TAGS = { read: 'latest', watch: 'latest' } as const;
 
-/** D-208's numbers, the order's token as the allowlist and the holder's key as the one candidate. */
+/**
+ * The sample's client configuration: two-day default and short waits, a thirty-day maximum, a one-day request window
+ * (one-hour floor), a twelve-hour cancel window and the rule cost bound; the order's token as the allowlist and the
+ * holder's key as the one candidate.
+ */
 function clientConfiguration(env: Env, holder: Address, creation?: CreationRecord): ClientConfiguration {
   return {
     defaultWait: 172800,
@@ -133,7 +137,7 @@ export async function buildKit(
     provider, descriptor, account, action, configuration, 'integrator',
     policyManager, recoveryAction, events, methods, codec, signerRecovery,
   );
-  // Type-checks once PT-074 lands the ten members and `implements IRecoveryClient` on `RecoveryClient`.
+  // The recovery client over the same parts, typed by its interface: the scripts use only what `IRecoveryClient` declares.
   const recovery: IRecoveryClient = new RecoveryClient(
     provider, descriptor, account, action, configuration,
     policyManager, recoveryAction, events, methods, codec, signerRecovery,

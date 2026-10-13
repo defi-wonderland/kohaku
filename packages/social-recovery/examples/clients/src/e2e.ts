@@ -1,4 +1,5 @@
 import { runCancel } from './cancel';
+import { checkArmingBatch } from './checks';
 import { loadEnv } from './env';
 import { runRecovery } from './recovery';
 import { runSetup } from './setup';
@@ -17,6 +18,7 @@ async function e2e(): Promise<void> {
   const setup = await runSetup(env);
 
   check(!sends || setup.confirmation?.landed === true, 'setup committed and confirmed');
+  checkArmingBatch(setup);
   step('e2e: recovery');
 
   const executed = await runRecovery({ twoStep: false }, env);

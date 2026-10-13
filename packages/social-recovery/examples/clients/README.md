@@ -42,11 +42,12 @@ pnpm build                                            # tsc --noEmit
 ## The wait: two modes
 
 The setup commits `SETUP_WAIT` seconds (default 120). A wait under the client's short-wait threshold (48 hours) is
-flagged with the SDK's `setup.wait-short` warning, which the setup and recovery scripts print.
+flagged with the SDK's `setup.wait-short` warning. The setup script prints it for the draft; the recovery script
+prints it for the committed setup, restored from the backup, so a resumed attempt is described by the wait it runs on.
 
 - Default: `pnpm run recovery` starts the attempt, polls the chain's clock until `consumableAfter`, then executes the
-  handover in the same run. A remaining wait longer than `RECOVERY_POLL_LIMIT` (default 900 s) stops the run instead.
-- `--two-step`: the first run starts the attempt and exits; run it again once the wait is over and it executes the
+  handover in the same run, however long the wait; Ctrl-C stops it, and a later run resumes the waiting attempt.
+- `--two-step`, the mode for a real wait: the first run starts the attempt and exits; run it again once the wait is over and it executes the
   waiting attempt. A run that finds an attempt waiting always resumes it rather than opening another.
 
 ## Variables
@@ -67,7 +68,6 @@ See `.env.example`; every variable carries a comment. In short:
 | `GUARDIAN_PRIVATE_KEYS`, `GUARDIAN_THRESHOLD` | the wallet guardians (comma-separated) and how many the rule needs | all |
 | `SETUP_WAIT`, `BACKUP_PASSWORD` | the committed wait and the encrypted backup's password | all |
 | `ORDER_TOKEN`, `ORDER_AMOUNT`, `ORDER_PAYEE` | the payment order; the payee defaults to the sponsor | all |
-| `RECOVERY_POLL_LIMIT` | the longest wait the default mode polls through | all |
 
 The deployment descriptor is built from these with digest version `1`; the run reads the manager's `version()` and
 EIP-712 domain at start and stops on a mismatch. The client configuration is fixed in `src/clients.ts`: default and

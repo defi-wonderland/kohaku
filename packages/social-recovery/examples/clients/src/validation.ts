@@ -32,9 +32,14 @@ async function handoverReads(kit: Kit, request: AttemptRequest, block: PinnedBlo
   };
 }
 
-/** The account's balance in the order's ERC-20 through `balanceOf`; the native asset is not read and never warns. */
+/**
+ * The account's balance in the order's ERC-20 through `balanceOf`. A zero order has no payment leg and reads no token;
+ * the native asset is not read and never warns.
+ */
 async function orderBalance(provider: IProvider, request: AttemptRequest, block: PinnedBlock): Promise<bigint> {
   const { token, amount } = request.order;
+
+  if (amount === 0n) return 0n;
 
   if (isAddressEqual(token, zeroAddress)) return amount;
 

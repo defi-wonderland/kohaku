@@ -51,8 +51,6 @@ export type Env = {
   readonly orderAmount: bigint;
   /** Absent to pay the sponsor. */
   readonly orderPayee?: Address;
-  /** The longest wait the default mode polls through before it stops and asks for `--two-step`, in seconds. */
-  readonly pollLimit: number;
 };
 
 const PRIVATE_KEY = /^0x[0-9a-fA-F]{64}$/;
@@ -186,6 +184,5 @@ export function loadEnv(): Env {
     orderToken: address('ORDER_TOKEN'),
     orderAmount: BigInt(amount),
     ...(payee === undefined ? {} : { orderPayee: payee }),
-    pollLimit: uint('RECOVERY_POLL_LIMIT', 900),
   };
 }

@@ -3,7 +3,11 @@ import { gatherReplies } from './guardians';
 import { sendFromSponsor } from './send';
 import { type Session, sponsorAddress } from './session';
 import { check, note, step } from './trace';
-import { checkRequest } from './validation';
+import { checkRequest, type NativeBalance } from './validation';
+
+/** The native balance through the session's viem client. */
+const nativeBalanceOf = (session: Session): NativeBalance => (address, blockNumber) =>
+  session.client.getBalance({ address, blockNumber: BigInt(blockNumber) });
 
 /** The chain's own clock, the latest block's timestamp, the moment every judgment compares against. */
 export const chainNow = async (session: Session): Promise<Moment> => (await session.provider.block('latest')).timestamp;
@@ -25,7 +29,7 @@ export async function assembled(session: Session, start: Gathering): Promise<{ r
   const request = kit.recovery.complete(gathering, undefined, now);
 
   note('request', { attemptId: request.attemptId, validUntil: request.validUntil, places: request.proofs.map((proof) => proof.place) });
-  await checkRequest(kit, session.provider, session.client, request, now);
+  await checkRequest(kit, session.provider, nativeBalanceOf(session), request, now);
 
   return { request, now };
 }

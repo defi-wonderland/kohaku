@@ -3,7 +3,8 @@ import { chainNow, openAttempt } from './attempt';
 import type { Env } from './env';
 import { executeAttempt } from './handover';
 import { openSession, type Session } from './session';
-import { note, runIfMain, step } from './trace';
+import { runIfMain } from './run';
+import { note, step } from './trace';
 
 /** `twoStep` starts the attempt and exits; a later run executes it once ripe. */
 export type RecoveryOptions = { readonly twoStep: boolean };

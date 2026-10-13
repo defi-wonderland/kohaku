@@ -1,26 +1,35 @@
 import { KitRefusalError, type ValidationResult } from '@kohaku-eth/social-recovery';
-import { pathToFileURL } from 'node:url';
 
 /** JSON with bigints as decimal strings, for printing records. */
 export const show = (value: unknown): string =>
   JSON.stringify(value, (_key, entry: unknown) => (typeof entry === 'bigint' ? entry.toString() : entry), 2);
 
+/** Where the trace's lines go; `failed` marks a failure's lines. */
+export type TraceSink = (line: string, failed: boolean) => void;
+
+let sink: TraceSink = (line, failed) => (failed ? console.error(line) : console.log(line));
+
+/** Sends every later trace line to `next` instead of the console. */
+export function setTraceSink(next: TraceSink): void {
+  sink = next;
+}
+
 /** One SDK call or flow step, printed as it starts. */
 export function step(label: string): void {
-  console.log(`\n▶ ${label}`);
+  sink(`\n▶ ${label}`, false);
 }
 
 /** One line under the current step. */
 export function note(label: string, value?: unknown): void {
   if (value === undefined) {
-    console.log(`  ${label}`);
+    sink(`  ${label}`, false);
 
     return;
   }
 
   const text = typeof value === 'string' ? value : show(value);
 
-  console.log(`  ${label}: ${text.includes('\n') ? text.replace(/\n/g, '\n  ') : text}`);
+  sink(`  ${label}: ${text.includes('\n') ? text.replace(/\n/g, '\n  ') : text}`, false);
 }
 
 /** Prints a validation result's errors and warnings by code. */
@@ -41,10 +50,10 @@ export function check(condition: boolean, message: string): asserts condition {
 
 /** Prints a failure, with the findings a `KitRefusalError` carries. */
 export function failure(error: unknown): void {
-  console.error('\n✗ failed');
+  sink('\n✗ failed', true);
 
   if (error instanceof KitRefusalError) {
-    console.error(`  KitRefusalError: ${error.message}`);
+    sink(`  KitRefusalError: ${error.message}`, true);
 
     if (error.findings !== undefined) findings(error.findings);
 
@@ -53,20 +62,5 @@ export function failure(error: unknown): void {
     return;
   }
 
-  console.error(error instanceof Error ? `  ${error.stack ?? error.message}` : `  ${show(error)}`);
-}
-
-/** Runs a script's entry when its module is the one Node was started with, exiting 1 on any failure. */
-export function runIfMain(moduleUrl: string, entry: () => Promise<void>): void {
-  const started = process.argv[1];
-
-  if (started === undefined || pathToFileURL(started).href !== moduleUrl) return;
-
-  entry().then(
-    () => process.exit(0),
-    (error: unknown) => {
-      failure(error);
-      process.exit(1);
-    },
-  );
+  sink(error instanceof Error ? `  ${error.stack ?? error.message}` : `  ${show(error)}`, true);
 }

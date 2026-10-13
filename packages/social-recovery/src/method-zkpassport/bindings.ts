@@ -1,34 +1,37 @@
+import { isHex } from 'viem';
 import {
+  FORMATS_HEX_BYTES32_PATTERN,
   METHOD_ZKPASSPORT_BIND_DATA_KEY,
   METHOD_ZKPASSPORT_BIND_EVM_KEY,
   METHOD_ZKPASSPORT_CUSTOM_DATA_KEY,
-  METHOD_ZKPASSPORT_DIGEST_ERROR,
-  METHOD_ZKPASSPORT_DIGEST_PATTERN,
+  METHOD_ZKPASSPORT_DIGEST_HEX_MESSAGE,
+  METHOD_ZKPASSPORT_DIGEST_WIDTH_MESSAGE,
   METHOD_ZKPASSPORT_MIN_PUBLIC_INPUTS,
   METHOD_ZKPASSPORT_NON_SALTED_NULLIFIER,
   METHOD_ZKPASSPORT_NULLIFIER_TYPE_FROM_END,
   METHOD_ZKPASSPORT_OUTER_EVM_PREFIX,
   METHOD_ZKPASSPORT_SCOPED_NULLIFIER_FROM_END,
   METHOD_ZKPASSPORT_WORD_HEX_LENGTH,
-  METHOD_ZKPASSPORT_WORD_PATTERN,
 } from '../constants';
+import { lowerHex } from '../formats/guards';
 import type { Hex } from '../interfaces';
-import type { StackProof } from '../types';
+import type { ZkPassportStackProof } from '../types';
 
-const isRecord = (value: unknown): value is { readonly [key: string]: unknown } =>
+/** Whether the value is a non-array object whose members can be read. */
+export const isRecord = (value: unknown): value is { readonly [key: string]: unknown } =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** The digest as the custom field's text, lower-case; throws on anything but 32 bytes of hex. */
+/** The digest as the custom field's text, lower-case; `TypeError` on anything but hex, `RangeError` on hex that is not 32 bytes. */
 export const digestText = (digest: Hex): string => {
-  if (typeof digest !== 'string' || !METHOD_ZKPASSPORT_DIGEST_PATTERN.test(digest)) {
-    throw new Error(METHOD_ZKPASSPORT_DIGEST_ERROR);
-  }
+  if (!isHex(digest, { strict: true })) throw new TypeError(METHOD_ZKPASSPORT_DIGEST_HEX_MESSAGE);
 
-  return digest.toLowerCase();
+  if (!FORMATS_HEX_BYTES32_PATTERN.test(digest)) throw new RangeError(METHOD_ZKPASSPORT_DIGEST_WIDTH_MESSAGE);
+
+  return lowerHex(digest);
 };
 
 /** The first proof named as the outer EVM proof, or undefined where none is. */
-export const outerEvmProof = (proofs: unknown): StackProof | undefined => {
+export const outerEvmProof = (proofs: unknown): ZkPassportStackProof | undefined => {
   if (!Array.isArray(proofs)) return undefined;
 
   const found: unknown = proofs.find(
@@ -36,11 +39,11 @@ export const outerEvmProof = (proofs: unknown): StackProof | undefined => {
       isRecord(proof) && typeof proof['name'] === 'string' && proof['name'].startsWith(METHOD_ZKPASSPORT_OUTER_EVM_PREFIX),
   );
 
-  return found as StackProof | undefined;
+  return found as ZkPassportStackProof | undefined;
 };
 
 /** The custom data the outer proof's bind committed inputs carry, or undefined where it carries none. */
-export const boundCustomData = (proof: StackProof): string | undefined => {
+export const boundCustomData = (proof: ZkPassportStackProof): string | undefined => {
   const committed: unknown = proof.committedInputs;
 
   if (!isRecord(committed)) return undefined;
@@ -57,7 +60,7 @@ export const boundCustomData = (proof: StackProof): string | undefined => {
 const trailing = (publicInputs: readonly string[], fromEnd: number): bigint | undefined => {
   const value = publicInputs[publicInputs.length - fromEnd];
 
-  return publicInputs.length >= METHOD_ZKPASSPORT_MIN_PUBLIC_INPUTS && typeof value === 'string' && METHOD_ZKPASSPORT_WORD_PATTERN.test(value)
+  return publicInputs.length >= METHOD_ZKPASSPORT_MIN_PUBLIC_INPUTS && typeof value === 'string' && FORMATS_HEX_BYTES32_PATTERN.test(value)
     ? BigInt(value)
     : undefined;
 };

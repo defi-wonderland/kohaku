@@ -1,6 +1,9 @@
-import { encodeAbiParameters } from 'viem';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { encodeAbiParameters, parseAbiParameters } from 'viem';
 import type { zkPassportMethod } from '../../src/method-zkpassport';
-import type { Address, Ctx, DeploymentDescriptor, Hex } from '../../src/interfaces';
+import type { Address, Ctx, DeploymentDescriptor, Fields, Hex } from '../../src/interfaces';
+import type { VectorFile } from '../kat/read-vector';
 
 /** The stack the factory takes, named from the factory's own signature rather than a deep import. */
 export type Stack = NonNullable<Parameters<typeof zkPassportMethod>[0]>;
@@ -135,7 +138,7 @@ export function stackDouble(options: StackDoubleOptions = {}): StackDouble {
           proofVerificationData: {
             vkeyHash: outer.vkeyHash,
             proof: outer.proof,
-            publicInputs: [...outer.publicInputs],
+            publicInputs: outer.publicInputs.slice(),
           },
           committedInputs: outer.committedInputs,
           serviceConfig: options.serviceConfig?.(args) ?? {
@@ -224,12 +227,55 @@ export function makeCtx(config: Hex, digest: Hex = DIGEST): Ctx {
   };
 }
 
-/** The config layout the vector's derivation names, encoded here with viem, independently of the codec. */
-export const encodeConfig = (identifier: Hex, version: Hex, domain: string, scope: string, validity: bigint): Hex =>
-  encodeAbiParameters(
-    [{ type: 'bytes32' }, { type: 'bytes32' }, { type: 'string' }, { type: 'string' }, { type: 'uint256' }],
-    [identifier, version, domain, scope, validity],
-  );
+/** The contracts pin's config decode signature, `abi.decode(config, (bytes32, string, string, uint256))`. */
+export const PIN_CONFIG_SIGNATURE = 'bytes32 uniqueIdentifier, string domain, string scope, uint256 validityPeriodInSeconds';
+
+/** The config layout the contracts pin decodes, encoded here with viem, independently of the codec. */
+export const encodeConfig = (identifier: Hex, domain: string, scope: string, validity: bigint): Hex =>
+  encodeAbiParameters(parseAbiParameters(PIN_CONFIG_SIGNATURE), [identifier, domain, scope, validity]);
+
+/** The superseded five-field layout with a version word second, which the pin no longer decodes. */
+export const encodeFiveFieldConfig = (identifier: Hex, version: Hex, domain: string, scope: string, validity: bigint): Hex =>
+  encodeAbiParameters(parseAbiParameters('bytes32, bytes32, string, string, uint256'), [identifier, version, domain, scope, validity]);
+
+/** The same fields as a nested `(bytes32, (string, string, uint256))` tuple, whose bytes differ from the pin's flat decode. */
+export const encodeNestedConfig = (identifier: Hex, domain: string, scope: string, validity: bigint): Hex =>
+  encodeAbiParameters(parseAbiParameters('bytes32, (string, string, uint256)'), [identifier, [domain, scope, validity]]);
+
+/** The config fields of the pin's layout, as the codec takes them. */
+export const configFields = (identifier: Hex, domain: string, scope: string, validity: bigint): Fields => ({
+  uniqueIdentifier: identifier,
+  domain,
+  scope,
+  validityPeriodInSeconds: validity,
+});
+
+/** The tester-authored pin-layout config rows, computed with viem outside the implementation. */
+export const readPinConfigRows = (): VectorFile =>
+  JSON.parse(readFileSync(fileURLToPath(new URL('./config-pin.json', import.meta.url)), 'utf8')) as VectorFile;
+
+/** Runs `call` and answers what it threw, failing when it returned. */
+export function thrown(call: () => unknown): unknown {
+  try {
+    call();
+  } catch (error) {
+    return error;
+  }
+
+  throw new Error('expected a throw, the call returned');
+}
+
+/** An array of `length` with only the given positions set, the others holes. */
+export function sparse(length: number, entries: { readonly [index: number]: string }): string[] {
+  const values = new Array<string>(length);
+
+  for (const [index, value] of Object.entries(entries)) values[Number(index)] = value;
+
+  return values;
+}
+
+/** Whether an error is an argument refusal: a `TypeError` or a `RangeError`, never a plain `Error`. */
+export const isArgumentError = (error: unknown): boolean => error instanceof TypeError || error instanceof RangeError;
 
 /** The proof layout the vector's derivation names, encoded here with viem, independently of the codec. */
 export const encodeProof = (vkeyHash: Hex, proof: Hex, publicInputs: readonly Hex[], committedInputs: Hex): Hex =>

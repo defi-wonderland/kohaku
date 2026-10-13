@@ -1,13 +1,16 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import * as folder from '../../src/method-zkpassport';
 import * as recoveryMethods from '../../src/recovery-methods';
 import { zkPassportMethod } from '../../src/method-zkpassport';
+import { getAddress } from 'viem';
+import * as constants from '../../src/constants';
+import { FORMATS_ZERO_ADDRESS } from '../../src/constants';
 import { DEVICE_KINDS } from '../../src/interfaces';
 import { createSourceProgram, PACKAGE_ROOT, requireSourceFile, resolveExports, SRC_ROOT } from '../helpers/source';
-import { DESCRIPTOR, encodeConfig, makeCtx, PARAMS, stackDouble, word } from './fixtures';
+import { DEFAULT_OUTER, DESCRIPTOR, DIGEST, encodeConfig, makeCtx, PARAMS, stackDouble, stackProof, word } from './fixtures';
 
 const TEN = [
   'codec',
@@ -33,7 +36,7 @@ function membersOf(value: object): string[] {
   return [...names].sort();
 }
 
-const CTX = makeCtx(encodeConfig(word(7), word(1), PARAMS.domain, PARAMS.scope, 1n));
+const CTX = makeCtx(encodeConfig(word(7), PARAMS.domain, PARAMS.scope, 1n));
 
 describe('the ten members', () => {
   const method = zkPassportMethod(stackDouble().stack);
@@ -50,8 +53,30 @@ describe('the ten members', () => {
     expect(method.modules(other)).toEqual([other.methodZkpassport]);
   });
 
-  it('deviceBinding is external-app', () => {
+  it('modules(descriptor) answers no module when the deployment carries the zero address for zkPassport', () => {
+    expect(method.modules({ ...DESCRIPTOR, methodZkpassport: FORMATS_ZERO_ADDRESS })).toEqual([]);
+  });
+
+  it('modules(descriptor) answers a mixed-case (checksummed) address as one module, the same address', () => {
+    const mixed = getAddress(`0x${'ab'.repeat(20)}`);
+
+    expect(mixed).not.toBe(mixed.toLowerCase());
+
+    const answered = method.modules({ ...DESCRIPTOR, methodZkpassport: mixed });
+
+    expect(answered).toHaveLength(1);
+    expect(answered[0]?.toLowerCase()).toBe(mixed.toLowerCase());
+  });
+
+  it('modules(descriptor) answers an address that differs from zero in one nibble as a module', () => {
+    const almost = `0x${'0'.repeat(39)}1` as const;
+
+    expect(method.modules({ ...DESCRIPTOR, methodZkpassport: almost })).toEqual([almost]);
+  });
+
+  it('deviceBinding is external-app, the named constant', () => {
     expect(method.deviceBinding).toBe('external-app');
+    expect(method.deviceBinding).toBe(constants.METHOD_ZKPASSPORT_DEVICE_BINDING);
   });
 
   it('describe states the device kind, an external proving app, and that the phone shows the name, logo and purpose', () => {
@@ -59,6 +84,7 @@ describe('the ten members', () => {
     const facts = zkPassportMethod(double.stack).describe(CTX);
 
     expect(facts.kind).toBe('external-proving-app');
+    expect(facts.kind).toBe(constants.METHOD_ZKPASSPORT_DEVICE_KIND);
     expect(DEVICE_KINDS).toContain(facts.kind);
 
     const shown = Object.entries(facts).filter(([key]) => /name/i.test(key) && /logo/i.test(key) && /purpose/i.test(key));
@@ -66,6 +92,7 @@ describe('the ten members', () => {
     expect(shown).toEqual([[expect.any(String), true]]);
     expect(double.calls).toEqual([]);
     expect(() => JSON.stringify(facts)).not.toThrow();
+    expect(JSON.stringify(facts)).not.toContain(DEFAULT_OUTER.version.slice(2, 18));
   });
 
   it('describe states the stack\'s standing, naming the pinned stack', () => {
@@ -88,6 +115,80 @@ describe('the ten members', () => {
   });
 });
 
+let program: ts.Program | undefined;
+
+/** One program over `src/`, built once for the two type-level checks. */
+const sourceProgram = (): ts.Program => (program ??= createSourceProgram());
+
+/** The method's exported constants, by name. */
+const OWN = Object.entries(constants).filter(([name]) => name.startsWith('METHOD_ZKPASSPORT_'));
+
+describe('the method\'s constants', () => {
+  it('the material-rejected and device-unavailable failures are frozen typed records', () => {
+    expect(constants.METHOD_ZKPASSPORT_MATERIAL_REJECTED).toEqual({ kind: 'reply-failure', cause: 'material-rejected' });
+    expect(constants.METHOD_ZKPASSPORT_DEVICE_UNAVAILABLE).toEqual({ kind: 'reply-failure', cause: 'device-unavailable' });
+    expect(Object.isFrozen(constants.METHOD_ZKPASSPORT_MATERIAL_REJECTED)).toBe(true);
+    expect(Object.isFrozen(constants.METHOD_ZKPASSPORT_DEVICE_UNAVAILABLE)).toBe(true);
+  });
+
+  it('the failures configFrom and replyFrom answer are those frozen records', async () => {
+    const method = zkPassportMethod(stackDouble().stack);
+    const absent = zkPassportMethod(stackDouble({ constructThrows: true }).stack);
+    const refused = await method.configFrom(method.enrollInput(PARAMS), undefined);
+    const unavailable = await absent.replyFrom(CTX, absent.signingInput(CTX, PARAMS), { proofs: [stackProof('outer_evm_count_5', DIGEST)] });
+
+    expect(refused).toEqual(constants.METHOD_ZKPASSPORT_MATERIAL_REJECTED);
+    expect(Object.isFrozen(refused)).toBe(true);
+    expect(unavailable).toEqual(constants.METHOD_ZKPASSPORT_DEVICE_UNAVAILABLE);
+    expect(Object.isFrozen(unavailable)).toBe(true);
+  });
+
+  it('the config layout is the pin\'s four flat fields, with no version', () => {
+    const layout = constants.METHOD_ZKPASSPORT_CONFIG_LAYOUT as readonly { readonly type: string; readonly name?: string }[];
+
+    expect(layout.map((parameter) => parameter.type)).toEqual(['bytes32', 'string', 'string', 'uint256']);
+    expect(JSON.stringify(layout)).not.toMatch(/version/i);
+  });
+
+  it('exports no parser regex: the hex patterns are the merged FORMATS_ ones', () => {
+    expect(OWN.filter(([, value]) => value instanceof RegExp).map(([name]) => name)).toEqual([]);
+    expect(OWN.map(([name]) => name)).not.toEqual(
+      expect.arrayContaining([expect.stringMatching(/^METHOD_ZKPASSPORT_(?:WORD|DIGEST|BYTES)_PATTERN$|^METHOD_ZKPASSPORT_UINT256_LIMIT$/)]),
+    );
+  });
+});
+
+describe('the changeset', () => {
+  const changesets = join(PACKAGE_ROOT, '..', '..', '.changeset');
+  const texts = readdirSync(changesets)
+    .filter((name) => name.endsWith('.md'))
+    .map((name) => readFileSync(join(changesets, name), 'utf8'))
+    .filter((text) => text.includes('zkPassportMethod'));
+
+  it('one changeset names the method, as a patch of the package', () => {
+    expect(texts).toHaveLength(1);
+    expect(texts[0]).toMatch(/['"]@kohaku-eth\/social-recovery['"]\s*:\s*patch/);
+  });
+
+  it('names the METHOD_ZKPASSPORT_ constants, by prefix or one by one', () => {
+    const text = texts[0] ?? '';
+    const byPrefix = /METHOD_ZKPASSPORT_(?![A-Z0-9])|METHOD_ZKPASSPORT_\*/.test(text);
+
+    expect(OWN.length).toBeGreaterThan(0);
+    expect(byPrefix || OWN.every(([name]) => text.includes(name))).toBe(true);
+  });
+
+  it('names every type the method\'s types file exports', () => {
+    const program = sourceProgram();
+    const typesFile = join(SRC_ROOT, 'types', 'method-zkpassport.ts');
+    const names = [...resolveExports(program.getTypeChecker(), requireSourceFile(program, typesFile)).keys()];
+    const text = texts[0] ?? '';
+
+    expect(names.length).toBeGreaterThan(0);
+    expect(names.filter((name) => !new RegExp(`\\b${name}\\b`).test(text))).toEqual([]);
+  }, 120_000);
+});
+
 describe('exports', () => {
   it('the folder\'s index exports the factory alone, at runtime', () => {
     expect(Object.keys(folder)).toEqual(['zkPassportMethod']);
@@ -95,11 +196,11 @@ describe('exports', () => {
   });
 
   it('the folder\'s index exports the factory alone, types included', () => {
-    const program = createSourceProgram();
+    const program = sourceProgram();
     const exported = resolveExports(program.getTypeChecker(), requireSourceFile(program, join(SRC_ROOT, 'method-zkpassport', 'index.ts')));
 
     expect([...exported.keys()]).toEqual(['zkPassportMethod']);
-  });
+  }, 120_000);
 
   it('the ./recovery-methods entry exports the same factory', () => {
     expect(recoveryMethods.zkPassportMethod).toBe(zkPassportMethod);

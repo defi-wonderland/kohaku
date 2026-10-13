@@ -1,7 +1,12 @@
-import { METHOD_ZKPASSPORT_DECIMAL_PATTERN, METHOD_ZKPASSPORT_DEV_MODE } from '../constants';
+import {
+  METHOD_ZKPASSPORT_DEV_MODE,
+  METHOD_ZKPASSPORT_DEVICE_UNAVAILABLE,
+  METHOD_ZKPASSPORT_MATERIAL_REJECTED,
+} from '../constants';
+import { METHOD_ZKPASSPORT_DECIMAL_PATTERN } from '../constants/method-zkpassport-parse';
 import type { EnrollFailure, Hex, Material, ReplyFailure } from '../interfaces';
-import type { Session, StackProof, ZkPassportStack, ZkPassportVerifierParameters } from '../types';
-import { boundCustomData, digestText, identifierWord, isNonSalted, outerEvmProof, scopedNullifier } from './bindings';
+import type { ZkPassportProof, ZkPassportSession, ZkPassportStack, ZkPassportStackProof, ZkPassportVerifierParameters } from '../types';
+import { boundCustomData, digestText, identifierWord, isNonSalted, isRecord, outerEvmProof, scopedNullifier } from './bindings';
 import {
   configFromFields,
   decodeZkPassportConfig,
@@ -10,38 +15,35 @@ import {
   proofFromFields,
 } from './codec';
 
-const rejected: ReplyFailure = { kind: 'reply-failure', cause: 'material-rejected' };
-
-const unavailable: ReplyFailure = { kind: 'reply-failure', cause: 'device-unavailable' };
-
-const isRecord = (value: unknown): value is { readonly [key: string]: unknown } =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-/** The outer proof's verifier parameters; `device-unavailable` where the stack does not load, `material-rejected` where it refuses the proof. */
-const parametersFor = async (
+/** The stack's verifier parameters for the outer proof, with their proof part checked whole; `device-unavailable` where the stack does not load, `material-rejected` where it refuses the proof or answers a malformed one. */
+const checkedParameters = async (
   stack: ZkPassportStack,
-  session: Session,
-  proof: StackProof,
-): Promise<ZkPassportVerifierParameters | ReplyFailure> => {
+  session: ZkPassportSession,
+  outer: ZkPassportStackProof,
+): Promise<{ readonly params: ZkPassportVerifierParameters; readonly proof: ZkPassportProof } | ReplyFailure> => {
   let client;
 
   try {
     client = await stack(session.domain);
   } catch {
-    return unavailable;
+    return METHOD_ZKPASSPORT_DEVICE_UNAVAILABLE;
   }
 
   try {
     const params = client.getSolidityVerifierParameters({
-      proof,
+      proof: outer,
       scope: session.scope,
       domain: session.domain,
       devMode: METHOD_ZKPASSPORT_DEV_MODE,
     });
 
-    return params.serviceConfig.devMode === METHOD_ZKPASSPORT_DEV_MODE ? params : rejected;
+    if (params.serviceConfig.devMode !== METHOD_ZKPASSPORT_DEV_MODE) return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
+
+    const { vkeyHash, proof, publicInputs } = params.proofVerificationData;
+
+    return { params, proof: proofFromFields({ proofVerificationData: { vkeyHash, proof, publicInputs }, committedInputs: params.committedInputs }) };
   } catch {
-    return rejected;
+    return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
   }
 };
 
@@ -53,31 +55,31 @@ const isFailure = (value: unknown): value is ReplyFailure => isRecord(value) && 
  */
 export const enrolledConfig = async (
   stack: ZkPassportStack,
-  session: Session,
+  session: ZkPassportSession,
   material: Material,
 ): Promise<Hex | EnrollFailure> => {
   const result = isRecord(material) ? material['result'] : undefined;
 
-  if (!isRecord(result) || result['verified'] !== true) return rejected;
+  if (!isRecord(result) || result['verified'] !== true) return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
 
   const identifier = result['uniqueIdentifier'];
   const outer = outerEvmProof(result['proofs']);
 
-  if (typeof identifier !== 'string' || !METHOD_ZKPASSPORT_DECIMAL_PATTERN.test(identifier) || outer === undefined) return rejected;
+  if (typeof identifier !== 'string' || !METHOD_ZKPASSPORT_DECIMAL_PATTERN.test(identifier) || outer === undefined) return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
 
-  const params = await parametersFor(stack, session, outer);
+  const checked = await checkedParameters(stack, session, outer);
 
-  if (isFailure(params)) return params;
+  if (isFailure(checked)) return checked;
 
-  const inputs = params.proofVerificationData.publicInputs;
+  const { params, proof } = checked;
+  const inputs = proof.proofVerificationData.publicInputs;
   const unique = BigInt(identifier);
 
-  if (unique === 0n || scopedNullifier(inputs) !== unique || !isNonSalted(inputs)) return rejected;
+  if (unique === 0n || scopedNullifier(inputs) !== unique || !isNonSalted(inputs)) return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
 
   try {
     const config = configFromFields({
       uniqueIdentifier: identifierWord(unique),
-      version: params.version,
       domain: params.serviceConfig.domain,
       scope: params.serviceConfig.scope,
       validityPeriodInSeconds: params.serviceConfig.validityPeriodInSeconds,
@@ -85,7 +87,7 @@ export const enrolledConfig = async (
 
     return encodeZkPassportConfig(config);
   } catch {
-    return rejected;
+    return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
   }
 };
 
@@ -95,14 +97,14 @@ export const enrolledConfig = async (
  */
 export const packagedProof = async (
   stack: ZkPassportStack,
-  session: Session,
+  session: ZkPassportSession,
   config: Hex,
   digest: Hex,
   material: Material,
 ): Promise<Hex | ReplyFailure> => {
   const outer = outerEvmProof(isRecord(material) ? material['proofs'] : undefined);
 
-  if (outer === undefined) return rejected;
+  if (outer === undefined) return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
 
   let expected: string;
   let committed: bigint;
@@ -111,25 +113,18 @@ export const packagedProof = async (
     expected = digestText(digest);
     committed = BigInt(decodeZkPassportConfig(config).uniqueIdentifier);
   } catch {
-    return rejected;
+    return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
   }
 
-  const params = await parametersFor(stack, session, outer);
+  const checked = await checkedParameters(stack, session, outer);
 
-  if (isFailure(params)) return params;
+  if (isFailure(checked)) return checked;
 
-  const { vkeyHash, proof, publicInputs } = params.proofVerificationData;
+  const { proof } = checked;
 
-  if (boundCustomData(outer) !== expected || scopedNullifier(publicInputs) !== committed) return rejected;
-
-  try {
-    const packaged = proofFromFields({
-      proofVerificationData: { vkeyHash, proof, publicInputs: [...publicInputs] },
-      committedInputs: params.committedInputs,
-    });
-
-    return encodeZkPassportProof(packaged);
-  } catch {
-    return rejected;
+  if (boundCustomData(outer) !== expected || scopedNullifier(proof.proofVerificationData.publicInputs) !== committed) {
+    return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
   }
+
+  return encodeZkPassportProof(proof);
 };

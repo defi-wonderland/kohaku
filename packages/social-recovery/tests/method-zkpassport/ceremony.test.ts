@@ -16,7 +16,11 @@ import {
   outerInputs,
   PARAMS,
   stackDouble,
+  isArgumentError,
+  readPinConfigRows,
+  sparse,
   stackProof,
+  thrown,
   word,
   type OuterMaterial,
   type StackCall,
@@ -39,7 +43,7 @@ const REQUEST_ARGS = {
 const rejected: ReplyFailure = { kind: 'reply-failure', cause: 'material-rejected' };
 
 /** The config the default outer proof's identifier commits to under PARAMS, encoded independently. */
-const CONFIG = encodeConfig(word(IDENTIFIER), asHex(DEFAULT_OUTER.version), PARAMS.domain, PARAMS.scope, 604800n);
+const CONFIG = encodeConfig(word(IDENTIFIER), PARAMS.domain, PARAMS.scope, 604800n);
 
 const enrollMaterial = (overrides: { readonly [k: string]: unknown } = {}): Material => ({
   result: {
@@ -101,9 +105,19 @@ describe('enrollment: enrollInput(params) and configFrom(input, { result })', ()
 
     const decoded = method.codec.decodeConfig(config as Hex);
 
-    expect(decoded['uniqueIdentifier']).toBe(word(IDENTIFIER));
-    expect(decoded['domain']).toBe(PARAMS.domain);
-    expect(decoded['scope']).toBe(PARAMS.scope);
+    expect(decoded).toEqual({ uniqueIdentifier: word(IDENTIFIER), domain: PARAMS.domain, scope: PARAMS.scope, validityPeriodInSeconds: 604800n });
+  });
+
+  it('configFrom writes no version: the stack\'s version word appears nowhere in the config', async () => {
+    const method = zkPassportMethod(stackDouble().stack);
+    const config = await method.configFrom(method.enrollInput(PARAMS), enrollMaterial());
+
+    expect(String(config)).not.toContain(DEFAULT_OUTER.version.slice(2, 18));
+    expect(Object.keys(method.codec.decodeConfig(config as Hex))).not.toContain('version');
+  });
+
+  it('enrollInput carries no version', () => {
+    expect(Object.keys(zkPassportMethod(stackDouble().stack).enrollInput(PARAMS))).not.toContain('version');
   });
 
   it('configFrom hands the outer_evm proof to getSolidityVerifierParameters with the domain and scope off the input, dev mode off', async () => {
@@ -154,6 +168,8 @@ describe('enrollment: enrollInput(params) and configFrom(input, { result })', ()
     ['a dev-mode mock nullifier (type 2)', enrollMaterial(), { ...DEFAULT_OUTER, publicInputs: outerInputs(IDENTIFIER, 2n) }],
     ['a dev-mode mock nullifier (type 3)', enrollMaterial(), { ...DEFAULT_OUTER, publicInputs: outerInputs(IDENTIFIER, 3n) }],
     ['too few public inputs', enrollMaterial(), { ...DEFAULT_OUTER, publicInputs: [word(IDENTIFIER)] }],
+    ['public inputs with a hole', enrollMaterial(), { ...DEFAULT_OUTER, publicInputs: sparse(6, { 0: word(1), 2: word(2), 3: word(0), 4: word(IDENTIFIER), 5: word(3) }) }],
+    ['a 31-byte public input', enrollMaterial(), { ...DEFAULT_OUTER, publicInputs: [`0x${'11'.repeat(31)}`, ...outerInputs(IDENTIFIER)] }],
   ])('configFrom answers the typed EnrollFailure for %s, never a throw', async (_why, material, outer) => {
     const method = zkPassportMethod(stackDouble(outer === undefined ? {} : { outer }).stack);
 
@@ -162,6 +178,17 @@ describe('enrollment: enrollInput(params) and configFrom(input, { result })', ()
 
   it('configFrom answers EnrollFailure when the stack reports dev mode in the service config', async () => {
     const double = stackDouble({ serviceConfig: (args) => ({ validityPeriodInSeconds: 1, domain: args.domain, scope: args.scope, devMode: true }) });
+    const method = zkPassportMethod(double.stack);
+
+    await expect(method.configFrom(method.enrollInput(PARAMS), enrollMaterial())).resolves.toEqual(rejected);
+  });
+
+  it.each([
+    ['over uint256', 2 ** 300],
+    ['negative', -1],
+    ['fractional', 1.5],
+  ])('configFrom answers EnrollFailure, never a throw, when the stack reports a validity %s', async (_why, validity) => {
+    const double = stackDouble({ serviceConfig: (args) => ({ validityPeriodInSeconds: validity, domain: args.domain, scope: args.scope, devMode: false }) });
     const method = zkPassportMethod(double.stack);
 
     await expect(method.configFrom(method.enrollInput(PARAMS), enrollMaterial())).resolves.toEqual(rejected);
@@ -196,11 +223,22 @@ describe('enrollment: enrollInput(params) and configFrom(input, { result })', ()
 
   it.each([
     ['no params', undefined],
+    ['params that are not a record', 'recover.example'],
     ['no domain', { scope: PARAMS.scope }],
-    ['an empty scope', { domain: PARAMS.domain, scope: '' }],
+    ['no scope', { domain: PARAMS.domain }],
+    ['a numeric domain', { domain: 7, scope: PARAMS.scope }],
     ['a name that is not text', { ...PARAMS, name: 5 }],
-  ])('enrollInput refuses %s (an orchestrator-side refusal throws)', (_why, params) => {
-    expect(() => zkPassportMethod(stackDouble().stack).enrollInput(params as never)).toThrow();
+    ['a logo that is not text', { ...PARAMS, logo: {} }],
+    ['a purpose that is not text', { ...PARAMS, purpose: 3n }],
+  ])('enrollInput refuses %s with a TypeError', (_why, params) => {
+    expect(() => zkPassportMethod(stackDouble().stack).enrollInput(params as never)).toThrow(TypeError);
+  });
+
+  it.each([
+    ['an empty scope', { domain: PARAMS.domain, scope: '' }],
+    ['an empty domain', { domain: '', scope: PARAMS.scope }],
+  ])('enrollInput refuses %s with a TypeError or a RangeError, never a plain Error', (_why, params) => {
+    expect(isArgumentError(thrown(() => zkPassportMethod(stackDouble().stack).enrollInput(params as never)))).toBe(true);
   });
 });
 
@@ -220,6 +258,18 @@ describe('approval: signingInput(ctx, params) and replyFrom(ctx, input, { proofs
       { kind: 'done', domain: PARAMS.domain },
     ]);
     expect(typeof request.url).toBe('string');
+  });
+
+  it.each([
+    ['no params', undefined],
+    ['no domain', { scope: PARAMS.scope }],
+    ['a numeric scope', { domain: PARAMS.domain, scope: 7 }],
+    ['a name that is not text', { ...PARAMS, name: 5 }],
+  ])('signingInput refuses %s with a TypeError, and asks the stack nothing', (_why, params) => {
+    const double = stackDouble();
+
+    expect(() => zkPassportMethod(double.stack).signingInput(makeCtx(CONFIG), params as never)).toThrow(TypeError);
+    expect(double.calls).toEqual([]);
   });
 
   it('a different scope yields a different request, and a different domain another stack instance', async () => {
@@ -278,6 +328,8 @@ describe('approval: signingInput(ctx, params) and replyFrom(ctx, input, { proofs
     ['bound data that is the digest without 0x', replyMaterial(DIGEST.slice(2)), undefined],
     ['no bound data', replyMaterial(null), undefined],
     ['a unique identifier that is not the config\'s', replyMaterial(), { ...DEFAULT_OUTER, publicInputs: outerInputs(IDENTIFIER + 1n) }],
+    ['public inputs with a hole', replyMaterial(), { ...DEFAULT_OUTER, publicInputs: sparse(6, { 0: word(1), 2: word(2), 3: word(0), 4: word(IDENTIFIER), 5: word(3) }) }],
+    ['a public input that is not a word', replyMaterial(), { ...DEFAULT_OUTER, publicInputs: ['0x01', ...outerInputs(IDENTIFIER)] }],
   ])('replyFrom answers the typed ReplyFailure for %s, never a throw', async (_why, material, outer) => {
     const method = zkPassportMethod(stackDouble(outer === undefined ? {} : { outer }).stack);
     const ctx = makeCtx(CONFIG);
@@ -310,14 +362,14 @@ describe('approval: signingInput(ctx, params) and replyFrom(ctx, input, { proofs
 });
 
 const proofFile = readVector('method-zkpassport-proof.json');
-const configFile = readVector('method-zkpassport-config.json');
+const configFile = readPinConfigRows();
 
-describe('the ceremony reproduces the blessed rows', () => {
-  const configRow = configFile.vectors[0];
+describe('the ceremony reproduces the pin\'s config row and the blessed proof row', () => {
+  const configRow = configFile.vectors.find((row) => row['id'] === 'normal');
   const proofRow = proofFile.vectors[0];
 
   const rowOuter = (): OuterMaterial => ({
-    version: asText(member(configRow, 'input', 'version')),
+    version: DEFAULT_OUTER.version,
     vkeyHash: asText(member(proofRow, 'input', 'proofVerificationData', 'vkeyHash')),
     proof: asText(member(proofRow, 'input', 'proofVerificationData', 'proof')),
     publicInputs: (member(proofRow, 'input', 'proofVerificationData', 'publicInputs') as unknown[]).map(asText),

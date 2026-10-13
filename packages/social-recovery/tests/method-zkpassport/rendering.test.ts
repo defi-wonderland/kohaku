@@ -3,7 +3,7 @@ import { zkPassportMethod } from '../../src/method-zkpassport';
 import type { Hex } from '../../src/interfaces';
 import { encodeConfig, makeCtx, PARAMS, stackDouble, word, type StackCall } from './fixtures';
 
-const CONFIG = encodeConfig(word(7), word(1), PARAMS.domain, PARAMS.scope, 3600n);
+const CONFIG = encodeConfig(word(7), PARAMS.domain, PARAMS.scope, 3600n);
 
 /** The rendering from the digest's value: `0x` and the value in 64 lowercase hex digits. */
 const rendering = (digest: string): string => `0x${BigInt(digest).toString(16).padStart(64, '0')}`;
@@ -66,14 +66,15 @@ describe('the digest text bound as the custom field', () => {
   });
 
   it.each([
-    ['31 bytes', `0x${'11'.repeat(31)}`],
-    ['33 bytes', `0x${'11'.repeat(33)}`],
-    ['no 0x prefix', '11'.repeat(32)],
-    ['non-hex characters', `0x${'zz'.repeat(32)}`],
-  ])('signingInput refuses a digest of %s rather than binding another rendering', (_why, digest) => {
+    ['31 bytes', `0x${'11'.repeat(31)}`, RangeError],
+    ['33 bytes', `0x${'11'.repeat(33)}`, RangeError],
+    ['no 0x prefix', '11'.repeat(32), TypeError],
+    ['non-hex characters', `0x${'zz'.repeat(32)}`, TypeError],
+    ['a number', 7, TypeError],
+  ])('signingInput refuses a digest of %s with the argument error class, rather than binding another rendering', (_why, digest, errorClass) => {
     const double = stackDouble();
 
-    expect(() => zkPassportMethod(double.stack).signingInput(makeCtx(CONFIG, digest as Hex), PARAMS)).toThrow();
+    expect(() => zkPassportMethod(double.stack).signingInput(makeCtx(CONFIG, digest as Hex), PARAMS)).toThrow(errorClass);
     expect(double.calls).toEqual([]);
   });
 });

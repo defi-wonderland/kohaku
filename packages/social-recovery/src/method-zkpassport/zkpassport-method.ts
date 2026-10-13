@@ -1,5 +1,13 @@
-import { METHOD_ZKPASSPORT_APP, METHOD_ZKPASSPORT_VECTOR_FILES } from '../constants';
+import {
+  FORMATS_ZERO_ADDRESS,
+  METHOD_ZKPASSPORT_APP,
+  METHOD_ZKPASSPORT_DEVICE_BINDING,
+  METHOD_ZKPASSPORT_DEVICE_KIND,
+  METHOD_ZKPASSPORT_MATERIAL_REJECTED,
+  METHOD_ZKPASSPORT_VECTOR_FILES,
+} from '../constants';
 import { METHOD_ZKPASSPORT_STACK_STANDING } from '../constants/method-zkpassport-stack';
+import { sameAddress } from '../formats/guards';
 import type { IMethodCodec, IRecoveryMethod } from '../interfaces';
 import type {
   Address,
@@ -22,15 +30,13 @@ import { decodeZkPassportConfig, decodeZkPassportProof, zkPassportCodec } from '
 import { enrolledConfig, packagedProof } from './material';
 import { opener, sessionFromInput, sessionFromParams } from './session';
 
-const rejected: ReplyFailure = { kind: 'reply-failure', cause: 'material-rejected' };
-
 /** A passport or national identity card as the credential, proven in the approver's zkPassport app. */
 export class ZkPassportMethod implements IRecoveryMethod {
   readonly codec: IMethodCodec = zkPassportCodec;
 
-  readonly deviceBinding: DeviceBinding = 'external-app';
+  readonly deviceBinding: DeviceBinding = METHOD_ZKPASSPORT_DEVICE_BINDING;
 
-  readonly vector: readonly string[] = [...METHOD_ZKPASSPORT_VECTOR_FILES];
+  readonly vector: readonly string[] = METHOD_ZKPASSPORT_VECTOR_FILES;
 
   readonly #stack: ZkPassportStack;
 
@@ -38,12 +44,14 @@ export class ZkPassportMethod implements IRecoveryMethod {
     this.#stack = stack;
   }
 
-  /** The `method-zkpassport` address the descriptor names. */
+  /** The `method-zkpassport` address the descriptor names, or none where the deployment carries the zero address for an absent module. */
   modules(descriptor: DeploymentDescriptor): readonly Address[] {
-    return [descriptor.methodZkpassport];
+    const address = descriptor.methodZkpassport;
+
+    return sameAddress(address, FORMATS_ZERO_ADDRESS) ? [] : [address];
   }
 
-  /** The ceremony record for `params` `{ domain, scope, name?, logo?, purpose? }`, binding no custom field; throws on a missing domain or scope. */
+  /** The ceremony record for `params` `{ domain, scope, name?, logo?, purpose? }`, binding no custom field; `TypeError` on a missing domain or scope. */
   enrollInput(params: Params): EnrollInput {
     const session = sessionFromParams(params);
 
@@ -54,12 +62,12 @@ export class ZkPassportMethod implements IRecoveryMethod {
   async configFrom(input: EnrollInput, material: Material): Promise<Hex | EnrollFailure> {
     const session = input.kind === 'ceremony' ? sessionFromInput(input) : undefined;
 
-    if (session === undefined) return rejected;
+    if (session === undefined) return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
 
     return enrolledConfig(this.#stack, session, material);
   }
 
-  /** The signing record for `params`, binding the digest's text as `customData`; throws on a missing domain or scope or a digest that is not 32 bytes. */
+  /** The signing record for `params`, binding the digest's text as `customData`; `TypeError` on a missing domain or scope or a digest that is not hex, `RangeError` on a digest that is not 32 bytes. */
   signingInput(ctx: Ctx, params?: Params): Input {
     const session = sessionFromParams(params);
     const customData = digestText(ctx.digest);
@@ -71,7 +79,7 @@ export class ZkPassportMethod implements IRecoveryMethod {
   async replyFrom(ctx: Ctx, input: Input, material: Material): Promise<Hex | ReplyFailure> {
     const session = sessionFromInput(input);
 
-    if (session === undefined) return rejected;
+    if (session === undefined) return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
 
     return packagedProof(this.#stack, session, ctx.request.config, ctx.digest, material);
   }
@@ -101,7 +109,7 @@ export class ZkPassportMethod implements IRecoveryMethod {
     void ctx;
 
     return {
-      kind: 'external-proving-app',
+      kind: METHOD_ZKPASSPORT_DEVICE_KIND,
       app: METHOD_ZKPASSPORT_APP,
       showsNameLogoPurpose: true,
       stack: { ...METHOD_ZKPASSPORT_STACK_STANDING },

@@ -1,17 +1,16 @@
 import type { METHOD_ZKPASSPORT_CUSTOM_DATA_KEY, METHOD_ZKPASSPORT_DEV_MODE, METHOD_ZKPASSPORT_REQUEST_MODE } from '../constants';
 import type { Hex } from '../interfaces';
 
-/** The config record the commitment closes over. */
+/** The config record: the committed identifier and the service its proofs are scoped to. */
 export type ZkPassportConfig = {
   readonly uniqueIdentifier: Hex;
-  readonly version: Hex;
   readonly domain: string;
   readonly scope: string;
   readonly validityPeriodInSeconds: bigint;
 };
 
 /** The upstream `ProofVerificationData`, in its upstream member order. */
-export type ProofVerificationData = {
+export type ZkPassportProofVerificationData = {
   readonly vkeyHash: Hex;
   readonly proof: Hex;
   readonly publicInputs: readonly Hex[];
@@ -19,12 +18,12 @@ export type ProofVerificationData = {
 
 /** The proof the request delivers. */
 export type ZkPassportProof = {
-  readonly proofVerificationData: ProofVerificationData;
+  readonly proofVerificationData: ZkPassportProofVerificationData;
   readonly committedInputs: Hex;
 };
 
 /** The integrator's parameters as this method keeps them on its input records. */
-export type Session = {
+export type ZkPassportSession = {
   readonly domain: string;
   readonly scope: string;
   readonly name?: string;
@@ -33,7 +32,7 @@ export type Session = {
 };
 
 /** One proof as the stack's `ProofResult` carries it; only the members this method reads. */
-export type StackProof = {
+export type ZkPassportStackProof = {
   readonly name?: string;
   readonly committedInputs?: { readonly [circuit: string]: unknown };
   readonly [member: string]: unknown;
@@ -55,8 +54,8 @@ export type ZkPassportRequest = {
   readonly requestId: string;
   onRequestReceived(callback: () => void): void;
   onGeneratingProof(callback: () => void): void;
-  onProofGenerated(callback: (proof: StackProof) => void): void;
-  onSuccess(callback: (response: { proofs: StackProof[]; result: unknown }) => unknown): void;
+  onProofGenerated(callback: (proof: ZkPassportStackProof) => void): void;
+  onSuccess(callback: (response: { proofs: ZkPassportStackProof[]; result: unknown }) => unknown): void;
   onReject(callback: () => void): void;
   onError(callback: (error: string) => void): void;
 };
@@ -88,7 +87,7 @@ export type ZkPassportVerifierParameters = {
 export type ZkPassportClient = {
   request(args: ZkPassportRequestArgs): Promise<ZkPassportQueryBuilder>;
   getSolidityVerifierParameters(args: {
-    proof: StackProof;
+    proof: ZkPassportStackProof;
     scope: string;
     domain: string;
     devMode: typeof METHOD_ZKPASSPORT_DEV_MODE;

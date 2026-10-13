@@ -1,79 +1,107 @@
 import { decodeAbiParameters, encodeAbiParameters } from 'viem';
 import {
-  METHOD_ZKPASSPORT_BYTES_PATTERN,
+  METHOD_ZKPASSPORT_CONFIG_FIELDS,
   METHOD_ZKPASSPORT_CONFIG_LAYOUT,
+  METHOD_ZKPASSPORT_CONFIG_NAME,
+  METHOD_ZKPASSPORT_CONFIG_SIGNATURE,
+  METHOD_ZKPASSPORT_FIELDS_MESSAGE,
+  METHOD_ZKPASSPORT_MISSING_MESSAGE,
   METHOD_ZKPASSPORT_PROOF_DATA_FIELDS,
   METHOD_ZKPASSPORT_PROOF_FIELDS,
   METHOD_ZKPASSPORT_PROOF_LAYOUT,
-  METHOD_ZKPASSPORT_UINT256_LIMIT,
-  METHOD_ZKPASSPORT_WORD_PATTERN,
+  METHOD_ZKPASSPORT_PROOF_NAME,
+  METHOD_ZKPASSPORT_PROOF_SIGNATURE,
+  METHOD_ZKPASSPORT_RECORD_MESSAGE,
+  METHOD_ZKPASSPORT_TEXT_MESSAGE,
+  METHOD_ZKPASSPORT_VALIDITY_BITS,
 } from '../constants';
+import { assertArray, assertBytes, assertBytes32, assertUintBigint, lowerHex } from '../formats/guards';
+import { decodeStrictly } from '../formats/strict';
 import type { IMethodCodec } from '../interfaces';
-import type { FieldValue, Fields, Hex } from '../interfaces';
+import type { Fields, Hex } from '../interfaces';
 import type { ZkPassportConfig, ZkPassportProof } from '../types';
+import { isRecord } from './bindings';
 
-const fail = (layout: string, why: string): never => {
-  throw new Error(`method-zkpassport ${layout}: ${why}`);
-};
+const exactly = (value: unknown, names: readonly string[], name: string): Fields => {
+  if (!isRecord(value)) throw new TypeError(`${name} ${METHOD_ZKPASSPORT_RECORD_MESSAGE}`);
 
-const exactly = (value: FieldValue | Fields | undefined, names: readonly string[], layout: string): Fields => {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return fail(layout, 'expected a record');
+  const keys = Object.keys(value);
 
-  const record = value as Fields;
-  const keys = Object.keys(record);
-
-  if (keys.length !== names.length || !names.every((name) => keys.includes(name))) {
-    fail(layout, `expected exactly the fields ${names.map((name) => `"${name}"`).join(', ')}`);
+  if (keys.length !== names.length || !names.every((field) => Object.hasOwn(value, field))) {
+    throw new TypeError(`${name} ${METHOD_ZKPASSPORT_FIELDS_MESSAGE} ${names.join(', ')}`);
   }
 
-  return record;
+  return value as Fields;
 };
 
-const word = (value: unknown, layout: string, name: string): Hex =>
-  typeof value === 'string' && METHOD_ZKPASSPORT_WORD_PATTERN.test(value) ? (value.toLowerCase() as Hex) : fail(layout, `"${name}" is not 32 bytes of hex`);
+const word = (value: unknown, name: string): Hex => {
+  assertBytes32(value, name);
 
-const bytes = (value: unknown, layout: string, name: string): Hex =>
-  typeof value === 'string' && METHOD_ZKPASSPORT_BYTES_PATTERN.test(value) ? (value.toLowerCase() as Hex) : fail(layout, `"${name}" is not whole bytes of hex`);
-
-const text = (value: unknown, layout: string, name: string): string =>
-  typeof value === 'string' ? value : fail(layout, `"${name}" is not a string`);
-
-const uint256 = (value: unknown, layout: string, name: string): bigint => {
-  const n = typeof value === 'number' && Number.isSafeInteger(value) ? BigInt(value) : value;
-
-  if (typeof n !== 'bigint' || n < 0n || n >= METHOD_ZKPASSPORT_UINT256_LIMIT) return fail(layout, `"${name}" is not a uint256`);
-
-  return n;
+  return lowerHex(value);
 };
 
-/** Reads config fields into the record, refusing extra, missing or ill-typed fields. */
+const bytes = (value: unknown, name: string): Hex => {
+  assertBytes(value, name);
+
+  return lowerHex(value);
+};
+
+const text = (value: unknown, name: string): string => {
+  if (typeof value !== 'string') throw new TypeError(`${name} ${METHOD_ZKPASSPORT_TEXT_MESSAGE}`);
+
+  return value;
+};
+
+/** A uint256, also taken as a safe-integer number since the stack reports the validity period as one. */
+const uint256 = (value: unknown, name: string): bigint => {
+  const candidate = typeof value === 'number' && Number.isSafeInteger(value) ? BigInt(value) : value;
+
+  assertUintBigint(candidate, METHOD_ZKPASSPORT_VALIDITY_BITS, name);
+
+  return candidate;
+};
+
+/** Each entry as a lower-cased 32-byte word, walked by index so a hole is refused by its position. */
+const words = (value: unknown, name: string): Hex[] => {
+  assertArray(value, name);
+
+  const walked: Hex[] = [];
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (!Object.hasOwn(value, index)) throw new TypeError(`${name}[${index}] ${METHOD_ZKPASSPORT_MISSING_MESSAGE}`);
+
+    walked.push(word(value[index], `${name}[${index}]`));
+  }
+
+  return walked;
+};
+
+/** Reads config fields into the record; `TypeError` on extra, missing or ill-typed fields, `RangeError` on a validity outside uint256. */
 export const configFromFields = (fields: Fields): ZkPassportConfig => {
-  const f = exactly(fields, METHOD_ZKPASSPORT_CONFIG_LAYOUT.map((member) => member.name), 'config');
+  const name = METHOD_ZKPASSPORT_CONFIG_NAME;
+  const f = exactly(fields, METHOD_ZKPASSPORT_CONFIG_FIELDS, name);
 
   return {
-    uniqueIdentifier: word(f['uniqueIdentifier'], 'config', 'uniqueIdentifier'),
-    version: word(f['version'], 'config', 'version'),
-    domain: text(f['domain'], 'config', 'domain'),
-    scope: text(f['scope'], 'config', 'scope'),
-    validityPeriodInSeconds: uint256(f['validityPeriodInSeconds'], 'config', 'validityPeriodInSeconds'),
+    uniqueIdentifier: word(f['uniqueIdentifier'], `${name}.uniqueIdentifier`),
+    domain: text(f['domain'], `${name}.domain`),
+    scope: text(f['scope'], `${name}.scope`),
+    validityPeriodInSeconds: uint256(f['validityPeriodInSeconds'], `${name}.validityPeriodInSeconds`),
   };
 };
 
-/** Reads proof fields into the record, refusing extra, missing or ill-typed fields. */
+/** Reads proof fields into the record; `TypeError` on extra, missing or ill-typed fields and on a hole in `publicInputs`. */
 export const proofFromFields = (fields: Fields): ZkPassportProof => {
-  const f = exactly(fields, METHOD_ZKPASSPORT_PROOF_FIELDS, 'proof');
-  const data = exactly(f['proofVerificationData'], METHOD_ZKPASSPORT_PROOF_DATA_FIELDS, 'proof');
-  const inputs = data['publicInputs'];
-
-  if (!Array.isArray(inputs)) return fail('proof', '"publicInputs" is not a list');
+  const name = METHOD_ZKPASSPORT_PROOF_NAME;
+  const f = exactly(fields, METHOD_ZKPASSPORT_PROOF_FIELDS, name);
+  const data = exactly(f['proofVerificationData'], METHOD_ZKPASSPORT_PROOF_DATA_FIELDS, `${name}.proofVerificationData`);
 
   return {
     proofVerificationData: {
-      vkeyHash: word(data['vkeyHash'], 'proof', 'vkeyHash'),
-      proof: bytes(data['proof'], 'proof', 'proof'),
-      publicInputs: inputs.map((input: unknown) => word(input, 'proof', 'publicInputs')),
+      vkeyHash: word(data['vkeyHash'], `${name}.vkeyHash`),
+      proof: bytes(data['proof'], `${name}.proof`),
+      publicInputs: words(data['publicInputs'], `${name}.publicInputs`),
     },
-    committedInputs: bytes(f['committedInputs'], 'proof', 'committedInputs'),
+    committedInputs: bytes(f['committedInputs'], `${name}.committedInputs`),
   };
 };
 
@@ -81,70 +109,53 @@ export const proofFromFields = (fields: Fields): ZkPassportProof => {
 export const encodeZkPassportConfig = (config: ZkPassportConfig): Hex =>
   encodeAbiParameters(METHOD_ZKPASSPORT_CONFIG_LAYOUT, [
     config.uniqueIdentifier,
-    config.version,
     config.domain,
     config.scope,
     config.validityPeriodInSeconds,
   ]);
 
 /** `abi.encode` of the proof, lower-case hex. */
-export const encodeZkPassportProof = (proof: ZkPassportProof): Hex =>
-  encodeAbiParameters(METHOD_ZKPASSPORT_PROOF_LAYOUT, [
-    { ...proof.proofVerificationData, publicInputs: [...proof.proofVerificationData.publicInputs] },
+export const encodeZkPassportProof = (proof: ZkPassportProof): Hex => {
+  const { vkeyHash, proof: proofBytes, publicInputs } = proof.proofVerificationData;
+
+  return encodeAbiParameters(METHOD_ZKPASSPORT_PROOF_LAYOUT, [
+    { vkeyHash, proof: proofBytes, publicInputs: [...publicInputs] },
     proof.committedInputs,
   ]);
-
-/** Decodes, then refuses bytes the encode would not reproduce (compared case-insensitively). */
-const strictly = <T>(bytesIn: Hex, layout: string, decode: (b: Hex) => T, encode: (v: T) => Hex): T => {
-  if (typeof bytesIn !== 'string' || !METHOD_ZKPASSPORT_BYTES_PATTERN.test(bytesIn)) return fail(layout, 'not whole bytes of hex');
-
-  let value: T;
-
-  try {
-    value = decode(bytesIn);
-  } catch {
-    return fail(layout, `not an ABI encoding of the ${layout} layout`);
-  }
-
-  if (encode(value) !== bytesIn.toLowerCase()) fail(layout, 'bytes the encoding would not reproduce');
-
-  return value;
 };
 
-/** The config the bytes hold; throws on any byte string the encode would not reproduce. */
+/** The config the bytes hold; `TypeError` on bytes that are not hex, `RangeError` on bytes the encode would not reproduce. */
 export const decodeZkPassportConfig = (config: Hex): ZkPassportConfig =>
-  strictly(
-    config,
-    'config',
-    (b) => {
-      const [uniqueIdentifier, version, domain, scope, validityPeriodInSeconds] = decodeAbiParameters(METHOD_ZKPASSPORT_CONFIG_LAYOUT, b);
+  decodeStrictly(config, METHOD_ZKPASSPORT_CONFIG_NAME, METHOD_ZKPASSPORT_CONFIG_SIGNATURE, {
+    decode: (encoded: Hex) => decodeAbiParameters(METHOD_ZKPASSPORT_CONFIG_LAYOUT, encoded),
+    build: ([uniqueIdentifier, domain, scope, validityPeriodInSeconds]) => ({ uniqueIdentifier, domain, scope, validityPeriodInSeconds }),
+    encode: encodeZkPassportConfig,
+  });
 
-      return { uniqueIdentifier, version, domain, scope, validityPeriodInSeconds };
-    },
-    encodeZkPassportConfig,
-  );
-
-/** The proof the bytes hold; throws on any byte string the encode would not reproduce. */
+/** The proof the bytes hold; `TypeError` on bytes that are not hex, `RangeError` on bytes the encode would not reproduce. */
 export const decodeZkPassportProof = (proof: Hex): ZkPassportProof =>
-  strictly(
-    proof,
-    'proof',
-    (b) => {
-      const [proofVerificationData, committedInputs] = decodeAbiParameters(METHOD_ZKPASSPORT_PROOF_LAYOUT, b);
-
-      return { proofVerificationData, committedInputs };
-    },
-    encodeZkPassportProof,
-  );
+  decodeStrictly(proof, METHOD_ZKPASSPORT_PROOF_NAME, METHOD_ZKPASSPORT_PROOF_SIGNATURE, {
+    decode: (encoded: Hex) => decodeAbiParameters(METHOD_ZKPASSPORT_PROOF_LAYOUT, encoded),
+    build: ([{ vkeyHash, proof: proofBytes, publicInputs }, committedInputs]) => ({
+      proofVerificationData: { vkeyHash, proof: proofBytes, publicInputs },
+      committedInputs,
+    }),
+    encode: encodeZkPassportProof,
+  });
 
 /** The method's codec, with `validityPeriodInSeconds` as a bigint. */
 export const zkPassportCodec: IMethodCodec = {
   encodeConfig: (fields: Fields): Hex => encodeZkPassportConfig(configFromFields(fields)),
-  decodeConfig: (config: Hex): Fields => ({ ...decodeZkPassportConfig(config) }),
+  decodeConfig: (config: Hex): Fields => {
+    const { uniqueIdentifier, domain, scope, validityPeriodInSeconds } = decodeZkPassportConfig(config);
+
+    return { uniqueIdentifier, domain, scope, validityPeriodInSeconds };
+  },
   encodeProof: (fields: Fields): Hex => encodeZkPassportProof(proofFromFields(fields)),
   decodeProof: (proof: Hex): Fields => {
     const { proofVerificationData, committedInputs } = decodeZkPassportProof(proof);
+    const { vkeyHash, proof: proofBytes, publicInputs } = proofVerificationData;
 
-    return { proofVerificationData: { ...proofVerificationData }, committedInputs };
+    return { proofVerificationData: { vkeyHash, proof: proofBytes, publicInputs }, committedInputs };
   },
 };

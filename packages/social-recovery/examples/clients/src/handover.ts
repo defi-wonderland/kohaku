@@ -1,4 +1,5 @@
 import type { Attempt, Hex } from '@kohaku-eth/social-recovery';
+import { checkPayment, checkStillAuthorized } from './checks';
 import { sendFromSponsor } from './send';
 import { type Session, sponsorAddress } from './session';
 import { check, note, step } from './trace';
@@ -23,7 +24,10 @@ async function openingPayload(session: Session, attempt: Attempt): Promise<Hex> 
   return opening.payload;
 }
 
-/** prepareExecuteHandover → the sponsor sends → the attempt is consumed and the keys moved. */
+/**
+ * prepareExecuteHandover → the sponsor sends → the attempt is consumed, the keys moved, the action still authorized
+ * and, for a nonzero order, the payee paid.
+ */
 export async function executeAttempt(session: Session, attempt: Attempt): Promise<void> {
   const { kit } = session;
   const payload = await openingPayload(session, attempt);
@@ -34,7 +38,9 @@ export async function executeAttempt(session: Session, attempt: Attempt): Promis
   const prepared = await kit.recovery.prepareExecuteHandover(attempt, payload, { from: sponsorAddress(session) });
 
   note('describes', prepared.describes ?? []);
-  await sendFromSponsor(session, prepared);
+
+  const receipt = await sendFromSponsor(session, prepared);
+
   step('recoveryState');
 
   const state = await kit.recovery.recoveryState();
@@ -47,4 +53,7 @@ export async function executeAttempt(session: Session, attempt: Attempt): Promis
   if (handover.removedAuthority !== undefined) {
     check(!(await kit.recoveryAction.isAuthority(handover.removedAuthority)), `the old key ${handover.removedAuthority} no longer does`);
   }
+
+  await checkStillAuthorized(session);
+  await checkPayment(session, attempt, receipt);
 }

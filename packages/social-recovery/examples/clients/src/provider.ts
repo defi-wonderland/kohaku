@@ -2,11 +2,11 @@ import type { BlockHeader, BlockRange, BlockTag, FilterSpec, IProvider, Provider
 import {
   type Address,
   BaseError,
-  ExecutionRevertedError,
   type Hex,
   isHex,
   type PublicClient,
   RawContractError,
+  RpcRequestError,
   toHex,
   TransactionNotFoundError,
 } from 'viem';
@@ -26,15 +26,37 @@ const dataOf = (cause: unknown): Hex | undefined => {
   return undefined;
 };
 
-/** The raw revert bytes a failed `eth_call` carried, `0x` for an empty revert, or `undefined` where the failure was not a revert. */
+/** A node's message for a call it could not run to its end, never a revert of the contract's own. */
+const RESOURCE_FAILURE = /gas required exceeds allowance|out of gas|exceeds block gas limit|gas limit reached/i;
+
+/** A node's message for a revert that carried no bytes. */
+const REVERTED = /execution reverted/i;
+
+/** The JSON-RPC error code nodes give a reverted call. */
+const REVERT_CODE = 3;
+
+/**
+ * The raw revert bytes a failed `eth_call` carried, or `undefined` where the failure is not a confirmed revert.
+ * A confirmed revert is an RPC error carrying revert data, or one whose node reports a revert with no data (then `0x`).
+ * A node's gas-allowance or other resource failure and every transport failure are not reverts: viem classes the
+ * allowance message as `ExecutionRevertedError` too, so the class alone is never taken as proof.
+ */
 function revertData(error: unknown): Hex | undefined {
   if (!(error instanceof BaseError)) return undefined;
 
-  const reverted = error.walk((cause) => cause instanceof RawContractError || cause instanceof ExecutionRevertedError);
+  const contract = error.walk((cause) => cause instanceof RawContractError);
 
-  if (reverted === null) return undefined;
+  if (contract instanceof RawContractError) return dataOf(contract) ?? '0x';
 
-  return dataOf(error.walk((cause) => dataOf(cause) !== undefined)) ?? '0x';
+  const rpc = error.walk((cause) => cause instanceof RpcRequestError);
+
+  if (!(rpc instanceof RpcRequestError) || RESOURCE_FAILURE.test(rpc.details)) return undefined;
+
+  const data = dataOf(rpc);
+
+  if (data !== undefined && data !== '0x') return data;
+
+  return rpc.code === REVERT_CODE || REVERTED.test(rpc.details) ? '0x' : undefined;
 }
 
 type RpcLog = {
@@ -67,7 +89,8 @@ function rawLog(log: RpcLog): RawLog {
 
 /**
  * The SDK's chain access over one viem public client: one JSON-RPC request per read.
- * A reverted `eth_call` rejects with `{ data }`, the raw revert bytes; every other failure rejects as itself, never as an empty answer.
+ * A confirmed revert of `eth_call` rejects with `{ data }`, the raw revert bytes; every other failure (a node's resource
+ * failure, a transport failure) rejects as itself, never as a revert and never as an empty answer.
  */
 export class ViemProvider implements IProvider {
   constructor(private readonly client: PublicClient) {}

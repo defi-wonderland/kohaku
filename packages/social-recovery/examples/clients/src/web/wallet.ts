@@ -1,15 +1,16 @@
 import type { Address, Hex } from '@kohaku-eth/social-recovery';
 import { getAddress, hexToNumber } from 'viem';
+import { type Ask, SEPOLIA_CHAIN_ID, switchToSepolia, timed, wrongChain } from './chain';
 import { connectionLine, statusLine } from './page';
 import { SESSION_CHANGED_MESSAGE } from './provider';
 
-/** Sepolia, the only chain the page runs against. */
-export const SEPOLIA_CHAIN_ID = 11155111;
+export { SEPOLIA_CHAIN_ID } from './chain';
 
 /** The EIP-1193 surface the page calls on the injected wallet. */
 export type InjectedWallet = {
   request(args: { method: string; params?: readonly unknown[] }): Promise<unknown>;
   on?(event: string, listener: (payload: unknown) => void): void;
+  removeListener?(event: string, listener: (payload: unknown) => void): void;
 };
 
 /** The connected wallet, its account and chain, and the session they were cached in. */
@@ -20,11 +21,12 @@ export type Connection = { readonly wallet: InjectedWallet; readonly account: Ad
  * `observedAccounts` / `observedChainIds` hold every account and chain the wallet reported since Connect last
  * started, the latest last, whether or not a connection is cached. `lastChainId` is the chain last observed or
  * connected to, kept across resets, so a chain switch while disconnected still drops what is bound to the chain.
+ * `requestedChainId` is the chain a running Connect asked the wallet to switch to; the switch's own event does not reset.
  */
 export const wallet: {
-  session: number; listening: boolean; injected?: InjectedWallet; account?: Address; chainId?: number; lastChainId?: number;
-  observedAccounts: (Address | undefined)[]; observedChainIds: number[];
-} = { session: 0, listening: false, observedAccounts: [], observedChainIds: [] };
+  session: number; listenedTo?: InjectedWallet; injected?: InjectedWallet; account?: Address; chainId?: number; lastChainId?: number;
+  requestedChainId?: number; observedAccounts: (Address | undefined)[]; observedChainIds: number[];
+} = { session: 0, observedAccounts: [], observedChainIds: [] };
 
 /** What a reset tells the rest of the page: whether the chain changed, which drops everything bound to it. */
 export type ResetListener = (chainChanged: boolean) => void;
@@ -52,28 +54,33 @@ export function reset(reason?: string, chainChanged = false): void {
 const firstAccount = (accounts: unknown): Address | undefined =>
   Array.isArray(accounts) && typeof accounts[0] === 'string' ? getAddress(accounts[0]) : undefined;
 
-/** Records every account or chain the wallet reports; resets when it differs from the cached one. */
+function onAccounts(accounts: unknown): void {
+  const account = firstAccount(accounts);
+
+  wallet.observedAccounts.push(account);
+
+  if (wallet.account !== undefined && account !== wallet.account) reset('the wallet switched account');
+}
+
+function onChain(chain: unknown): void {
+  const chainId = hexToNumber(chain as Hex);
+  const last = wallet.lastChainId;
+
+  wallet.observedChainIds.push(chainId);
+  wallet.lastChainId = chainId;
+
+  if (last !== undefined && chainId !== last && chainId !== wallet.requestedChainId) reset('the wallet switched chain', true);
+}
+
+/** Records every account or chain the wallet reports, moving the listeners when the page's wallet object changed. */
 export function listen(injected: InjectedWallet): void {
-  if (wallet.listening || injected.on === undefined) return;
+  if (wallet.listenedTo === injected || injected.on === undefined) return;
 
-  wallet.listening = true;
-  injected.on('accountsChanged', (accounts) => {
-    const account = firstAccount(accounts);
-
-    wallet.observedAccounts.push(account);
-
-    if (wallet.account !== undefined && account !== wallet.account) reset('the wallet switched account');
-  });
-  injected.on('chainChanged', (chain) => {
-    const chainId = hexToNumber(chain as Hex);
-
-    const last = wallet.lastChainId;
-
-    wallet.observedChainIds.push(chainId);
-    wallet.lastChainId = chainId;
-
-    if (last !== undefined && chainId !== last) reset('the wallet switched chain', true);
-  });
+  wallet.listenedTo?.removeListener?.('accountsChanged', onAccounts);
+  wallet.listenedTo?.removeListener?.('chainChanged', onChain);
+  wallet.listenedTo = injected;
+  injected.on('accountsChanged', onAccounts);
+  injected.on('chainChanged', onChain);
 }
 
 /** Throws when a reset happened since `session` was read. */
@@ -82,47 +89,79 @@ export const ensureSession = (session: number): void => {
 };
 
 /**
- * Asks for the account and the chain, reads both again (`eth_accounts`, `eth_chainId`), then caches them.
- * The listeners record what the wallet reports while these requests are pending; if a re-read or any
- * recorded value differs from what was requested, the connection is refused. A chain other than Sepolia is refused.
+ * Asks for the account, switches the wallet to Sepolia when it is elsewhere, reads the account and the chain again
+ * (`eth_accounts`, `eth_chainId`), then caches them. Each request waits at most `WALLET_ANSWER_MS`. The listeners
+ * record what the wallet reports meanwhile; a re-read or a recorded value that differs from what was expected (the
+ * first chain before the switch, Sepolia after it) refuses the connection, as does a wallet left on another chain.
  */
 export async function connect(injected: InjectedWallet): Promise<Connection> {
+  try {
+    return await connectOnce(injected);
+  } finally {
+    wallet.requestedChainId = undefined;
+  }
+}
+
+async function connectOnce(injected: InjectedWallet): Promise<Connection> {
   reset();
   listen(injected);
   Object.assign(wallet, { observedAccounts: [], observedChainIds: [] });
 
   const { session } = wallet;
-  const account = firstAccount(await injected.request({ method: 'eth_requestAccounts' }));
+  const ask: Ask = async (method, params) => {
+    statusLine.textContent = 'Connecting… confirm in your wallet';
+
+    const answer = await timed(injected.request(params === undefined ? { method } : { method, params }), method);
+
+    ensureSession(session);
+
+    return answer;
+  };
+  const account = firstAccount(await ask('eth_requestAccounts'));
 
   ensureSession(session);
 
   if (account === undefined) throw new Error('the wallet returned no account');
 
-  const chainId = hexToNumber((await injected.request({ method: 'eth_chainId' })) as Hex);
+  const first = hexToNumber((await ask('eth_chainId')) as Hex);
 
   ensureSession(session);
 
-  const accountNow = firstAccount(await injected.request({ method: 'eth_accounts' }));
+  const mark = wallet.observedChainIds.length;
+
+  if (first !== SEPOLIA_CHAIN_ID) {
+    wallet.requestedChainId = SEPOLIA_CHAIN_ID;
+    await switchToSepolia(ask, first);
+    ensureSession(session);
+  }
+
+  const chainId = hexToNumber((await ask('eth_chainId')) as Hex);
 
   ensureSession(session);
 
-  const chainNow = hexToNumber((await injected.request({ method: 'eth_chainId' })) as Hex);
+  if (chainId !== SEPOLIA_CHAIN_ID) throw wrongChain(chainId);
+
+  const accountNow = firstAccount(await ask('eth_accounts'));
+
+  ensureSession(session);
+
+  const chainNow = hexToNumber((await ask('eth_chainId')) as Hex);
 
   ensureSession(session);
 
   const switched = accountNow !== account || chainNow !== chainId
     || wallet.observedAccounts.some((observed) => observed !== account)
-    || wallet.observedChainIds.some((observed) => observed !== chainId);
+    || wallet.observedChainIds.slice(0, mark).some((observed) => observed !== first)
+    || wallet.observedChainIds.slice(mark).some((observed) => observed !== chainId);
 
   if (switched) {
     reset();
     throw new Error('the wallet switched account or chain while connecting; connect again');
   }
 
-  if (chainId !== SEPOLIA_CHAIN_ID) throw new Error(`the wallet is on chain ${chainId}; switch it to Sepolia (${SEPOLIA_CHAIN_ID})`);
-
   Object.assign(wallet, { injected, account, chainId, lastChainId: chainId });
   connectionLine.textContent = `Connected ${account} on Sepolia (${chainId}).`;
+  statusLine.textContent = 'Connected.';
 
   return { wallet: injected, account, chainId, session };
 }

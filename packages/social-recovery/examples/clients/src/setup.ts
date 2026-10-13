@@ -4,7 +4,7 @@ import { setupDraft } from './draft';
 import type { Env } from './env';
 import { sendAsAccount } from './send';
 import { openSession } from './session';
-import { check, findings, note, runIfMain, step } from './trace';
+import { check, findings, note, runIfMain, show, step } from './trace';
 
 /**
  * What a setup run ends with: whether the action was authorized before it, what was prepared (absent where the prepare
@@ -25,7 +25,7 @@ function printPrepared(prepared: PreparedCall | PreparedBatch): void {
   note('prepared', prepared.kind === 'batch' ? `batch of ${calls.length}, atomic ${prepared.atomic}` : 'one call');
   note('pinned block', prepared.block.number);
 
-  for (const call of calls) note(`call → ${call.target}`, `sender ${call.sender}, simulation ${JSON.stringify(call.simulation ?? 'skipped')}`);
+  for (const call of calls) note(`call → ${call.target}`, `sender ${call.sender}, simulation ${show(call.simulation ?? 'skipped')}`);
 }
 
 /** The setup flow: draft → validateSetup → describeSetup → prepareCommitSetup → the account sends → confirmSetup → setupState. */

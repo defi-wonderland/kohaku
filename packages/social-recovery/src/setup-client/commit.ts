@@ -1,12 +1,13 @@
 import { bytesToHex } from 'viem';
 import { BACKUP_NONCE_SIZE, BACKUP_PADDING_SIZE, BACKUP_PAYLOAD_VERSION, FORMATS_SETUP_NONCE_BITS } from '../constants';
-import { configurationCommitment, simulatePrepared } from '../client-core';
+import { configurationBody, simulatePrepared } from '../client-core';
 import { sealBackup, serializeConfiguration } from '../encryption';
+import { encodeSetupBody, setupCommitment } from '../formats';
 import { assertObject, assertUintBigint } from '../formats/guards';
 import type { Configuration, Hex, PreparedBatch, PreparedCall, PrepareOptions, SetupDraft } from '../interfaces';
 import type { SetupClientParts } from '../types/setup-client';
 import { assertBackupFits, assertBackupPassword, assertOptions } from './check';
-import { assertBodyEncodes, checkedDraft, draftConfiguration, publicMetadataOf } from './draft';
+import { checkedDraft, draftConfiguration, publicMetadataOf } from './draft';
 import { authorizedAt, pinRead } from './reads';
 
 /** A fresh random AES-GCM nonce, drawn for every seal. */
@@ -59,8 +60,9 @@ export async function prepareCommit(
   assertOptions(options);
 
   const configuration = draftConfiguration(draft, credentials);
+  const body = configurationBody(configuration, parts.account);
+  const encodedBody = encodeSetupBody(body);
 
-  assertBodyEncodes(configuration, parts.account);
   assertBackupFits(draft, configuration);
 
   const { block } = await pinRead(parts);
@@ -72,12 +74,12 @@ export async function prepareCommit(
   const nonce = state.setupNonce + 1n;
 
   assertUintBigint(nonce, FORMATS_SETUP_NONCE_BITS, 'the next setup nonce');
-  const setupCommitment = configurationCommitment(configuration, parts.account, parts.action, nonce);
-  const privateMetadata = await backupBytes(parts, draft, configuration, password, setupCommitment, nonce);
+  const commitment = setupCommitment(parts.account, parts.action, nonce, encodedBody);
+  const privateMetadata = await backupBytes(parts, draft, configuration, password, commitment, nonce);
   const arming = authorized ? undefined : await parts.recoveryAction.armingCall(block);
   const commit = await parts.policyManager.prepareCommitSetup(
     parts.action,
-    setupCommitment,
+    commitment,
     nonce,
     publicMetadataOf(draft),
     privateMetadata,

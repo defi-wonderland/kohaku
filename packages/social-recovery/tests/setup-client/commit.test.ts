@@ -272,6 +272,21 @@ describe('prepareCommitSetup: the ABI widths before the pin', () => {
   });
 });
 
+describe('prepareCommitSetup: the commitment of a valid draft', () => {
+  it.each((['empty', 'clear', 'encrypted'] as const).flatMap((backup) => [
+    [backup, 0n] as const,
+    [backup, 4n] as const,
+  ]))('commits what configurationCommitment gives, byte for byte (%s backup, stored nonce %s)', async (backup, stored) => {
+    const world = stored === 0n ? {} : { authorized: true, state: standingState(COMMITTED, stored, 900) };
+    const { client, seen } = build({ world });
+
+    await client.prepareCommitSetup(withBackup(DRAFT, backup), backup === 'encrypted' ? PASSWORD : undefined);
+
+    expect(commitArguments(seen)[1]).toBe(configurationCommitment(configurationOf(DRAFT), ACCOUNT, ACTION, stored + 1n));
+    expect(commitArguments(seen)[2]).toBe(stored + 1n);
+  });
+});
+
 describe('prepareCommitSetup: the nonce bound', () => {
   it('refuses a stored nonce of 2^64 - 1 with a RangeError naming the nonce, preparing nothing', async () => {
     const { client, seen } = build({ world: { authorized: true, state: standingState(COMMITTED, 2n ** 64n - 1n, 10) } });

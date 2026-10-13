@@ -32,7 +32,7 @@ import type {
   Selection,
   ValidityWindow,
 } from '../interfaces';
-import { assertOptions } from '../setup-client/check';
+import { assertOptions, assertPreparesServed } from '../setup-client/check';
 import type { MethodRegistry } from '../types';
 import type { RecoveryClientParts } from '../types/recovery-client';
 import { assertSource, cancellingWindow, checkedHandover, serializedOrder, windowEnd, windowWidth } from './arguments';
@@ -40,11 +40,11 @@ import { assertCompletable, requestOf } from './completion';
 import { describedBatch, executeCall } from './described';
 import { assertPayloadHash, assertSameAttempt, assertSpendNotVetoed, checkedAttempt, decodedHandover, payeeOf, payloadHashOf } from './execute';
 import { namedHandover } from './handover';
-import { assertAttemptWaiting, assertNoAttemptWaiting, gatheredSetup, readState } from './reading';
+import { assertAttemptState, assertAttemptWaiting, assertNoAttemptWaiting, gatheredSetup, readState } from './reading';
 import { sharedRequest } from './record';
 import { checkedParts } from './parts';
 import { recoveryRecord, removedKeyAt } from './state';
-import { assertPayloadDecodes, assertPreparesServed, assertSubmission } from './submission';
+import { assertPayloadDecodes, assertSubmission } from './submission';
 
 /**
  * The entry an integrator builds when a key is lost, bound to one chain, deployment, account and action.
@@ -279,9 +279,10 @@ export class RecoveryClient implements IRecoveryClient {
 
     const reading = await readState(parts);
     const { block } = reading.pinned;
+    const held = checkedAttempt(reading.state.attempt);
 
-    assertSameAttempt(given, reading.state.attempt);
-    await assertSpendNotVetoed(parts, reading.state.attempt, block);
+    assertSameAttempt(given, held);
+    await assertSpendNotVetoed(parts, held, block);
 
     const describes = describedBatch(parts, given, handover, payloadHash, payee);
     const call = executeCall(parts, payload, block, describes);
@@ -291,13 +292,18 @@ export class RecoveryClient implements IRecoveryClient {
 
   /**
    * The manager's state for the account and action at one pinned block, with the key a handover would remove inferred at
-   * that block from the events, the action and the signer seam where one was given; it reads no stop.
+   * that block from the events, the action and the signer seam where one was given; it reads no stop. Throws a `TypeError`
+   * where the manager answers a malformed attempt.
    */
   async recoveryState(): Promise<RecoveryState> {
     const { parts } = this;
-    const reading = await readState(parts);
-    const removedKey = await removedKeyAt(parts, reading.pinned.block);
+    const pinned = await pinBlockHeader(parts.provider, parts.configuration.blockTags.read);
+    const [state, removedKey] = await Promise.all([parts.policyManager.stateOf(pinned.block), removedKeyAt(parts, pinned.block)]);
 
-    return recoveryRecord(reading.state, removedKey, reading.pinned.header);
+    assertAttemptState(state);
+
+    const attempt = checkedAttempt(state.attempt);
+
+    return recoveryRecord(state, attempt, removedKey, pinned.header);
   }
 }

@@ -1,15 +1,17 @@
-import { FORMATS_SAFE_INTEGER_BITS, RECOVERY_CLIENT_PAYLOAD_MALFORMED_MESSAGE, RECOVERY_CLIENT_VERSION_ESCAPED_MESSAGE } from '../constants';
+import { FORMATS_SAFE_INTEGER_BITS, RECOVERY_CLIENT_PAYLOAD_MALFORMED_MESSAGE } from '../constants';
 import { KitRefusalError } from '../client-core';
 import { assertUintNumber } from '../formats/guards';
-import { sortedProofPlaces } from '../formats/proof-place';
-import type { AttemptRequest, CancelRequest, Hex, Moment } from '../interfaces';
+import type { AttemptRequest, CancelRequest, Hex, Moment, ProofPlace } from '../interfaces';
 import { assertBoundRequest } from '../policy-manager/calldata';
 import type { RecoveryClientParts } from '../types/recovery-client';
 import { checkedRequest } from '../validation/request-parse';
 
-/** Refuses every prepare of a client built for a deployment version this build does not serve. */
-export function assertPreparesServed(versionEscaped: boolean): void {
-  if (versionEscaped) throw new KitRefusalError(RECOVERY_CLIENT_VERSION_ESCAPED_MESSAGE);
+/** Refuses with the encoder's `RangeError`, naming the lowest repeated place, checked proofs that name one place twice; their order is left to the encoder. */
+function assertDistinctPlaces(proofs: readonly ProofPlace[]): void {
+  const places = proofs.map(({ place }) => place).sort((left, right) => left - right);
+  const repeated = places.find((place, index) => index > 0 && place === places[index - 1]);
+
+  if (repeated !== undefined) throw new RangeError(`proofs place ${repeated} is repeated: places must be strictly increasing`);
 }
 
 /**
@@ -25,7 +27,7 @@ export function assertSubmission(parts: RecoveryClientParts, request: AttemptReq
     throw new TypeError(opening ? 'request must be an opening request with a payload and an order' : 'request must be a cancel request');
   }
 
-  sortedProofPlaces(request.proofs);
+  assertDistinctPlaces(checked.proofs);
   assertUintNumber(now, FORMATS_SAFE_INTEGER_BITS, 'now');
   assertBoundRequest(request, parts.account, parts.action);
 }

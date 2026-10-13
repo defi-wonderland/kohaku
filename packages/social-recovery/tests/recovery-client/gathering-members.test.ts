@@ -1,5 +1,6 @@
+import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { count, fileReply, KitRefusalError, requests, type AttemptRequest, type CancelRequest, type Reply } from '../../src/index';
+import { count, fileReply, KitRefusalError, order, requests, type AttemptRequest, type CancelRequest, type Reply } from '../../src/index';
 import { PINNED_AT, replyFor, VALID_UNTIL } from '../gathering/support';
 import { approvalWith, cancellationWith, expectedMembers, loweredMembers, loweredProof, proofOfReply } from './completion-fixtures';
 import { CLIENT_CONFIGURATION, errorCodes, rig } from './doubles';
@@ -148,5 +149,19 @@ describe('complete', () => {
 
   it('answers synchronously', () => {
     expect(rig().client.complete(approvalWith([0, 1, 2]), undefined, NOW)).not.toBeInstanceOf(Promise);
+  });
+});
+
+describe('complete: the proofs are the merged ordering\'s', () => {
+  it.each<[string, () => ReturnType<typeof approvalWith>, readonly number[] | undefined]>([
+    ['an approval, preferred set', () => approvalWith([2, 0, 3]), undefined],
+    ['an approval, a selection out of order', () => approvalWith([0, 1, 2, 3]), [3, 0, 1]],
+    ['a cancellation, preferred set', () => cancellationWith([3, 1, 0]), undefined],
+  ])('%s: exactly what order gives, methods checksummed', (_name, record, selection) => {
+    const request = rig().client.complete(record(), selection, NOW);
+
+    expect(request.proofs).toEqual(order(record(), selection, NOW));
+
+    for (const proof of request.proofs) expect(proof.method).toBe(getAddress(proof.method));
   });
 });

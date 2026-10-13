@@ -69,3 +69,22 @@ describe('the recovery client surface', () => {
     expect(seen).toEqual([]);
   });
 });
+
+/** Names this client once exported and no longer does: the merged constants carry their values. */
+const REMOVED = ['RECOVERY_CLIENT_KEY_VALUE', 'RECOVERY_CLIENT_REVOKED_VALUE', 'RECOVERY_CLIENT_VERSION_ESCAPED_MESSAGE'];
+
+describe('the constants the client shares with the merged modules', () => {
+  it.each(REMOVED)('the source entry no longer exports %s', (name) => {
+    expect(Object.hasOwn(source, name)).toBe(false);
+  });
+
+  it.each(REMOVED)('the built entry no longer exports %s', async (name) => {
+    expect(Object.hasOwn(await loadBuilt(), name)).toBe(false);
+  });
+
+  it('the merged words and the escape message stay exported', () => {
+    expect(source.POLICY_MANAGER_TRUE_WORD).toBe(`0x${'00'.repeat(31)}01`);
+    expect(source.RECOVERY_ACTION_DISARMED_VALUE).toBe(`0x${'00'.repeat(32)}`);
+    expect(typeof source.SETUP_CLIENT_VERSION_ESCAPED_MESSAGE).toBe('string');
+  });
+});

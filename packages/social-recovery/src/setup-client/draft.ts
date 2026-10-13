@@ -1,7 +1,5 @@
-import { configurationBody } from '../client-core';
-import { encodeSetupBody } from '../formats/setup-body';
 import { assertBytes, lowerHex } from '../formats/guards';
-import type { Address, Clause, Configuration, Credential, Hex, SetupDraft } from '../interfaces';
+import type { Clause, Configuration, Credential, Hex, SetupDraft } from '../interfaces';
 import type { PlacedCredential } from '../types/validation';
 import { placedCredentials } from '../validation/setup-draft';
 
@@ -50,16 +48,6 @@ export function draftConfiguration(draft: SetupDraft, credentials: readonly Plac
   );
 
   return { clauses, wait: draft.wait, ignoresPause: draft.ignoresPause };
-}
-
-/**
- * Refuses with the setup body encoder's `RangeError` a configuration whose body does not fit its ABI widths, a threshold past
- * uint8 or a wait past uint48 among them, so the commit reads nothing for a body it could not encode.
- */
-export function assertBodyEncodes(configuration: Configuration, account: Address): void {
-  const body = configurationBody(configuration, account);
-
-  encodeSetupBody(body);
 }
 
 /** The draft's public metadata, lower-cased, for a draft already checked. */

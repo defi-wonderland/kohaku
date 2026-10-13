@@ -15,10 +15,6 @@ export const RECOVERY_CLIENT_UNANSWERED_READ_MESSAGE = 'a rule method read went 
 /** What `eth_getCode` answers for an address that holds no code. */
 export const RECOVERY_CLIENT_NO_CODE: Hex = '0x';
 
-/** The refusal message of a prepare on a client built for a deployment version this build does not serve. */
-export const RECOVERY_CLIENT_VERSION_ESCAPED_MESSAGE =
-  'this client prepares nothing: the deployment answers a version this build does not serve';
-
 /** The refusal message when a payload does not hold a handover the action would execute. */
 export const RECOVERY_CLIENT_PAYLOAD_MALFORMED_MESSAGE = 'the payload does not hold a handover the action would execute';
 
@@ -33,12 +29,6 @@ export const RECOVERY_CLIENT_SPEND_VETOED_MESSAGE = 'a method the attempt used i
 
 /** The argument error when an open payee would be paid and no `from` names who sends the call. */
 export const RECOVERY_CLIENT_OPEN_PAYEE_MESSAGE = 'options.from is required: the order pays an open payee, which is the sender of the call';
-
-/** The privilege word the grant writes for the new key. */
-export const RECOVERY_CLIENT_KEY_VALUE: Hex = '0x0000000000000000000000000000000000000000000000000000000000000001';
-
-/** The privilege word the revoke writes for the removed key, which grants nothing. */
-export const RECOVERY_CLIENT_REVOKED_VALUE: Hex = '0x0000000000000000000000000000000000000000000000000000000000000000';
 
 /** The action's `executeHandover(address _account, bytes _payload)`. */
 export const RECOVERY_CLIENT_EXECUTE_HANDOVER_ABI = [

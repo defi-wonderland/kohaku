@@ -279,6 +279,15 @@ const twoOrMore = (request: AttemptRequest | CancelRequest): readonly ProofPlace
   return [first, { ...first, place: first.place + 1 }];
 };
 
+/** The request's first proof copied to its place plus each offset, in the order given. */
+const atOffsets = (request: AttemptRequest | CancelRequest, offsets: readonly number[]): readonly ProofPlace[] => {
+  const [first] = request.proofs;
+
+  if (first === undefined) throw new Error('the fixture carries no proof');
+
+  return offsets.map((offset) => ({ ...first, place: first.place + offset }));
+};
+
 /** The encoder's own refusal of a request. */
 const encoderRefusal = (s: Submit, request: AttemptRequest | CancelRequest): unknown => {
   try {
@@ -302,6 +311,9 @@ describe.each(SUBMITS)('$name: a repeated proof place before the pin', (s) => {
       },
     ],
     ['a repeat out of order', (request) => [...twoOrMore(request)].reverse().concat(twoOrMore(request).slice(-1))],
+    ['the middle place repeated among four proofs', (request) => atOffsets(request, [0, 1, 1, 2])],
+    ['a repeat around the middle of three proofs', (request) => atOffsets(request, [1, 0, 1])],
+    ['two places each repeated, out of order', (request) => atOffsets(request, [2, 0, 2, 0])],
   ];
 
   it.each(DUPLICATES)('refuses %s with the encoder\'s RangeError and zero provider calls, simulating or not', async (_name, proofsOf) => {
@@ -316,6 +328,13 @@ describe.each(SUBMITS)('$name: a repeated proof place before the pin', (s) => {
       expect((thrown as RangeError).message).toBe((expected as RangeError).message);
       expect(built.seen).toEqual([]);
     }
+  });
+
+  it('prepares three unique proofs given in reverse, the bytes those of the sorted request', async () => {
+    const built = rig();
+    const prepared = await submit(built, s, withProofs(s.request(), atOffsets(s.request(), [2, 1, 0])));
+
+    expect(prepared.data.toLowerCase()).toBe(s.data(withProofs(s.request(), atOffsets(s.request(), [0, 1, 2])) as never).toLowerCase());
   });
 
   it('prepares unique proofs given out of order, the bytes those of the sorted request', async () => {

@@ -1,12 +1,12 @@
 import { encodeFunctionData } from 'viem';
 import {
   FORMATS_ZERO_ADDRESS,
+  POLICY_MANAGER_TRUE_WORD,
+  RECOVERY_ACTION_DISARMED_VALUE,
   RECOVERY_ACTION_SET_ADDR_PRIVILEGE_ABI,
   RECOVERY_CLIENT_CONSUME_ABI,
   RECOVERY_CLIENT_ERC20_TRANSFER_ABI,
   RECOVERY_CLIENT_EXECUTE_HANDOVER_ABI,
-  RECOVERY_CLIENT_KEY_VALUE,
-  RECOVERY_CLIENT_REVOKED_VALUE,
 } from '../constants';
 import { lowerHex, sameAddress } from '../formats/guards';
 import type { Address, Attempt, DescribedCall, Handover, Hex, PinnedBlock, PreparedCall } from '../interfaces';
@@ -42,8 +42,8 @@ export function describedBatch(
   const consumeData = encodeFunctionData({ abi: RECOVERY_CLIENT_CONSUME_ABI, args: [parts.action, attempt.attemptId, payloadHash] });
   const calls: DescribedCall[] = [
     { target: parts.descriptor.manager, value: 0n, data: consumeData },
-    privilegeCall(parts.account, handover.newAuthority, RECOVERY_CLIENT_KEY_VALUE),
-    privilegeCall(parts.account, handover.removedAuthority, RECOVERY_CLIENT_REVOKED_VALUE),
+    privilegeCall(parts.account, handover.newAuthority, POLICY_MANAGER_TRUE_WORD),
+    privilegeCall(parts.account, handover.removedAuthority, RECOVERY_ACTION_DISARMED_VALUE),
   ];
 
   if (attempt.order.amount === 0n || payee === undefined) return calls;

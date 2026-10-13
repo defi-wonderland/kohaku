@@ -6,7 +6,7 @@ import type { PlaceStanding } from '../types';
 import type { MethodStop, RecoveryClientParts } from '../types/recovery-client';
 
 /** The read's answer, rejecting where it went unanswered since no standing may be guessed. */
-export function answerOf<Answer>(result: ReadResult<Answer>, read: string, method: Address): Answer {
+function answerOf<Answer>(result: ReadResult<Answer>, read: string, method: Address): Answer {
   assertObject(result, `${read}(${method})`);
 
   if (!result.answered) throw new Error(`${RECOVERY_CLIENT_UNANSWERED_READ_MESSAGE}: ${read}(${method})`);
@@ -14,16 +14,21 @@ export function answerOf<Answer>(result: ReadResult<Answer>, read: string, metho
   return result.value;
 }
 
-/** One rule method's stop: stopped where `paused` answers `true`, stoppable where its pause holder is nonzero. */
-async function methodStop(parts: RecoveryClientParts, method: Address, block: PinnedBlock): Promise<MethodStop> {
-  const [pausedRead, partiesRead] = await Promise.all([
-    parts.policyManager.paused(method, block),
-    parts.policyManager.trustedParties(method, block),
-  ]);
-  const paused: unknown = answerOf(pausedRead, 'paused', method);
-  const parties = answerOf(partiesRead, 'trustedParties', method);
+/** Whether one method answers stopped at the block, rejecting where the read went unanswered or its answer is not a boolean. */
+export async function pausedAt(parts: RecoveryClientParts, method: Address, block: PinnedBlock): Promise<boolean> {
+  const read = await parts.policyManager.paused(method, block);
+  const paused: unknown = answerOf(read, 'paused', method);
 
   assertBool(paused, `paused(${method})`);
+
+  return paused;
+}
+
+/** One rule method's stop: stopped where `paused` answers `true`, stoppable where its pause holder is nonzero. */
+async function methodStop(parts: RecoveryClientParts, method: Address, block: PinnedBlock): Promise<MethodStop> {
+  const [paused, partiesRead] = await Promise.all([pausedAt(parts, method, block), parts.policyManager.trustedParties(method, block)]);
+  const parties = answerOf(partiesRead, 'trustedParties', method);
+
   assertObject(parties, `trustedParties(${method})`);
 
   const pauseHolder = normalizeAddress(parties.pauseHolder, `trustedParties(${method}).pauseHolder`);

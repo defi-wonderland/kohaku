@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { KitRefusalError, type PreparedCall } from '../../src/index';
+import { KitRefusalError, SETUP_CLIENT_VERSION_ESCAPED_MESSAGE, type PreparedCall } from '../../src/index';
 import { PINNED_AT } from '../gathering/support';
 import { approvalWith } from './completion-fixtures';
 import {
@@ -34,6 +34,7 @@ describe('the version escape', () => {
     const thrown = await rejectionOf(run(built.client));
 
     expect(thrown).toBeInstanceOf(KitRefusalError);
+    expect((thrown as KitRefusalError).message).toBe(SETUP_CLIENT_VERSION_ESCAPED_MESSAGE);
     expect(Object.hasOwn(thrown as object, 'cause')).toBe(false);
     expect(membersOf(built.seen).filter((member) => member.startsWith('manager.prepare') || member === 'provider.call')).toEqual([]);
   });

@@ -8,14 +8,12 @@ import {
 } from '../constants';
 import { KitRefusalError } from '../client-core';
 import { assertGatheringRead, decimalBigint, decimalNumber, filedPlaces, windowFactsOf } from '../gathering/edge';
+import { proofOf } from '../gathering/order';
 import type { AttemptRequest, CancelRequest, Gathering, Moment, ProofPlace, Reply, Selection } from '../interfaces';
 import { submissionFindings } from '../validation';
 import { emptyFindings } from '../validation/common';
 import { checkedRequest } from '../validation/request-parse';
 import { ruleCountFindings } from '../validation/request-proofs';
-
-/** The filed reply as the proof it submits. */
-const proofOf = ({ place, method, config, salt, proof }: Reply): ProofPlace => ({ place, method, config, salt, proof });
 
 /** The submission the record's own members make with the given proofs, its numbers converted from the record's decimal strings. */
 export function requestOf(record: Gathering, proofs: readonly ProofPlace[]): AttemptRequest | CancelRequest {

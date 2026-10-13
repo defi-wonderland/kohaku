@@ -25,7 +25,7 @@ import {
 import { checkedPaymentOrder } from '../formats/payment-order';
 import { ATTEMPT_STATES, type Address, type Attempt, type Handover, type Hex, type PinnedBlock, type PrepareOptions } from '../interfaces';
 import type { RecoveryClientParts } from '../types/recovery-client';
-import { answerOf } from './standings';
+import { pausedAt } from './standings';
 
 /** A checked copy of the attempt, its addresses checksummed and its payload hash lower-cased, refusing a malformed member. */
 export function checkedAttempt(attempt: Attempt): Attempt {
@@ -42,7 +42,16 @@ export function checkedAttempt(attempt: Attempt): Attempt {
   const order = checkedPaymentOrder(attempt.order, 'attempt.order');
   const usedMethods = normalizeAddresses(attempt.usedMethods, 'attempt.usedMethods');
 
-  return { ...attempt, payloadHash: lowerHex(attempt.payloadHash), order, usedMethods };
+  return {
+    attemptId: attempt.attemptId,
+    setupNonce: attempt.setupNonce,
+    consumableAfter: attempt.consumableAfter,
+    state: attempt.state,
+    payloadHash: lowerHex(attempt.payloadHash),
+    order,
+    usedMethods,
+    ignoresPause: attempt.ignoresPause,
+  };
 }
 
 /** The address the payment leg pays: the order's payee, or the sender named by `options.from` where the order leaves it open. */
@@ -102,41 +111,26 @@ export function assertPayloadHash(attempt: Attempt, payloadHash: Hex): void {
 /** The lower-cased payload's hash. */
 export const payloadHashOf = (payload: Hex): Hex => keccak256(lowerHex(payload));
 
-/** Refuses with a `KitRefusalError` an attempt whose id, payload hash or order is not the manager's. */
+/** Refuses with a `KitRefusalError` an attempt whose id, payload hash or order is not the manager's checked one. */
 export function assertSameAttempt(given: Attempt, held: Attempt): void {
-  assertBytes32(held.payloadHash, 'state.attempt.payloadHash');
-
-  const order = checkedPaymentOrder(held.order, 'state.attempt.order');
+  const { order } = held;
   const sameOrder =
     sameAddress(order.token, given.order.token) && order.amount === given.order.amount && sameAddress(order.payee, given.order.payee);
 
-  if (held.attemptId === given.attemptId && lowerHex(held.payloadHash) === given.payloadHash && sameOrder) return;
+  if (held.attemptId === given.attemptId && held.payloadHash === given.payloadHash && sameOrder) return;
 
   throw new KitRefusalError(RECOVERY_CLIENT_ATTEMPT_DIFFERS_MESSAGE);
 }
 
-/** Whether one used method answers stopped at the block, rejecting where the read went unanswered. */
-async function isStopped(parts: RecoveryClientParts, method: Address, block: PinnedBlock): Promise<boolean> {
-  const read = await parts.policyManager.paused(method, block);
-  const paused: unknown = answerOf(read, 'paused', method);
-
-  assertBool(paused, `paused(${method})`);
-
-  return paused;
-}
-
 /**
- * Refuses with a `KitRefusalError` naming the method where a method the attempt used is stopped, unless the attempt ignores
- * stops; each distinct method is read once at the block, the methods in parallel, and an unanswered read rejects with an `Error`.
+ * Refuses with a `KitRefusalError` naming the method where a method the manager's checked attempt used is stopped, unless the
+ * attempt ignores stops; each distinct method is read once at the block, the methods in parallel, and an unanswered read rejects with an `Error`.
  */
 export async function assertSpendNotVetoed(parts: RecoveryClientParts, held: Attempt, block: PinnedBlock): Promise<void> {
-  assertBool(held.ignoresPause, 'state.attempt.ignoresPause');
-
   if (held.ignoresPause) return;
 
-  const used = normalizeAddresses(held.usedMethods, 'state.attempt.usedMethods');
-  const methods = [...new Set(used)];
-  const stopped = await Promise.all(methods.map((method) => isStopped(parts, method, block)));
+  const methods = [...new Set(held.usedMethods)];
+  const stopped = await Promise.all(methods.map((method) => pausedAt(parts, method, block)));
   const vetoing = methods.find((_, index) => stopped[index] === true);
 
   if (vetoing !== undefined) throw new KitRefusalError(`${RECOVERY_CLIENT_SPEND_VETOED_MESSAGE}: ${vetoing}`);

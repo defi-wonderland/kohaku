@@ -1,6 +1,6 @@
-import { getAddress, keccak256 } from 'viem';
+import { decodeFunctionData, getAddress, keccak256 } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { KitRefusalError, type Attempt, type Hex, type PaymentOrder } from '../../src/index';
+import { KitRefusalError, POLICY_MANAGER_TRUE_WORD, RECOVERY_ACTION_DISARMED_VALUE, type Attempt, type Hex, type PaymentOrder } from '../../src/index';
 import {
   ACCOUNT,
   ACTION,
@@ -26,7 +26,7 @@ import {
   ZERO,
   type World,
 } from './doubles';
-import { describedBatch, executeHandoverData, loweredCall, payloadOf } from './encodings';
+import { describedBatch, executeHandoverData, loweredCall, payloadOf, PIN_WRITES_ABI } from './encodings';
 import { liveAttempt, membersOf, PAYLOAD } from './prepare-fixtures';
 
 const SPONSOR = getAddress(`0x${'5b'.repeat(20)}`);
@@ -241,6 +241,13 @@ describe('prepareExecuteHandover: refusals', () => {
     await expect(rig(chainWith(stored)).client.prepareExecuteHandover(passed, PAYLOAD)).resolves.toBeDefined();
   });
 
+  it('accepts the stored payload hash passed in upper-case hex', async () => {
+    const stored = liveAttempt();
+    const passed: Attempt = { ...stored, payloadHash: `0x${stored.payloadHash.slice(2).toUpperCase()}` };
+
+    await expect(rig(chainWith(stored)).client.prepareExecuteHandover(passed, PAYLOAD)).resolves.toBeDefined();
+  });
+
   it('refuses where a used method is stopped, naming the method', async () => {
     const built = execute(liveAttempt(), { paused: new Map([[METHOD_PASSKEY.toLowerCase(), { answered: true, value: true }]]) });
     const thrown = await rejectionOf(built.run);
@@ -278,5 +285,44 @@ describe('prepareExecuteHandover: refusals', () => {
     const prepared = await built.client.prepareExecuteHandover(attempt, PAYLOAD);
 
     expect(prepared.simulation).toEqual({ success: true });
+  });
+});
+
+describe('prepareExecuteHandover: the privilege words', () => {
+  it('grants the new key the manager\'s true word and revokes the removed key with the disarmed value', async () => {
+    const prepared = await execute(liveAttempt()).run;
+    const [, grant, revoke] = prepared.describes ?? [];
+    const priv = (data: Hex | undefined) => decodeFunctionData({ abi: PIN_WRITES_ABI, data: data ?? '0x' }).args?.[1];
+
+    expect(priv(grant?.data)).toBe(POLICY_MANAGER_TRUE_WORD);
+    expect(priv(revoke?.data)).toBe(RECOVERY_ACTION_DISARMED_VALUE);
+  });
+});
+
+describe('prepareExecuteHandover: the read log', () => {
+  const METHOD_THIRD = getAddress(`0x${'e9'.repeat(20)}`);
+
+  it.each<[string, readonly typeof METHOD_ECDSA[], boolean, number]>([
+    ['two methods', [METHOD_ECDSA, METHOD_PASSKEY], false, 2],
+    ['one method', [METHOD_ECDSA], false, 1],
+    [
+      'repeats in other case across three methods',
+      [METHOD_ECDSA, METHOD_PASSKEY, METHOD_ECDSA.toLowerCase() as typeof METHOD_ECDSA, METHOD_THIRD, METHOD_PASSKEY],
+      false,
+      3,
+    ],
+    ['two methods under ignoresPause', [METHOD_ECDSA, METHOD_PASSKEY], true, 0],
+    ['no method', [], false, 0],
+  ])('reads the pin, the state and paused once per distinct used method over %s, and no trusted parties', async (_name, methods, ignoresPause, pauses) => {
+    const built = execute(liveAttempt(ORDER, methods, ignoresPause));
+
+    await built.run;
+
+    const made = membersOf(built.seen);
+
+    expect(made.slice(0, 2)).toEqual(['provider.block', 'manager.stateOf']);
+    expect(made.slice(2)).toEqual(Array.from({ length: pauses }, () => 'manager.paused'));
+    expect(new Set(callsTo(built.seen, 'manager', 'paused').map((one) => String(one.args[0]).toLowerCase())).size).toBe(pauses);
+    expect(callsTo(built.seen, 'manager', 'trustedParties')).toEqual([]);
   });
 });

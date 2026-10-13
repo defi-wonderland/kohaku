@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inferRemovedKey, type Attempt, type Hex, type KitNotification, type LogPosition, type RawTransaction } from '../../src/index';
+import { inferRemovedKey, type Address, type Attempt, type BlockHeader, type Hex, type KitNotification, type LogPosition, type RawTransaction } from '../../src/index';
 import {
   ACCOUNT,
   ACCOUNT_FILTER,
@@ -14,9 +14,13 @@ import {
   KEY_OLD,
   KEY_OTHER,
   lastArg,
+  METHOD_ECDSA,
+  METHOD_PASSKEY,
+  PAYEE,
   pinnedOf,
   rig,
   stateFor,
+  TOKEN,
   world,
   ZERO,
   type World,
@@ -193,5 +197,88 @@ describe('recoveryState: failures', () => {
 
   it('works under the version escape', async () => {
     await expect(rig(world(), CLIENT_CONFIGURATION, { escaped: true }).client.recoveryState()).resolves.toBeDefined();
+  });
+});
+
+describe('recoveryState: the checked record', () => {
+  it('copies a respelled stored attempt into a fresh record, hash lower-cased and addresses checksummed', async () => {
+    const stored: Attempt = {
+      ...WAITING,
+      payloadHash: `0x${'AB'.repeat(32)}`,
+      order: { token: TOKEN.toLowerCase() as Address, amount: 9n, payee: PAYEE.toLowerCase() as Address },
+      usedMethods: [METHOD_ECDSA.toLowerCase() as Address, METHOD_PASSKEY.toLowerCase() as Address],
+    };
+    const state = stateFor(undefined, stored);
+    const record = await rig(world({ state })).client.recoveryState();
+
+    expect(record.attempt).toEqual({
+      ...stored,
+      payloadHash: `0x${'ab'.repeat(32)}`,
+      order: { token: TOKEN, amount: 9n, payee: PAYEE },
+      usedMethods: [METHOD_ECDSA, METHOD_PASSKEY],
+    });
+    expect(record.attempt).not.toBe(stored);
+    expect(record.attempt.order).not.toBe(stored.order);
+    expect(record.attempt.usedMethods).not.toBe(stored.usedMethods);
+  });
+});
+
+describe('recoveryState: the record carries the eight attempt fields only', () => {
+  it('drops a member the manager answers beyond the eight', async () => {
+    const stored = { ...WAITING, extra: 'carried' } as Attempt;
+    const record = await rig(world({ state: stateFor(undefined, stored) })).client.recoveryState();
+
+    expect(Object.keys(record.attempt).sort()).toEqual(
+      ['attemptId', 'setupNonce', 'consumableAfter', 'state', 'payloadHash', 'order', 'usedMethods', 'ignoresPause'].sort(),
+    );
+  });
+});
+
+describe('recoveryState: one pin for the state and the inference', () => {
+  const PREVIOUS = [started(2n, payloadOf(KEY_OLD, KEY_OTHER), 200), consumed(2n, 201)];
+  const LATER: BlockHeader = { number: HEADER.number + 5, timestamp: HEADER.timestamp + 60, hash: `0x${'6b'.repeat(32)}` };
+
+  it('reads the state and every inference read at the one pinned block, even where a second pin would differ', async () => {
+    const built = rig(world({ notifications: PREVIOUS, headers: [HEADER, LATER] }));
+    const record = await built.client.recoveryState();
+    const pinned = pinnedOf(HEADER);
+
+    expect(record.block).toEqual(HEADER);
+    expect(callsTo(built.seen, 'provider', 'block')).toHaveLength(1);
+    expect(lastArg(callsTo(built.seen, 'manager', 'stateOf')[0]!)).toEqual(pinned);
+
+    const authorities = callsTo(built.seen, 'action', 'isAuthority');
+
+    expect(authorities.length).toBeGreaterThan(0);
+
+    for (const one of authorities) expect(lastArg(one)).toEqual(pinned);
+
+    expect(callsTo(built.seen, 'events', 'fetch').map((one) => (one.args[1] as { to: number }).to)).toEqual([HEADER.number]);
+  });
+
+  it.each([
+    ['the state read answers last', 'manager.stateOf'],
+    ['the inference answers last', 'events.fetch'],
+  ])('answers the same record where %s', async (_name, slow) => {
+    const plain = await rig(world({ notifications: PREVIOUS })).client.recoveryState();
+    const reordered = await rig(world({ notifications: PREVIOUS, delays: new Map([[slow, 20]]) })).client.recoveryState();
+
+    expect(reordered).toEqual(plain);
+    expect(reordered.removedKey).toBe(KEY_OLD);
+  });
+
+  it('starts the inference without waiting for the state read', async () => {
+    const built = rig(world({ notifications: PREVIOUS, delays: new Map([['manager.stateOf', 20]]), failures: new Map([['manager.stateOf', INJECTED]]) }));
+
+    await expect(built.client.recoveryState()).rejects.toBe(INJECTED);
+    expect(callsTo(built.seen, 'events', 'fetch')).toHaveLength(1);
+  });
+
+  it('reads the state without waiting for the inference', async () => {
+    const built = rig(world({ notifications: PREVIOUS, delays: new Map([['events.fetch', 1_000]]), failures: new Map([['manager.stateOf', INJECTED]]) }));
+    const startedAt = performance.now();
+
+    await expect(built.client.recoveryState()).rejects.toBe(INJECTED);
+    expect(performance.now() - startedAt).toBeLessThan(500);
   });
 });

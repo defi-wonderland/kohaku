@@ -244,6 +244,10 @@ export type World = {
   readonly authorityAnswers?: ReadonlyMap<string, unknown>;
   /** `part.member` names whose calls reject with the value. */
   readonly failures: ReadonlyMap<string, unknown>;
+  /** `part.member` names whose answers wait this many milliseconds, to reorder concurrent reads. */
+  readonly delays?: ReadonlyMap<string, number>;
+  /** Headers the block read answers in turn, `header` once they run out, so a second pin shows. */
+  readonly headers?: readonly BlockHeader[];
 };
 
 /** The happy-path world over `CONFIGURATION`, with the given members replaced. */
@@ -314,12 +318,17 @@ export function rig(given: World = world(), configuration: ClientConfiguration =
   const answer = async <T>(part: Seen['part'], member: string, args: readonly unknown[], value: () => T): Promise<T> => {
     seen.push({ part, member, args });
 
+    const delay = given.delays?.get(`${part}.${member}`);
+
+    if (delay !== undefined) await new Promise((resolve) => setTimeout(resolve, delay));
+
     const failure = given.failures.get(`${part}.${member}`);
 
     if (failure !== undefined) throw failure;
 
     return value();
   };
+  let blockReads = 0;
   const unexpected = (part: Seen['part'], member: string) => async (...args: unknown[]): Promise<never> => {
     seen.push({ part, member, args });
 
@@ -353,7 +362,13 @@ export function rig(given: World = world(), configuration: ClientConfiguration =
       return overrides.call === undefined ? '0x' : overrides.call(to, data, from, block);
     },
     logs: async (...args) => answer('provider', 'logs', args, () => []),
-    block: async (tag: BlockTag) => answer('provider', 'block', [tag], () => given.header),
+    block: async (tag: BlockTag) => {
+      const header = given.headers?.[blockReads] ?? given.header;
+
+      blockReads += 1;
+
+      return answer('provider', 'block', [tag], () => header);
+    },
     code: async (address, block) => answer('provider', 'code', [address, block], () => given.code.get(keyed(address)) ?? '0x'),
     transaction: async (hash) => answer('provider', 'transaction', [hash], () => given.transactions.get(keyed(hash))),
   };

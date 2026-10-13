@@ -266,8 +266,8 @@ export function thrown(call: () => unknown): unknown {
 }
 
 /** An array of `length` with only the given positions set, the others holes. */
-export function sparse(length: number, entries: { readonly [index: number]: string }): string[] {
-  const values = new Array<string>(length);
+export function sparse<T = string>(length: number, entries: { readonly [index: number]: T }): T[] {
+  const values = new Array<T>(length);
 
   for (const [index, value] of Object.entries(entries)) values[Number(index)] = value;
 

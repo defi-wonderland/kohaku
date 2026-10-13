@@ -3,7 +3,21 @@ import { bytesToHex } from 'viem';
 import { describe, expect, it } from 'vitest';
 import { zkPassportMethod } from '../../src/method-zkpassport';
 import type { Hex } from '../../src/interfaces';
-import { encodeConfig, encodeFiveFieldConfig, encodeNestedConfig, encodeProof, stackDouble } from './fixtures';
+import * as constants from '../../src/constants';
+import {
+  DEFAULT_OUTER,
+  DIGEST,
+  encodeConfig,
+  encodeFiveFieldConfig,
+  encodeNestedConfig,
+  encodeProof,
+  IDENTIFIER,
+  makeCtx,
+  PARAMS,
+  stackDouble,
+  stackProof,
+  word,
+} from './fixtures';
 
 const NUM_RUNS = Number(process.env['FC_NUM_RUNS'] ?? 256);
 
@@ -91,6 +105,45 @@ describe('method-zkpassport codec properties', () => {
 
         expect(error).toBeInstanceOf(TypeError);
         expect((error as Error).message).toContain(`[${position}]`);
+      }),
+      { numRuns: NUM_RUNS, ...SEED },
+    );
+  }, 600_000);
+});
+
+describe('method-zkpassport proof-list properties', () => {
+  const other = stackProof('sig_check_dsc');
+  const enrollOuter = stackProof('outer_evm_count_4');
+  const replyOuter = stackProof('outer_evm_count_5', DIGEST);
+  const config = encodeConfig(word(IDENTIFIER), PARAMS.domain, PARAMS.scope, BigInt(DEFAULT_OUTER.validityPeriodInSeconds));
+
+  /** A list of `length` with the outer proof at one position and a hole at another, the rest unrelated proofs. */
+  const holedArb = fc
+    .integer({ min: 2, max: 8 })
+    .chain((length) => fc.tuple(fc.constant(length), fc.nat({ max: length - 1 }), fc.nat({ max: length - 1 })))
+    .filter(([, outerAt, holeAt]) => outerAt !== holeAt);
+
+  const holed = (length: number, outerAt: number, holeAt: number, outer: typeof other): (typeof other)[] => {
+    const list = Array.from({ length }, (_, index) => (index === outerAt ? outer : other));
+
+    delete list[holeAt];
+
+    return list;
+  };
+
+  it('a hole at any position of the proofs answers material-rejected at configFrom and replyFrom, and the stack is not called', async () => {
+    await fc.assert(
+      fc.asyncProperty(holedArb, async ([length, outerAt, holeAt]) => {
+        const double = stackDouble();
+        const method = zkPassportMethod(double.stack);
+        const ctx = makeCtx(config);
+        const material = { result: { verified: true, uniqueIdentifier: IDENTIFIER.toString(10), proofs: holed(length, outerAt, holeAt, enrollOuter) } };
+
+        expect(await method.configFrom(method.enrollInput(PARAMS), material)).toEqual(constants.METHOD_ZKPASSPORT_MATERIAL_REJECTED);
+        expect(await method.replyFrom(ctx, method.signingInput(ctx, PARAMS), { proofs: holed(length, outerAt, holeAt, replyOuter) })).toEqual(
+          constants.METHOD_ZKPASSPORT_MATERIAL_REJECTED,
+        );
+        expect(double.calls).toEqual([]);
       }),
       { numRuns: NUM_RUNS, ...SEED },
     );

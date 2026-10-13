@@ -7,9 +7,12 @@ import {
   METHOD_ZKPASSPORT_DIGEST_HEX_MESSAGE,
   METHOD_ZKPASSPORT_DIGEST_WIDTH_MESSAGE,
   METHOD_ZKPASSPORT_MIN_PUBLIC_INPUTS,
+  METHOD_ZKPASSPORT_MISSING_MESSAGE,
   METHOD_ZKPASSPORT_NON_SALTED_NULLIFIER,
   METHOD_ZKPASSPORT_NULLIFIER_TYPE_FROM_END,
   METHOD_ZKPASSPORT_OUTER_EVM_PREFIX,
+  METHOD_ZKPASSPORT_PROOFS_NAME,
+  METHOD_ZKPASSPORT_RECORD_MESSAGE,
   METHOD_ZKPASSPORT_SCOPED_NULLIFIER_FROM_END,
   METHOD_ZKPASSPORT_WORD_HEX_LENGTH,
 } from '../constants';
@@ -30,16 +33,25 @@ export const digestText = (digest: Hex): string => {
   return lowerHex(digest);
 };
 
-/** The first proof named as the outer EVM proof, or undefined where none is. */
+/** The first proof named as the outer EVM proof, or undefined where none is; every index is walked first, so a hole or a non-record entry anywhere throws a `TypeError` naming its position. */
 export const outerEvmProof = (proofs: unknown): ZkPassportStackProof | undefined => {
   if (!Array.isArray(proofs)) return undefined;
 
-  const found: unknown = proofs.find(
-    (proof: unknown) =>
-      isRecord(proof) && typeof proof['name'] === 'string' && proof['name'].startsWith(METHOD_ZKPASSPORT_OUTER_EVM_PREFIX),
-  );
+  let found: ZkPassportStackProof | undefined;
 
-  return found as ZkPassportStackProof | undefined;
+  for (let index = 0; index < proofs.length; index += 1) {
+    if (!Object.hasOwn(proofs, index)) throw new TypeError(`${METHOD_ZKPASSPORT_PROOFS_NAME}[${index}] ${METHOD_ZKPASSPORT_MISSING_MESSAGE}`);
+
+    const proof: unknown = proofs[index];
+
+    if (!isRecord(proof)) throw new TypeError(`${METHOD_ZKPASSPORT_PROOFS_NAME}[${index}] ${METHOD_ZKPASSPORT_RECORD_MESSAGE}`);
+
+    if (found === undefined && typeof proof['name'] === 'string' && proof['name'].startsWith(METHOD_ZKPASSPORT_OUTER_EVM_PREFIX)) {
+      found = proof;
+    }
+  }
+
+  return found;
 };
 
 /** The custom data the outer proof's bind committed inputs carry, or undefined where it carries none. */

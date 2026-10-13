@@ -47,6 +47,15 @@ const checkedParameters = async (
   }
 };
 
+/** The outer EVM proof of a ceremony's proof list, or undefined where the list is malformed or holds none. */
+const outerOf = (proofs: unknown): ZkPassportStackProof | undefined => {
+  try {
+    return outerEvmProof(proofs);
+  } catch {
+    return undefined;
+  }
+};
+
 const isFailure = (value: unknown): value is ReplyFailure => isRecord(value) && value['kind'] === 'reply-failure';
 
 /**
@@ -63,7 +72,7 @@ export const enrolledConfig = async (
   if (!isRecord(result) || result['verified'] !== true) return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
 
   const identifier = result['uniqueIdentifier'];
-  const outer = outerEvmProof(result['proofs']);
+  const outer = outerOf(result['proofs']);
 
   if (typeof identifier !== 'string' || !METHOD_ZKPASSPORT_DECIMAL_PATTERN.test(identifier) || outer === undefined) return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
 
@@ -102,7 +111,7 @@ export const packagedProof = async (
   digest: Hex,
   material: Material,
 ): Promise<Hex | ReplyFailure> => {
-  const outer = outerEvmProof(isRecord(material) ? material['proofs'] : undefined);
+  const outer = outerOf(isRecord(material) ? material['proofs'] : undefined);
 
   if (outer === undefined) return METHOD_ZKPASSPORT_MATERIAL_REJECTED;
 

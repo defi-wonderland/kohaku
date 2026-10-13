@@ -361,6 +361,55 @@ describe('approval: signingInput(ctx, params) and replyFrom(ctx, input, { proofs
   });
 });
 
+/** One unrelated proof, the enrollment's outer proof and the approval's outer proof, as the stack's lists carry them. */
+const OTHER = stackProof('sig_check_dsc');
+const ENROLL_OUTER = stackProof('outer_evm_count_4');
+const REPLY_OUTER = stackProof('outer_evm_count_5', DIGEST);
+
+const holedLists: readonly (readonly [string, (outer: { readonly [member: string]: unknown }) => unknown[]])[] = [
+  ['a hole before the outer proof', (outer) => sparse(3, { 0: OTHER, 2: outer })],
+  ['a hole after the outer proof', (outer) => sparse(3, { 0: OTHER, 1: outer })],
+  ['a trailing hole after the outer proof', (outer) => sparse(2, { 0: outer })],
+  ['an entirely sparse list', () => sparse(3, {})],
+];
+
+describe('the proof lists are walked whole: a hole is refused before the stack is asked', () => {
+  it.each(holedLists)('configFrom answers material-rejected for %s, and the stack is not called', async (_why, list) => {
+    const double = stackDouble();
+    const method = zkPassportMethod(double.stack);
+
+    await expect(method.configFrom(method.enrollInput(PARAMS), enrollMaterial({ proofs: list(ENROLL_OUTER) }))).resolves.toEqual(rejected);
+    expect(double.calls).toEqual([]);
+  });
+
+  it.each(holedLists)('replyFrom answers material-rejected for %s, and the stack is not called', async (_why, list) => {
+    const double = stackDouble();
+    const method = zkPassportMethod(double.stack);
+    const ctx = makeCtx(CONFIG);
+
+    await expect(method.replyFrom(ctx, method.signingInput(ctx, PARAMS), { proofs: list(REPLY_OUTER) })).resolves.toEqual(rejected);
+    expect(double.calls).toEqual([]);
+  });
+
+  it('a dense list with an unrelated proof on either side of the outer proof still enrolls and replies', async () => {
+    const method = zkPassportMethod(stackDouble().stack);
+    const ctx = makeCtx(CONFIG);
+
+    await expect(method.configFrom(method.enrollInput(PARAMS), enrollMaterial({ proofs: [OTHER, ENROLL_OUTER, OTHER] }))).resolves.toBe(CONFIG);
+    await expect(method.replyFrom(ctx, method.signingInput(ctx, PARAMS), { proofs: [OTHER, REPLY_OUTER, OTHER] })).resolves.toBe(
+      encodeProof(asHex(DEFAULT_OUTER.vkeyHash), asHex(DEFAULT_OUTER.proof), DEFAULT_OUTER.publicInputs.map(asHex), asHex(DEFAULT_OUTER.committedInputs)),
+    );
+  });
+
+  it('a list with an explicit undefined entry is refused the same way', async () => {
+    const double = stackDouble();
+    const method = zkPassportMethod(double.stack);
+
+    await expect(method.configFrom(method.enrollInput(PARAMS), enrollMaterial({ proofs: [ENROLL_OUTER, undefined] }))).resolves.toEqual(rejected);
+    expect(double.calls).toEqual([]);
+  });
+});
+
 const proofFile = readVector('method-zkpassport-proof.json');
 const configFile = readPinConfigRows();
 

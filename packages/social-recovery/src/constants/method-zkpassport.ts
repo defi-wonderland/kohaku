@@ -46,6 +46,9 @@ export const METHOD_ZKPASSPORT_BIND_EVM_KEY = 'bind_evm';
 /** The key under a committed input that holds its values. */
 export const METHOD_ZKPASSPORT_BIND_DATA_KEY = 'data';
 
+/** The ceremony material's list of proofs, as a refusal names it. */
+export const METHOD_ZKPASSPORT_PROOFS_NAME = 'proofs';
+
 /** The custom field the digest's text is bound to. */
 export const METHOD_ZKPASSPORT_CUSTOM_DATA_KEY = 'custom_data';
 

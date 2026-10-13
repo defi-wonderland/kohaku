@@ -88,7 +88,12 @@ the holder key as the one candidate key and the order's token as the token allow
 
 `pnpm run dev` serves `index.html` with Vite. It drives the same clients through the connected browser wallet: the
 wallet answers every read (an `IProvider` over its EIP-1193 `request`) and sends every transaction. The page holds no
-key and no RPC URL; the wallet must be on Sepolia (chain id 11155111), or Connect refuses.
+key and no RPC URL of its own; the wallet must end up on Sepolia (chain id 11155111), or Connect refuses.
+When the wallet is on another chain, Connect asks it to switch to Sepolia (`wallet_switchEthereumChain`), first adding
+the chain (`wallet_addEthereumChain`, with a public Sepolia RPC and Etherscan) when the wallet does not know it; Connect
+refuses only when you reject the switch or the wallet stays elsewhere.
+Each Connect reads the wallet object the browser holds at that moment, shows "Connecting… confirm in your wallet" while
+a request is pending, and reports a request the wallet has not answered within 60 seconds as an error.
 
 - **Deployment**: the manager, the methods, the action, the Ambire implementation, the deploy block, the factory and its
   deploy function, the optional manager version and the optional existing account. Each field is prefilled from the

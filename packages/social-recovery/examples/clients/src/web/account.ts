@@ -6,9 +6,10 @@ import { checkedCreation, deployCalldata, randomSalt } from './creation';
 import { holder, useAccount } from './kit';
 import { field, valueOf } from './page';
 import { WalletProvider } from './provider';
+import { currentLifetime, LifetimeProvider } from './lifetime';
 import { readRpcProvider, readRpcUrl } from './reads';
 import { sendTransaction } from './send';
-import { type Connection, ensureSession, SEPOLIA_CHAIN_ID, wallet } from './wallet';
+import { type Connection, ensureSession, rawWallet, SEPOLIA_CHAIN_ID, wallet } from './wallet';
 
 /** Fills the salt field with a fresh random salt. */
 export function newSalt(): void {
@@ -20,7 +21,8 @@ export async function applyDeployment(conn: Connection): Promise<void> {
   const inputs = deploymentInputs();
   const text = valueOf('read-rpc');
   const reads = text === '' ? undefined : readRpcProvider(readRpcUrl(text), () => wallet.session);
-  const provider = reads?.provider ?? new WalletProvider(conn.wallet, () => wallet.session);
+  const base = reads?.provider ?? new WalletProvider(rawWallet(), () => wallet.session);
+  const provider = new LifetimeProvider(base, currentLifetime());
 
   if (reads !== undefined) {
     const chainId = await provider.chainId();
@@ -35,7 +37,7 @@ export async function applyDeployment(conn: Connection): Promise<void> {
   const descriptor = await deploymentDescriptor(inputs, provider, conn.session);
 
   ensureSession(conn.session);
-  Object.assign(holder, { descriptor, provider, readClient: reads?.client, account: undefined, kit: undefined, gathering: undefined, ripe: false });
+  Object.assign(holder, { descriptor, provider: base, readClient: reads?.client, account: undefined, kit: undefined, gathering: undefined, ripe: false });
 
   if (inputs.account === undefined) {
     standIn(conn);
@@ -52,7 +54,7 @@ function requireDeployment(): { descriptor: NonNullable<typeof holder.descriptor
 
   if (descriptor === undefined || provider === undefined) throw new Error('apply the deployment first');
 
-  return { descriptor, provider };
+  return { descriptor, provider: new LifetimeProvider(provider, currentLifetime()) };
 }
 
 /** The form's existing account: it must hold code; whether the connected account is its authority is shown. */

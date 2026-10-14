@@ -6,8 +6,8 @@ import { checkedCreation, deployCalldata, randomSalt } from './creation';
 import { holder, useAccount } from './kit';
 import { field, valueOf } from './page';
 import { WalletProvider } from './provider';
-import { currentLifetime, LifetimeProvider } from './lifetime';
-import { readRpcProvider, readRpcUrl } from './reads';
+import { currentLifetime } from './lifetime';
+import { bindProvider, readRpcProvider, readRpcUrl } from './reads';
 import { sendTransaction } from './send';
 import { type Connection, ensureSession, rawWallet, SEPOLIA_CHAIN_ID, wallet } from './wallet';
 
@@ -22,7 +22,7 @@ export async function applyDeployment(conn: Connection): Promise<void> {
   const text = valueOf('read-rpc');
   const reads = text === '' ? undefined : readRpcProvider(readRpcUrl(text), () => wallet.session);
   const base = reads?.provider ?? new WalletProvider(rawWallet(), () => wallet.session);
-  const provider = new LifetimeProvider(base, currentLifetime());
+  const provider = bindProvider(base, currentLifetime(), reads !== undefined);
 
   if (reads !== undefined) {
     const chainId = await provider.chainId();
@@ -54,7 +54,7 @@ function requireDeployment(): { descriptor: NonNullable<typeof holder.descriptor
 
   if (descriptor === undefined || provider === undefined) throw new Error('apply the deployment first');
 
-  return { descriptor, provider: new LifetimeProvider(provider, currentLifetime()) };
+  return { descriptor, provider: bindProvider(provider, currentLifetime()) };
 }
 
 /** The form's existing account: it must hold code; whether the connected account is its authority is shown. */

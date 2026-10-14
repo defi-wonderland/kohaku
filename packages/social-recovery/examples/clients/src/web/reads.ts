@@ -4,6 +4,7 @@ import { sepolia } from 'viem/chains';
 import { ViemProvider } from '../provider';
 import type { NativeBalance } from '../validation';
 import { holder } from './kit';
+import { ensureLive } from './chain';
 import { SESSION_CHANGED_MESSAGE, walletNativeBalance } from './provider';
 import { type Connection, ensureSession } from './wallet';
 
@@ -12,6 +13,8 @@ export class SessionCheckedProvider implements IProvider {
   constructor(private readonly inner: IProvider, private readonly session: () => number) {}
 
   private async checked<T>(read: () => Promise<T>): Promise<T> {
+    ensureLive();
+
     const before = this.session();
     let answer: T | undefined;
     let failure: unknown;
@@ -25,6 +28,8 @@ export class SessionCheckedProvider implements IProvider {
     }
 
     if (this.session() !== before) throw new Error(SESSION_CHANGED_MESSAGE);
+
+    ensureLive();
 
     if (failed) throw failure;
 
@@ -84,7 +89,11 @@ export function nativeBalanceFor(conn: Connection): NativeBalance {
 
   if (client === undefined) return walletNativeBalance(conn.wallet);
 
-  return (address, blockNumber) => client.getBalance({ address, blockNumber: BigInt(blockNumber) });
+  return (address, blockNumber) => {
+    ensureLive();
+
+    return client.getBalance({ address, blockNumber: BigInt(blockNumber) });
+  };
 }
 
 /** How often the page asks the Read RPC URL for its latest block while it catches up. */
@@ -97,22 +106,38 @@ const CATCH_UP_LIMIT_MS = 60_000;
  * Waits until the Read RPC URL's latest block is at least `block`, so checks after a mined transaction do not read a
  * state the endpoint has not seen yet; nothing to wait for without one. Throws when it is still behind after the limit.
  */
-export async function readsAt(conn: Connection, block: number): Promise<void> {
+export async function readsAt(conn: Connection, block: number, limitMs = CATCH_UP_LIMIT_MS): Promise<void> {
   const client = holder.readClient;
-  const started = Date.now();
+  const deadline = Date.now() + limitMs;
+  const remaining = (): number => deadline - Date.now();
+  const late = (): Error => new Error(`the read endpoint has not reached block ${block} yet; Refresh later`);
 
   if (client === undefined) return;
 
   for (;;) {
-    const latest = await client.getBlockNumber({ cacheTime: 0 });
+    if (remaining() <= 0) throw late();
+
+    ensureLive();
+
+    const latest = await within(client.getBlockNumber({ cacheTime: 0 }), remaining(), late);
 
     ensureSession(conn.session);
 
     if (latest >= BigInt(block)) return;
 
-    if (Date.now() - started >= CATCH_UP_LIMIT_MS) throw new Error(`the read endpoint has not reached block ${block} yet; Refresh later`);
+    if (remaining() <= 0) throw late();
 
-    await new Promise((resolve) => setTimeout(resolve, CATCH_UP_POLL_MS));
+    await new Promise((resolve) => setTimeout(resolve, Math.min(CATCH_UP_POLL_MS, remaining())));
     ensureSession(conn.session);
   }
+}
+
+/** `pending`, or the `late()` error once `ms` passed, whichever comes first. */
+async function within<T>(pending: Promise<T>, ms: number, late: () => Error): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => reject(late()), ms);
+  });
+
+  return Promise.race([pending, timeout]).finally(() => clearTimeout(timer));
 }

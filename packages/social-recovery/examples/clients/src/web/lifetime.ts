@@ -35,15 +35,30 @@ export function ensureLive(life: Lifetime = current): void {
   if (life.settled) throw new Error('this step already ended; its late answer is dropped');
 }
 
+/** Who answers a timed request: the connected wallet, or the Read RPC URL. */
+export type Answerer = 'wallet' | 'read-endpoint';
+
+/** What a request says when its answerer let the limit pass, in seconds. */
+export const LATE_MESSAGES: Readonly<Record<Answerer, (method: string, seconds: number) => string>> = {
+  wallet: (method, seconds) => `the wallet did not answer ${method} within ${seconds} s; open the wallet, or reload the page and connect again`,
+  'read-endpoint': (method, seconds) => `the read endpoint did not answer ${method} within ${seconds} s; check the Read RPC URL or try again`,
+};
+
 /**
  * A request issued for `life` that rejects, naming the method and its limit, when it is not answered in time; the
- * timeout aborts only `life`. An answer is accepted only while `life` is still live.
+ * timeout aborts only `life`, and its message names `answerer`. An answer is accepted only while `life` is still live.
  */
-export async function timed<T>(pending: Promise<T>, method: string, life: Lifetime, ms = limitFor(method)): Promise<T> {
+export async function timed<T>(
+  pending: Promise<T>,
+  method: string,
+  life: Lifetime,
+  answerer: Answerer = 'wallet',
+  ms = limitFor(method),
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => {
-      const error = new Error(`the wallet did not answer ${method} within ${ms / 1000} s; open the wallet, or reload the page and connect again`);
+      const error = new Error(LATE_MESSAGES[answerer](method, ms / 1000));
 
       abortAction(error, life);
       reject(error);
@@ -65,14 +80,18 @@ export const lifetimeWallet = (injected: InjectedWallet, life: Lifetime): Inject
   },
 });
 
-/** An `IProvider` bound to one action: every read refused once that action ended, timed and aborting only it. */
+/** An `IProvider` bound to one action: every read refused once that action ended, timed as `answerer`'s and aborting only it. */
 export class LifetimeProvider implements IProvider {
-  constructor(private readonly inner: IProvider, private readonly life: Lifetime) {}
+  constructor(
+    private readonly inner: IProvider,
+    private readonly life: Lifetime,
+    private readonly answerer: Answerer = 'wallet',
+  ) {}
 
   private read<T>(method: string, run: () => Promise<T>): Promise<T> {
     ensureLive(this.life);
 
-    return timed(run(), method, this.life);
+    return timed(run(), method, this.life, this.answerer);
   }
 
   chainId(): Promise<number> {

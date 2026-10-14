@@ -85,9 +85,12 @@ export function readRpcProvider(url: URL, session: () => number): { provider: IP
   return { client, provider: new SessionCheckedProvider(new ViemProvider(client), session) };
 }
 
-/** A cached provider bound to one action; a Read RPC provider also goes through the concurrency cap and the backoff. */
+/**
+ * A cached provider bound to one action; a Read RPC provider also goes through the concurrency cap and the backoff, and
+ * its timeouts name the read endpoint.
+ */
 export const bindProvider = (base: IProvider, life: Lifetime, throttle = holder.readClient !== undefined): IProvider =>
-  new LifetimeProvider(throttle ? new ThrottledProvider(base, life) : base, life);
+  throttle ? new LifetimeProvider(new ThrottledProvider(base, life), life, 'read-endpoint') : new LifetimeProvider(base, life);
 
 /** The native balance through the Read RPC URL when one is applied, else through the wallet. */
 export function nativeBalanceFor(conn: Connection): NativeBalance {
@@ -100,7 +103,9 @@ export function nativeBalanceFor(conn: Connection): NativeBalance {
   return (address, blockNumber) => {
     ensureLive(life);
 
-    return timed(throttled(() => client.getBalance({ address, blockNumber: BigInt(blockNumber) }), life), 'eth_getBalance', life);
+    const balance = throttled(() => client.getBalance({ address, blockNumber: BigInt(blockNumber) }), life);
+
+    return timed(balance, 'eth_getBalance', life, 'read-endpoint');
   };
 }
 

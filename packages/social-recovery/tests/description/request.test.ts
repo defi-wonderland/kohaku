@@ -140,13 +140,15 @@ describe('describeRequest describes the order', () => {
 });
 
 describe('describeRequest reads the device facts from the method registry', () => {
-  it('returns the registered implementation\'s describe answer, handed this request and place', () => {
+  it('returns the registered implementation\'s describe answer, handed a frozen copy of this request and its place', () => {
     const { method, seen } = registered();
     const description = describeRequest(approval, codecRegistry(), methodRegistry([[approval.method, method]]));
 
     expect(description.device).toEqual(FACTS);
     expect(seen).toHaveLength(1);
     expect(seen[0]?.request).toEqual(approval);
+    expect(seen[0]?.request).not.toBe(approval);
+    expect(Object.isFrozen(seen[0]?.request)).toBe(true);
     expect(seen[0]?.place).toBe(approval.place);
   });
 

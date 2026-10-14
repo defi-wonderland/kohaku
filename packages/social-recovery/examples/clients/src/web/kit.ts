@@ -19,7 +19,8 @@ import { signerRecovery } from '../signer-recovery';
 import { note, show, step } from '../trace';
 import { BLOCK_TAGS, clientConfiguration, tokenAllowlist, WEB_LOG_CHUNK_SIZE } from './config';
 import { accountLine, button, stateOut } from './page';
-import { currentLifetime, LifetimeProvider } from './lifetime';
+import { currentLifetime } from './lifetime';
+import { bindProvider } from './reads';
 import { type Connection, ensureSession, onReset } from './wallet';
 
 /**
@@ -119,7 +120,7 @@ export function requireKit(): { kit: Kit; provider: IProvider; account: HolderAc
 
   if (kit === undefined || provider === undefined || account === undefined) throw new Error('apply the deployment and choose an account first');
 
-  const bound = new LifetimeProvider(provider, currentLifetime());
+  const bound = bindProvider(provider, currentLifetime());
   const [key] = kit.configuration.candidateKeys;
 
   return { kit: buildKit(bound, kit.descriptor, account, key ?? account.address, kit.configuration), provider: bound, account };

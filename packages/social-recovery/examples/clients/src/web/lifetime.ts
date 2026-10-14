@@ -6,7 +6,11 @@ import type { InjectedWallet } from './wallet';
 /** One page action's lifetime: ended by a timeout or a reset of its own (`aborted`), or by the action settling. */
 export type Lifetime = { aborted?: Error; settled: boolean };
 
+/** The refusal of a request, or an answer, that came after its action settled. */
+export const STEP_ENDED_MESSAGE = 'this step already ended; its late answer is dropped';
+
 let current: Lifetime = { settled: true };
+const endings = new WeakMap<Lifetime, AbortController>();
 
 /** Starts an action with a fresh lifetime that no earlier callback can reach. */
 export function beginAction(): Lifetime {
@@ -18,6 +22,7 @@ export function beginAction(): Lifetime {
 /** Ends a lifetime once its action settled: its late answers are dropped and its late timers change nothing else. */
 export const settleAction = (life: Lifetime): void => {
   life.settled = true;
+  endings.get(life)?.abort(new Error(STEP_ENDED_MESSAGE));
 };
 
 /** The running action's lifetime, captured by every request that action issues. */
@@ -26,13 +31,28 @@ export const currentLifetime = (): Lifetime => current;
 /** Ends one lifetime with `reason`; only that action's later requests refuse and it ends with the reason. */
 export const abortAction = (reason: Error, life: Lifetime = current): void => {
   life.aborted ??= reason;
+  endings.get(life)?.abort(life.aborted);
 };
+
+/** A signal that aborts once `life` is aborted or settled, with the reason it ended. */
+export function endedSignal(life: Lifetime): AbortSignal {
+  let ending = endings.get(life);
+
+  if (ending === undefined) {
+    ending = new AbortController();
+    endings.set(life, ending);
+  }
+
+  if (life.aborted !== undefined || life.settled) ending.abort(life.aborted ?? new Error(STEP_ENDED_MESSAGE));
+
+  return ending.signal;
+}
 
 /** Throws when `life` was aborted or already settled, so nothing more is asked, written or accepted for it. */
 export function ensureLive(life: Lifetime = current): void {
   if (life.aborted !== undefined) throw life.aborted;
 
-  if (life.settled) throw new Error('this step already ended; its late answer is dropped');
+  if (life.settled) throw new Error(STEP_ENDED_MESSAGE);
 }
 
 /** Who answers a timed request: the connected wallet, or the Read RPC URL. */

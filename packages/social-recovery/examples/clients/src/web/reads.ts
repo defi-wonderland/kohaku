@@ -6,7 +6,8 @@ import type { NativeBalance } from '../validation';
 import { holder } from './kit';
 import { WALLET_ANSWER_MS } from './chain';
 import { currentLifetime, ensureLive, type Lifetime, LifetimeProvider, timed } from './lifetime';
-import { throttled, ThrottledProvider } from './throttle';
+import { endpointFetch } from './endpoint';
+import { readBound, throttled, ThrottledProvider } from './throttle';
 import { SESSION_CHANGED_MESSAGE, walletNativeBalance } from './provider';
 import { type Connection, ensureSession } from './wallet';
 
@@ -76,10 +77,11 @@ export function readRpcUrl(text: string): URL {
 
 /**
  * The scripts' viem `IProvider` over the Read RPC URL, session-checked, and the client it reads through. The transport
- * never retries and gives up within the read limit, so the page's own checks decide every request that goes out.
+ * never retries, and each request, its body included, is aborted after `limitMs` or when its action ends, so the page's
+ * own checks decide every request that goes out.
  */
-export function readRpcProvider(url: URL, session: () => number): { provider: IProvider; client: PublicClient } {
-  const transport = http(url.href, { retryCount: 0, timeout: WALLET_ANSWER_MS });
+export function readRpcProvider(url: URL, session: () => number, limitMs = WALLET_ANSWER_MS): { provider: IProvider; client: PublicClient } {
+  const transport = http(url.href, { fetchFn: endpointFetch(limitMs), retryCount: 0, timeout: limitMs });
   const client = createPublicClient({ chain: sepolia, transport }) as PublicClient;
 
   return { client, provider: new SessionCheckedProvider(new ViemProvider(client), session) };
@@ -103,7 +105,7 @@ export function nativeBalanceFor(conn: Connection): NativeBalance {
   return (address, blockNumber) => {
     ensureLive(life);
 
-    const balance = throttled(() => client.getBalance({ address, blockNumber: BigInt(blockNumber) }), life);
+    const balance = throttled(() => client.getBalance({ address, blockNumber: BigInt(blockNumber) }), life, readBound('eth_getBalance'));
 
     return timed(balance, 'eth_getBalance', life, 'read-endpoint');
   };
@@ -133,7 +135,8 @@ export async function readsAt(conn: Connection, block: number, limitMs = CATCH_U
 
     ensureLive(life);
 
-    const latest = await within(throttled(() => client.getBlockNumber({ cacheTime: 0 }), life), remaining(), late);
+    const poll = throttled(() => client.getBlockNumber({ cacheTime: 0 }), life, { deadline, late });
+    const latest = await within(poll, remaining(), late);
 
     if (remaining() <= 0) throw late();
 

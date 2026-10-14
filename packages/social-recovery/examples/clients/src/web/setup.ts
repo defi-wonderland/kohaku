@@ -4,7 +4,7 @@ import type { Kit } from '../clients';
 import { printDescription } from '../describe';
 import { check, findings, note, show, step } from '../trace';
 import { wholeField } from './config';
-import { requireKit } from './kit';
+import { noteStandIn, requireKit } from './kit';
 import { field, valueOf } from './page';
 import { sendAsAccount } from './send';
 import { type Connection, ensureSession } from './wallet';
@@ -62,6 +62,8 @@ function printPrepared(prepared: PreparedCall | PreparedBatch): void {
  * `executeBySender` → confirmSetup → setupState. The EOA stand-in stops before sending, as the Node script does.
  */
 export async function runSetup(conn: Connection): Promise<void> {
+  noteStandIn();
+
   const { kit, account } = requireKit();
   const { setup } = kit;
   const draft = setupDraft(kit);

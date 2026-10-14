@@ -4,6 +4,7 @@ import {
   type DeploymentDescriptor,
   EventManager,
   type Gathering,
+  type IProvider,
   type IRecoveryClient,
   type MethodRegistry,
   PolicyManager,
@@ -11,14 +12,13 @@ import {
   SetupClient,
   walletMethod,
 } from '@kohaku-eth/social-recovery';
-import { type Address, isAddressEqual } from 'viem';
+import { type Address, isAddressEqual, type PublicClient } from 'viem';
 import type { HolderAccount } from '../account';
 import type { Kit } from '../clients';
 import { signerRecovery } from '../signer-recovery';
 import { note, show, step } from '../trace';
-import { BLOCK_TAGS, clientConfiguration, tokenAllowlist } from './config';
+import { BLOCK_TAGS, clientConfiguration, tokenAllowlist, WEB_LOG_CHUNK_SIZE } from './config';
 import { accountLine, button, stateOut } from './page';
-import type { WalletProvider } from './provider';
 import { type Connection, ensureSession, onReset } from './wallet';
 
 /**
@@ -27,7 +27,7 @@ import { type Connection, ensureSession, onReset } from './wallet';
  * can sign as a guardian and come back to the same gathering.
  */
 export const holder: {
-  descriptor?: DeploymentDescriptor; provider?: WalletProvider; account?: HolderAccount; kit?: Kit;
+  descriptor?: DeploymentDescriptor; provider?: IProvider; readClient?: PublicClient; account?: HolderAccount; kit?: Kit;
   gathering?: Gathering; ripe: boolean;
 } = { ripe: false };
 
@@ -37,19 +37,19 @@ onReset((chainChanged) => {
 
   if (!chainChanged) return;
 
-  Object.assign(holder, { descriptor: undefined, provider: undefined, account: undefined, kit: undefined, gathering: undefined });
+  Object.assign(holder, { descriptor: undefined, provider: undefined, readClient: undefined, account: undefined, kit: undefined, gathering: undefined });
   accountLine.textContent = 'The chain changed: apply the deployment again.';
 });
 
 /** Builds the parts in the merged constructors' order over the wallet provider, then both clients over the same parts. */
-export function buildKit(provider: WalletProvider, descriptor: DeploymentDescriptor, account: HolderAccount, key: Address): Kit {
+export function buildKit(provider: IProvider, descriptor: DeploymentDescriptor, account: HolderAccount, key: Address): Kit {
   const { action } = descriptor;
   const codec = new AmbireActionCodec([action]);
   const policyManager = new PolicyManager(provider, descriptor, account.address, action, BLOCK_TAGS);
   const recoveryAction = new AmbireRecoveryAction(provider, descriptor, account.address, action, codec, BLOCK_TAGS);
   const method = walletMethod();
   const methods: MethodRegistry = new Map([[descriptor.methodEcdsa, method]]);
-  const events = new EventManager(provider, descriptor, account.address, action, methods, { logChunkSize: 10000 });
+  const events = new EventManager(provider, descriptor, account.address, action, methods, { logChunkSize: WEB_LOG_CHUNK_SIZE });
   const configuration = clientConfiguration(key, tokenAllowlist(), account.creation);
   const setup = new SetupClient(
     provider, descriptor, account.address, action, configuration, 'integrator',
@@ -97,8 +97,15 @@ export function kitForOrder(token: Address): Kit {
   return rebuilt;
 }
 
+/** Traces, before a flow runs, that the EOA stand-in sends nothing. */
+export function noteStandIn(): void {
+  if (holder.account?.sendsSelfCalls === false) {
+    note('EOA stand-in: reads and prepares only, nothing is sent; Create or Select an Ambire account to commit');
+  }
+}
+
 /** The cached kit, provider and account; throws until an account is chosen. */
-export function requireKit(): { kit: Kit; provider: WalletProvider; account: HolderAccount } {
+export function requireKit(): { kit: Kit; provider: IProvider; account: HolderAccount } {
   const { kit, provider, account } = holder;
 
   if (kit === undefined || provider === undefined || account === undefined) throw new Error('apply the deployment and choose an account first');

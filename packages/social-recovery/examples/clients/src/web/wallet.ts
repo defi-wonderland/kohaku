@@ -1,6 +1,7 @@
 import type { Address, Hex } from '@kohaku-eth/social-recovery';
 import { getAddress, hexToNumber } from 'viem';
-import { type Ask, SEPOLIA_CHAIN_ID, switchToSepolia, timed, wrongChain } from './chain';
+import { type Ask, SEPOLIA_CHAIN_ID, switchToSepolia, timed, timedWallet, wrongChain } from './chain';
+import { note } from '../trace';
 import { connectionLine, statusLine } from './page';
 import { SESSION_CHANGED_MESSAGE } from './provider';
 
@@ -44,6 +45,7 @@ export const injectedWallet = (): InjectedWallet | undefined =>
 /** Drops the cached connection; Connect must run again. The forms and pasted texts stay. */
 export function reset(reason?: string, chainChanged = false): void {
   Object.assign(wallet, { session: wallet.session + 1, account: undefined, chainId: undefined });
+  note(reason === undefined ? '⟲ connection dropped' : `⟲ connection dropped: ${reason}`);
   connectionLine.textContent = 'Not connected.';
   statusLine.textContent = reason === undefined ? '' : `${reason}: connect again`;
 
@@ -59,7 +61,7 @@ function onAccounts(accounts: unknown): void {
 
   wallet.observedAccounts.push(account);
 
-  if (wallet.account !== undefined && account !== wallet.account) reset('the wallet switched account');
+  if (wallet.account !== undefined && account !== wallet.account) reset(`the wallet switched account to ${account ?? 'none'}`);
 }
 
 function onChain(chain: unknown): void {
@@ -69,7 +71,7 @@ function onChain(chain: unknown): void {
   wallet.observedChainIds.push(chainId);
   wallet.lastChainId = chainId;
 
-  if (last !== undefined && chainId !== last && chainId !== wallet.requestedChainId) reset('the wallet switched chain', true);
+  if (last !== undefined && chainId !== last && chainId !== wallet.requestedChainId) reset(`the wallet switched chain to ${chainId}`, true);
 }
 
 /** Records every account or chain the wallet reports, moving the listeners when the page's wallet object changed. */
@@ -90,7 +92,7 @@ export const ensureSession = (session: number): void => {
 
 /**
  * Asks for the account, switches the wallet to Sepolia when it is elsewhere, reads the account and the chain again
- * (`eth_accounts`, `eth_chainId`), then caches them. Each request waits at most `WALLET_ANSWER_MS`. The listeners
+ * (`eth_accounts`, `eth_chainId`), then caches them. Each request waits at most `limitFor(method)`. The listeners
  * record what the wallet reports meanwhile; a re-read or a recorded value that differs from what was expected (the
  * first chain before the switch, Sepolia after it) refuses the connection, as does a wallet left on another chain.
  */
@@ -108,12 +110,21 @@ async function connectOnce(injected: InjectedWallet): Promise<Connection> {
   Object.assign(wallet, { observedAccounts: [], observedChainIds: [] });
 
   const { session } = wallet;
+  const live = (): void => ensureSession(session);
   const ask: Ask = async (method, params) => {
+    live();
     statusLine.textContent = 'Connecting… confirm in your wallet';
 
-    const answer = await timed(injected.request(params === undefined ? { method } : { method, params }), method);
+    let answer: unknown;
 
-    ensureSession(session);
+    try {
+      answer = await timed(injected.request(params === undefined ? { method } : { method, params }), method);
+    } catch (error) {
+      live();
+      throw error;
+    }
+
+    live();
 
     return answer;
   };
@@ -131,7 +142,7 @@ async function connectOnce(injected: InjectedWallet): Promise<Connection> {
 
   if (first !== SEPOLIA_CHAIN_ID) {
     wallet.requestedChainId = SEPOLIA_CHAIN_ID;
-    await switchToSepolia(ask, first);
+    await switchToSepolia(ask, first, live);
     ensureSession(session);
   }
 
@@ -159,11 +170,13 @@ async function connectOnce(injected: InjectedWallet): Promise<Connection> {
     throw new Error('the wallet switched account or chain while connecting; connect again');
   }
 
-  Object.assign(wallet, { injected, account, chainId, lastChainId: chainId });
+  const timedInjected = timedWallet(injected);
+
+  Object.assign(wallet, { injected: timedInjected, account, chainId, lastChainId: chainId });
   connectionLine.textContent = `Connected ${account} on Sepolia (${chainId}).`;
   statusLine.textContent = 'Connected.';
 
-  return { wallet: injected, account, chainId, session };
+  return { wallet: timedInjected, account, chainId, session };
 }
 
 /** The connection cached now, read at the start of every action; throws when there is none. */

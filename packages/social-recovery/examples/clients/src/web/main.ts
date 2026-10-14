@@ -1,4 +1,4 @@
-import { failure } from '../trace';
+import { failure, step } from '../trace';
 import { applyDeployment, createAccount, newSalt, selectAccount, standIn } from './account';
 import { prefillDeployment } from './config';
 import { fileReply, startGathering, submitAttempt } from './attempt';
@@ -7,29 +7,46 @@ import { guardian, signRequest } from './guardian';
 import { holder, refreshState } from './kit';
 import { button, copyText, statusLine, traceBox } from './page';
 import { runSetup } from './setup';
-import { type Connection, connect, connected, injectedWallet } from './wallet';
+import { type Connection, connect, connected, injectedWallet, wallet } from './wallet';
 
 const buttons = [...document.querySelectorAll<HTMLButtonElement>('button')];
 
-let busy = false;
+/** The label of the action running now; `undefined` when none is. */
+let running: string | undefined;
 
-/** Runs one action at a time, every button off while it runs, showing a failure on the page instead of losing it in the console. */
-const guarded = (action: () => Promise<void> | void) => async (): Promise<void> => {
-  if (busy) return;
+/** The status lines `guarded` itself writes while an action runs; anything else was written by the action. */
+const WORKING = 'Working…';
+const STILL_WORKING = 'Still working on the previous step';
 
-  busy = true;
-  statusLine.textContent = 'Working…';
+/**
+ * Runs one action at a time, every button off while it runs, showing a failure on the page instead of losing it in the
+ * console. A click while another action runs names that action in the status line; the start of each is traced.
+ */
+const guarded = (name: string, action: () => Promise<void> | void) => async (): Promise<void> => {
+  const label = button(name).textContent?.trim() ?? name;
+
+  if (running !== undefined) {
+    statusLine.textContent = `${STILL_WORKING} (${running})… wait or reload`;
+
+    return;
+  }
+
+  running = label;
+  statusLine.textContent = WORKING;
+  step(`${label} as ${wallet.account ?? 'no connected account'}`);
 
   for (const each of buttons) each.disabled = true;
 
   try {
     await action();
-    statusLine.textContent = statusLine.textContent === 'Working…' ? 'Done.' : statusLine.textContent;
+    const current = statusLine.textContent ?? '';
+
+    statusLine.textContent = current === WORKING || current.startsWith(STILL_WORKING) ? 'Done.' : current;
   } catch (error) {
     failure(error);
     statusLine.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
-    busy = false;
+    running = undefined;
 
     for (const each of buttons) each.disabled = false;
 
@@ -38,35 +55,35 @@ const guarded = (action: () => Promise<void> | void) => async (): Promise<void> 
 };
 
 /** An action that reads the connection cached at the moment it starts. */
-const withConnection = (action: (conn: Connection) => Promise<void> | void) => guarded(() => action(connected()));
+const withConnection = (name: string, action: (conn: Connection) => Promise<void> | void) => guarded(name, () => action(connected()));
 
 const actions: Record<string, () => Promise<void>> = {
-  'connect': guarded(async () => {
+  'connect': guarded('connect', async () => {
     const injected = injectedWallet();
 
     if (injected === undefined) throw new Error('no injected wallet: install or enable a browser wallet and reload');
 
     await connect(injected);
   }),
-  'apply': withConnection(applyDeployment),
-  'new-salt': guarded(newSalt),
-  'create': withConnection(createAccount),
-  'select': withConnection(selectAccount),
-  'stand-in': withConnection(standIn),
-  'refresh-state': withConnection(refreshState),
-  'run-setup': withConnection(runSetup),
-  'gather': withConnection(startGathering),
-  'file-reply': withConnection(fileReply),
-  'submit-attempt': withConnection(submitAttempt),
-  'refresh-attempt': withConnection(refreshAttempt),
-  'execute': withConnection(executeHandover),
-  'sign': withConnection(signRequest),
-  'copy-reply': guarded(async () => {
+  'apply': withConnection('apply', applyDeployment),
+  'new-salt': guarded('new-salt', newSalt),
+  'create': withConnection('create', createAccount),
+  'select': withConnection('select', selectAccount),
+  'stand-in': withConnection('stand-in', standIn),
+  'refresh-state': withConnection('refresh-state', refreshState),
+  'run-setup': withConnection('run-setup', runSetup),
+  'gather': withConnection('gather', startGathering),
+  'file-reply': withConnection('file-reply', fileReply),
+  'submit-attempt': withConnection('submit-attempt', submitAttempt),
+  'refresh-attempt': withConnection('refresh-attempt', refreshAttempt),
+  'execute': withConnection('execute', executeHandover),
+  'sign': withConnection('sign', signRequest),
+  'copy-reply': guarded('copy-reply', async () => {
     if (guardian.reply === undefined) throw new Error('sign a request first');
 
     await copyText(JSON.stringify(guardian.reply, null, 2));
   }),
-  'clear-trace': guarded(() => {
+  'clear-trace': guarded('clear-trace', () => {
     traceBox.replaceChildren();
   }),
 };

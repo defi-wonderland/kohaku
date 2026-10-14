@@ -1,5 +1,5 @@
 import { failure, step } from '../trace';
-import { actionState, beginAction } from './chain';
+import { beginAction, settleAction } from './lifetime';
 import { applyDeployment, createAccount, newSalt, selectAccount, standIn } from './account';
 import { prefillDeployment } from './config';
 import { fileReply, startGathering, submitAttempt } from './attempt';
@@ -8,7 +8,8 @@ import { guardian, signRequest } from './guardian';
 import { holder, refreshState } from './kit';
 import { button, copyText, statusLine, traceBox } from './page';
 import { runSetup } from './setup';
-import { type Connection, connect, connected, injectedWallet, wallet } from './wallet';
+import { connect } from './connect';
+import { type Connection, connected, injectedWallet, wallet } from './wallet';
 
 const buttons = [...document.querySelectorAll<HTMLButtonElement>('button')];
 
@@ -33,7 +34,9 @@ const guarded = (name: string, action: () => Promise<void> | void) => async (): 
   }
 
   running = label;
-  beginAction();
+
+  const life = beginAction();
+
   statusLine.textContent = WORKING;
   step(`${label} as ${wallet.account ?? 'no connected account'}`);
 
@@ -42,17 +45,18 @@ const guarded = (name: string, action: () => Promise<void> | void) => async (): 
   try {
     await action();
 
-    if (actionState.aborted !== undefined) throw actionState.aborted;
+    if (life.aborted !== undefined) throw life.aborted;
 
     const current = statusLine.textContent ?? '';
 
     statusLine.textContent = current === WORKING || current.startsWith(STILL_WORKING) ? 'Done.' : current;
   } catch (thrown) {
-    const error = actionState.aborted ?? thrown;
+    const error = life.aborted ?? thrown;
 
     failure(error);
     statusLine.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
+    settleAction(life);
     running = undefined;
 
     for (const each of buttons) each.disabled = false;

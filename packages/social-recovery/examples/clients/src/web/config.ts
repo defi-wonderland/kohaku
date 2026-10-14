@@ -14,6 +14,9 @@ import { ensureSession, SEPOLIA_CHAIN_ID } from './wallet';
 /** The factory's deploy function when `VITE_AMBIRE_FACTORY_DEPLOY_FUNCTION` names none. */
 export const DEFAULT_DEPLOY_FUNCTION = 'function deploy(bytes code, uint256 salt) returns (address)';
 
+/** The page's `eth_getLogs` range in blocks: the wallets' own RPC nodes refuse wider ranges on their free plans. */
+export const WEB_LOG_CHUNK_SIZE = 2000;
+
 /** Reads and watches at `latest`, as the Node scripts do. */
 export const BLOCK_TAGS = { read: 'latest', watch: 'latest' } as const;
 
@@ -47,6 +50,7 @@ export function prefillDeployment(): void {
     'factory-deploy': env.VITE_AMBIRE_FACTORY_DEPLOY_FUNCTION || DEFAULT_DEPLOY_FUNCTION,
     'manager-version': env.VITE_MANAGER_VERSION,
     'account-address': env.VITE_ACCOUNT_ADDRESS,
+    'read-rpc': env.VITE_READ_RPC_URL,
   };
 
   for (const [name, value] of Object.entries(prefill)) {
@@ -168,7 +172,7 @@ export function clientConfiguration(holder: Address, tokens: readonly Address[],
     ...(creation === undefined ? {} : { creation }),
     candidateKeys: [holder],
     blockTags: BLOCK_TAGS,
-    logChunkSize: 10000,
+    logChunkSize: WEB_LOG_CHUNK_SIZE,
     tokens,
     simulate: true,
   };

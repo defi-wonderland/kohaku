@@ -1,3 +1,4 @@
+import type { IProvider } from '@kohaku-eth/social-recovery';
 import type { HolderAccount } from '../account';
 import { check, note, step } from '../trace';
 import { addressField, DEFAULT_DEPLOY_FUNCTION, deploymentDescriptor, deploymentInputs } from './config';
@@ -5,22 +6,36 @@ import { checkedCreation, deployCalldata, randomSalt } from './creation';
 import { holder, useAccount } from './kit';
 import { field, valueOf } from './page';
 import { WalletProvider } from './provider';
+import { readRpcProvider, readRpcUrl } from './reads';
 import { sendTransaction } from './send';
-import { type Connection, ensureSession, wallet } from './wallet';
+import { type Connection, ensureSession, SEPOLIA_CHAIN_ID, wallet } from './wallet';
 
 /** Fills the salt field with a fresh random salt. */
 export function newSalt(): void {
   field('salt').value = randomSalt();
 }
 
-/** Checks the descriptor against the chain through the wallet, then takes the form's account, or the EOA stand-in. */
+/** Checks the descriptor against the chain through the Read RPC URL when set, else the wallet, then takes the form's account, or the EOA stand-in. */
 export async function applyDeployment(conn: Connection): Promise<void> {
   const inputs = deploymentInputs();
-  const provider = new WalletProvider(conn.wallet, () => wallet.session);
+  const text = valueOf('read-rpc');
+  const reads = text === '' ? undefined : readRpcProvider(readRpcUrl(text), () => wallet.session);
+  const provider = reads?.provider ?? new WalletProvider(conn.wallet, () => wallet.session);
+
+  if (reads !== undefined) {
+    const chainId = await provider.chainId();
+
+    ensureSession(conn.session);
+
+    if (chainId !== SEPOLIA_CHAIN_ID) throw new Error(`the Read RPC URL answers chain id ${chainId}, not Sepolia (${SEPOLIA_CHAIN_ID})`);
+
+    note('reads through the Read RPC URL', readRpcUrl(text).host);
+  }
+
   const descriptor = await deploymentDescriptor(inputs, provider, conn.session);
 
   ensureSession(conn.session);
-  Object.assign(holder, { descriptor, provider, account: undefined, kit: undefined, gathering: undefined, ripe: false });
+  Object.assign(holder, { descriptor, provider, readClient: reads?.client, account: undefined, kit: undefined, gathering: undefined, ripe: false });
 
   if (inputs.account === undefined) {
     standIn(conn);
@@ -32,7 +47,7 @@ export async function applyDeployment(conn: Connection): Promise<void> {
   ensureSession(conn.session);
 }
 
-function requireDeployment(): { descriptor: NonNullable<typeof holder.descriptor>; provider: WalletProvider } {
+function requireDeployment(): { descriptor: NonNullable<typeof holder.descriptor>; provider: IProvider } {
   const { descriptor, provider } = holder;
 
   if (descriptor === undefined || provider === undefined) throw new Error('apply the deployment first');
@@ -108,7 +123,7 @@ export async function createAccount(conn: Connection): Promise<void> {
 
   ensureSession(conn.session);
 
-  const deployed = await provider.code(account, 'latest');
+  const deployed = await provider.code(account, receipt.blockNumber);
 
   ensureSession(conn.session);
   check(deployed !== '0x', `the factory deployed code at ${account}`);

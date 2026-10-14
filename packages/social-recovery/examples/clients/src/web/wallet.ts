@@ -1,6 +1,6 @@
 import type { Address, Hex } from '@kohaku-eth/social-recovery';
 import { getAddress, hexToNumber } from 'viem';
-import { type Ask, SEPOLIA_CHAIN_ID, switchToSepolia, timed, timedWallet, wrongChain } from './chain';
+import { abortAction, type Ask, ensureLive, SEPOLIA_CHAIN_ID, switchToSepolia, timed, timedWallet, wrongChain } from './chain';
 import { note } from '../trace';
 import { connectionLine, statusLine } from './page';
 import { SESSION_CHANGED_MESSAGE } from './provider';
@@ -52,6 +52,12 @@ export function reset(reason?: string, chainChanged = false): void {
   for (const listener of resetListeners) listener(chainChanged);
 }
 
+/** A reset the wallet's own event caused, which also ends the running action. */
+function dropBy(reason: string, chainChanged: boolean): void {
+  abortAction(new Error(`${SESSION_CHANGED_MESSAGE} (${reason})`));
+  reset(reason, chainChanged);
+}
+
 /** The first account of an EIP-1193 account list, checksummed; `undefined` when the list is empty. */
 const firstAccount = (accounts: unknown): Address | undefined =>
   Array.isArray(accounts) && typeof accounts[0] === 'string' ? getAddress(accounts[0]) : undefined;
@@ -61,7 +67,7 @@ function onAccounts(accounts: unknown): void {
 
   wallet.observedAccounts.push(account);
 
-  if (wallet.account !== undefined && account !== wallet.account) reset(`the wallet switched account to ${account ?? 'none'}`);
+  if (wallet.account !== undefined && account !== wallet.account) dropBy(`the wallet switched account to ${account ?? 'none'}`, false);
 }
 
 function onChain(chain: unknown): void {
@@ -71,7 +77,7 @@ function onChain(chain: unknown): void {
   wallet.observedChainIds.push(chainId);
   wallet.lastChainId = chainId;
 
-  if (last !== undefined && chainId !== last && chainId !== wallet.requestedChainId) reset(`the wallet switched chain to ${chainId}`, true);
+  if (last !== undefined && chainId !== last && chainId !== wallet.requestedChainId) dropBy(`the wallet switched chain to ${chainId}`, true);
 }
 
 /** Records every account or chain the wallet reports, moving the listeners when the page's wallet object changed. */
@@ -113,6 +119,7 @@ async function connectOnce(injected: InjectedWallet): Promise<Connection> {
   const live = (): void => ensureSession(session);
   const ask: Ask = async (method, params) => {
     live();
+    ensureLive();
     statusLine.textContent = 'Connecting… confirm in your wallet';
 
     let answer: unknown;

@@ -5,7 +5,8 @@ import { ViemProvider } from '../provider';
 import type { NativeBalance } from '../validation';
 import { holder } from './kit';
 import { WALLET_ANSWER_MS } from './chain';
-import { currentLifetime, ensureLive, timed } from './lifetime';
+import { currentLifetime, ensureLive, type Lifetime, LifetimeProvider, timed } from './lifetime';
+import { throttled, ThrottledProvider } from './throttle';
 import { SESSION_CHANGED_MESSAGE, walletNativeBalance } from './provider';
 import { type Connection, ensureSession } from './wallet';
 
@@ -84,6 +85,10 @@ export function readRpcProvider(url: URL, session: () => number): { provider: IP
   return { client, provider: new SessionCheckedProvider(new ViemProvider(client), session) };
 }
 
+/** A cached provider bound to one action; a Read RPC provider also goes through the concurrency cap and the backoff. */
+export const bindProvider = (base: IProvider, life: Lifetime, throttle = holder.readClient !== undefined): IProvider =>
+  new LifetimeProvider(throttle ? new ThrottledProvider(base, life) : base, life);
+
 /** The native balance through the Read RPC URL when one is applied, else through the wallet. */
 export function nativeBalanceFor(conn: Connection): NativeBalance {
   const client = holder.readClient;
@@ -95,7 +100,7 @@ export function nativeBalanceFor(conn: Connection): NativeBalance {
   return (address, blockNumber) => {
     ensureLive(life);
 
-    return timed(client.getBalance({ address, blockNumber: BigInt(blockNumber) }), 'eth_getBalance', life);
+    return timed(throttled(() => client.getBalance({ address, blockNumber: BigInt(blockNumber) }), life), 'eth_getBalance', life);
   };
 }
 
@@ -123,7 +128,7 @@ export async function readsAt(conn: Connection, block: number, limitMs = CATCH_U
 
     ensureLive(life);
 
-    const latest = await within(client.getBlockNumber({ cacheTime: 0 }), remaining(), late);
+    const latest = await within(throttled(() => client.getBlockNumber({ cacheTime: 0 }), life), remaining(), late);
 
     if (remaining() <= 0) throw late();
 

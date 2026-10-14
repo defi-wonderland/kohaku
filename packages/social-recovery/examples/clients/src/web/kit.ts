@@ -19,6 +19,7 @@ import { signerRecovery } from '../signer-recovery';
 import { note, show, step } from '../trace';
 import { BLOCK_TAGS, clientConfiguration, tokenAllowlist, WEB_LOG_CHUNK_SIZE } from './config';
 import { accountLine, button, stateOut } from './page';
+import { currentLifetime, LifetimeProvider } from './lifetime';
 import { type Connection, ensureSession, onReset } from './wallet';
 
 /**
@@ -42,7 +43,13 @@ onReset((chainChanged) => {
 });
 
 /** Builds the parts in the merged constructors' order over the wallet provider, then both clients over the same parts. */
-export function buildKit(provider: IProvider, descriptor: DeploymentDescriptor, account: HolderAccount, key: Address): Kit {
+export function buildKit(
+  provider: IProvider,
+  descriptor: DeploymentDescriptor,
+  account: HolderAccount,
+  key: Address,
+  configuration = clientConfiguration(key, tokenAllowlist(), account.creation),
+): Kit {
   const { action } = descriptor;
   const codec = new AmbireActionCodec([action]);
   const policyManager = new PolicyManager(provider, descriptor, account.address, action, BLOCK_TAGS);
@@ -50,7 +57,6 @@ export function buildKit(provider: IProvider, descriptor: DeploymentDescriptor, 
   const method = walletMethod();
   const methods: MethodRegistry = new Map([[descriptor.methodEcdsa, method]]);
   const events = new EventManager(provider, descriptor, account.address, action, methods, { logChunkSize: WEB_LOG_CHUNK_SIZE });
-  const configuration = clientConfiguration(key, tokenAllowlist(), account.creation);
   const setup = new SetupClient(
     provider, descriptor, account.address, action, configuration, 'integrator',
     policyManager, recoveryAction, events, methods, codec, signerRecovery,
@@ -79,22 +85,22 @@ export function useAccount(conn: Connection, account: HolderAccount): Kit {
   Object.assign(holder, { account, kit, gathering: undefined, ripe: false });
   accountLine.textContent = `Account ${account.address}${account.sendsSelfCalls ? '' : ' (EOA stand-in: reads and prepares only)'}.`;
 
-  return kit;
+  return requireKit().kit;
 }
 
 /** The cached kit, rebuilt over the same account and candidate key when the order's token is not in its allowlist. */
 export function kitForOrder(token: Address): Kit {
-  const { kit, provider, account } = requireKit();
+  const { kit, account } = requireKit();
   const [key] = kit.configuration.candidateKeys;
 
-  if (key === undefined || kit.configuration.tokens.some((listed) => isAddressEqual(listed, token))) return kit;
+  if (key === undefined || holder.provider === undefined || kit.configuration.tokens.some((listed) => isAddressEqual(listed, token))) return kit;
 
-  const rebuilt = buildKit(provider, kit.descriptor, account, key);
+  const rebuilt = buildKit(holder.provider, kit.descriptor, account, key);
 
   note('token allowlist', rebuilt.configuration.tokens);
   holder.kit = rebuilt;
 
-  return rebuilt;
+  return requireKit().kit;
 }
 
 /** Traces, before a flow runs, that the EOA stand-in sends nothing. */
@@ -104,13 +110,19 @@ export function noteStandIn(): void {
   }
 }
 
-/** The cached kit, provider and account; throws until an account is chosen. */
+/**
+ * The chosen account with its kit and provider rebuilt over the running action's lifetime, so a request an ended
+ * action left behind can never reach, or be timed into, a later one. Throws until an account is chosen.
+ */
 export function requireKit(): { kit: Kit; provider: IProvider; account: HolderAccount } {
   const { kit, provider, account } = holder;
 
   if (kit === undefined || provider === undefined || account === undefined) throw new Error('apply the deployment and choose an account first');
 
-  return { kit, provider, account };
+  const bound = new LifetimeProvider(provider, currentLifetime());
+  const [key] = kit.configuration.candidateKeys;
+
+  return { kit: buildKit(bound, kit.descriptor, account, key ?? account.address, kit.configuration), provider: bound, account };
 }
 
 /** Reads `setupState()` and `recoveryState()` and prints both, bigints as decimal strings. */

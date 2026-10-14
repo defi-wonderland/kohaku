@@ -4,7 +4,8 @@ import { sepolia } from 'viem/chains';
 import { ViemProvider } from '../provider';
 import type { NativeBalance } from '../validation';
 import { holder } from './kit';
-import { ensureLive } from './chain';
+import { WALLET_ANSWER_MS } from './chain';
+import { currentLifetime, ensureLive, timed } from './lifetime';
 import { SESSION_CHANGED_MESSAGE, walletNativeBalance } from './provider';
 import { type Connection, ensureSession } from './wallet';
 
@@ -13,8 +14,6 @@ export class SessionCheckedProvider implements IProvider {
   constructor(private readonly inner: IProvider, private readonly session: () => number) {}
 
   private async checked<T>(read: () => Promise<T>): Promise<T> {
-    ensureLive();
-
     const before = this.session();
     let answer: T | undefined;
     let failure: unknown;
@@ -28,8 +27,6 @@ export class SessionCheckedProvider implements IProvider {
     }
 
     if (this.session() !== before) throw new Error(SESSION_CHANGED_MESSAGE);
-
-    ensureLive();
 
     if (failed) throw failure;
 
@@ -76,9 +73,13 @@ export function readRpcUrl(text: string): URL {
   return url;
 }
 
-/** The scripts' viem `IProvider` over the Read RPC URL, session-checked, and the client it reads through. */
+/**
+ * The scripts' viem `IProvider` over the Read RPC URL, session-checked, and the client it reads through. The transport
+ * never retries and gives up within the read limit, so the page's own checks decide every request that goes out.
+ */
 export function readRpcProvider(url: URL, session: () => number): { provider: IProvider; client: PublicClient } {
-  const client = createPublicClient({ chain: sepolia, transport: http(url.href) }) as PublicClient;
+  const transport = http(url.href, { retryCount: 0, timeout: WALLET_ANSWER_MS });
+  const client = createPublicClient({ chain: sepolia, transport }) as PublicClient;
 
   return { client, provider: new SessionCheckedProvider(new ViemProvider(client), session) };
 }
@@ -89,10 +90,12 @@ export function nativeBalanceFor(conn: Connection): NativeBalance {
 
   if (client === undefined) return walletNativeBalance(conn.wallet);
 
-  return (address, blockNumber) => {
-    ensureLive();
+  const life = currentLifetime();
 
-    return client.getBalance({ address, blockNumber: BigInt(blockNumber) });
+  return (address, blockNumber) => {
+    ensureLive(life);
+
+    return timed(client.getBalance({ address, blockNumber: BigInt(blockNumber) }), 'eth_getBalance', life);
   };
 }
 
@@ -108,6 +111,7 @@ const CATCH_UP_LIMIT_MS = 60_000;
  */
 export async function readsAt(conn: Connection, block: number, limitMs = CATCH_UP_LIMIT_MS): Promise<void> {
   const client = holder.readClient;
+  const life = currentLifetime();
   const deadline = Date.now() + limitMs;
   const remaining = (): number => deadline - Date.now();
   const late = (): Error => new Error(`the read endpoint has not reached block ${block} yet; Refresh later`);
@@ -117,10 +121,13 @@ export async function readsAt(conn: Connection, block: number, limitMs = CATCH_U
   for (;;) {
     if (remaining() <= 0) throw late();
 
-    ensureLive();
+    ensureLive(life);
 
     const latest = await within(client.getBlockNumber({ cacheTime: 0 }), remaining(), late);
 
+    if (remaining() <= 0) throw late();
+
+    ensureLive(life);
     ensureSession(conn.session);
 
     if (latest >= BigInt(block)) return;
@@ -134,6 +141,8 @@ export async function readsAt(conn: Connection, block: number, limitMs = CATCH_U
 
 /** `pending`, or the `late()` error once `ms` passed, whichever comes first. */
 async function within<T>(pending: Promise<T>, ms: number, late: () => Error): Promise<T> {
+  if (ms <= 0) throw late();
+
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
     timer = setTimeout(() => reject(late()), ms);

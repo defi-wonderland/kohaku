@@ -85,17 +85,44 @@ export async function switchToSepolia(ask: Ask, from: number, live: () => void):
   }
 }
 
-/** A wallet request that rejects, naming the method, when the wallet has not answered within `ms`. */
+/** Why the running action was ended: a wallet timeout or a reset. Cleared when the next action starts. */
+export const actionState: { aborted?: Error } = {};
+
+/** Starts an action with a clean abort state. */
+export const beginAction = (): void => {
+  actionState.aborted = undefined;
+};
+
+/** Ends the running action: every later request refuses with `reason`, and the action ends with it. */
+export const abortAction = (reason: Error): void => {
+  actionState.aborted ??= reason;
+};
+
+/** Throws the running action's abort reason, so no request goes out once it was ended. */
+export const ensureLive = (): void => {
+  if (actionState.aborted !== undefined) throw actionState.aborted;
+};
+
+/** A wallet request that rejects, naming the method, when the wallet has not answered within `ms`; a timeout ends the action. */
 export function timed<T>(pending: Promise<T>, method: string, ms = limitFor(method)): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => reject(new Error(`the wallet did not answer ${method} within ${ms / 1000} s; open the wallet, or reload the page and connect again`)), ms);
+    timer = setTimeout(() => {
+      const error = new Error(`the wallet did not answer ${method} within ${ms / 1000} s; open the wallet, or reload the page and connect again`);
+
+      abortAction(error);
+      reject(error);
+    }, ms);
   });
 
   return Promise.race([pending, timeout]).finally(() => clearTimeout(timer));
 }
 
-/** The wallet with every request timed by `timed`, so a dismissed or lost prompt rejects instead of hanging the page. */
+/** The wallet with every request timed by `timed` and refused once the action was ended. */
 export const timedWallet = (injected: InjectedWallet): InjectedWallet => ({
-  request: (args) => timed(injected.request(args), args.method),
+  request: (args) => {
+    ensureLive();
+
+    return timed(injected.request(args), args.method);
+  },
 });

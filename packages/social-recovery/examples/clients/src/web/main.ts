@@ -1,4 +1,5 @@
 import { failure, step } from '../trace';
+import { actionState, beginAction } from './chain';
 import { applyDeployment, createAccount, newSalt, selectAccount, standIn } from './account';
 import { prefillDeployment } from './config';
 import { fileReply, startGathering, submitAttempt } from './attempt';
@@ -32,6 +33,7 @@ const guarded = (name: string, action: () => Promise<void> | void) => async (): 
   }
 
   running = label;
+  beginAction();
   statusLine.textContent = WORKING;
   step(`${label} as ${wallet.account ?? 'no connected account'}`);
 
@@ -39,10 +41,15 @@ const guarded = (name: string, action: () => Promise<void> | void) => async (): 
 
   try {
     await action();
+
+    if (actionState.aborted !== undefined) throw actionState.aborted;
+
     const current = statusLine.textContent ?? '';
 
     statusLine.textContent = current === WORKING || current.startsWith(STILL_WORKING) ? 'Done.' : current;
-  } catch (error) {
+  } catch (thrown) {
+    const error = actionState.aborted ?? thrown;
+
     failure(error);
     statusLine.textContent = `Error: ${error instanceof Error ? error.message : String(error)}`;
   } finally {

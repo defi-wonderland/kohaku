@@ -72,3 +72,18 @@ export const METHODS_ORCHESTRATOR_ENROLL_ANSWER_MESSAGE = 'answered neither a ce
 
 /** The kinds an implementation's `enrollInput` may answer. */
 export const METHODS_ORCHESTRATOR_ENROLL_KINDS: readonly string[] = Object.freeze(['nothing-to-perform', 'ceremony']);
+
+/** Follows the position's name where an array or a registry entry has no own value there. */
+export const METHODS_ORCHESTRATOR_MISSING_MESSAGE = 'is missing';
+
+/** Follows the value's name where it must be a string and is not. */
+export const METHODS_ORCHESTRATOR_NOT_STRING_MESSAGE = 'must be a string';
+
+/** Follows the registry's name where it cannot be iterated. */
+export const METHODS_ORCHESTRATOR_NOT_ITERABLE_MESSAGE = 'must be iterable';
+
+/** Follows the entry's name where a registry entry is not exactly a key and a value. */
+export const METHODS_ORCHESTRATOR_ENTRY_PAIR_MESSAGE = 'must be exactly a key and a value';
+
+/** How many slots a registry entry holds: its key, then its value. */
+export const METHODS_ORCHESTRATOR_ENTRY_LENGTH = 2;

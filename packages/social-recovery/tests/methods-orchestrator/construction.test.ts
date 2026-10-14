@@ -1,6 +1,7 @@
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
 import {
+  METHODS_ORCHESTRATOR_MISSING_MESSAGE,
   MethodsOrchestrator,
   type ActionCodecRegistry,
   type Address,
@@ -240,4 +241,81 @@ describe('the runtime\'s bindings are checked at construction', () => {
     expect(thrownBy(() => orchestrator.signingInput(approval()))).toBeDefined();
     expect(calls).toHaveLength(0);
   });
+});
+
+/** A map-like registry with a `get` that answers nothing and an iterator over the given raw entries. */
+const mapLike = (entries: readonly unknown[]) => ({
+  get: () => undefined,
+  *[Symbol.iterator]() {
+    yield* entries;
+  },
+});
+
+/** A two-slot entry with only the given slot filled, the other a hole. */
+const holedEntry = (slot: 0 | 1, value: unknown): unknown[] => {
+  const entry: unknown[] = [];
+
+  entry[slot] = value;
+  entry.length = 2;
+
+  return entry;
+};
+
+/** A one-slot entry whose index 1 comes from its prototype rather than from itself. */
+const inheritedEntry = (key: unknown, value: unknown): unknown[] => {
+  const proto: unknown[] = Object.create(Array.prototype) as unknown[];
+
+  proto[1] = value;
+
+  const entry: unknown[] = [key];
+
+  Object.setPrototypeOf(entry, proto);
+
+  return entry;
+};
+
+describe('each registry entry must hold its key and value as its own two slots', () => {
+  const registries: readonly [string, Address, unknown][] = [
+    ['methods', REQUEST_METHOD, recordingMethod().method],
+    ['codecs', ACTION, strictCodec([ACTION])],
+  ];
+
+  for (const [name, key, value] of registries) {
+    const buildWith = (registry: unknown): MethodsOrchestrator => (name === 'methods' ? build(registry) : build(new Map(), registry));
+
+    it(`${name}: a hole at slot 0 is a TypeError naming the entry and index 0`, () => {
+      const error = thrownBy(() => buildWith(mapLike([holedEntry(1, value)])));
+
+      expect(error).toBeInstanceOf(TypeError);
+      expect((error as Error).message).toContain(`${name} entry 0[0] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
+    });
+
+    it(`${name}: a hole at slot 1 is a TypeError naming the entry and index 1`, () => {
+      const error = thrownBy(() => buildWith(mapLike([holedEntry(0, key)])));
+
+      expect(error).toBeInstanceOf(TypeError);
+      expect((error as Error).message).toContain(`${name} entry 0[1] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
+    });
+
+    it(`${name}: a value inherited at index 1 through the prototype is refused`, () => {
+      const entry = inheritedEntry(key, value);
+
+      expect(entry[1]).toBe(value);
+
+      const error = thrownBy(() => buildWith(mapLike([entry])));
+
+      expect(error).toBeInstanceOf(TypeError);
+      expect((error as Error).message).toContain(`${name} entry 0[1] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
+    });
+
+    it(`${name}: the hole is named at its entry's position`, () => {
+      const error = thrownBy(() => buildWith(mapLike([[key, value], holedEntry(0, OTHER_METHOD)])));
+
+      expect((error as Error).message).toContain(`${name} entry 1[1] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
+    });
+
+    it(`${name}: a native Map with valid entries is accepted as before`, () => {
+      expect(buildWith(new Map([[key, value]]))).toBeInstanceOf(MethodsOrchestrator);
+    });
+  }
 });

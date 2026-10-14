@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { KitRefusalError, REPLY_FAILURE_CAUSES, type ApproverRequest, type Hex, type Verdict } from '../../src/index';
+import {
+  KitRefusalError,
+  METHODS_ORCHESTRATOR_BYTES_ANSWER_MESSAGE,
+  METHODS_ORCHESTRATOR_VERDICT_ANSWER_MESSAGE,
+  REPLY_FAILURE_CAUSES,
+  type ApproverRequest,
+  type Hex,
+  type Verdict,
+} from '../../src/index';
 import {
   approval,
   BROKEN_CHECKSUM,
@@ -177,9 +185,9 @@ describe('an implementation that answers junk: TypeError naming the member', () 
       const config = await rejectionOf(() => orchestrator.configFrom(REQUEST_METHOD, { kind: 'ceremony' }, undefined));
 
       expect(reply).toBeInstanceOf(TypeError);
-      expect((reply as Error).message).toContain('replyFrom');
+      expect((reply as Error).message).toBe(`replyFrom ${METHODS_ORCHESTRATOR_BYTES_ANSWER_MESSAGE}`);
       expect(config).toBeInstanceOf(TypeError);
-      expect((config as Error).message).toContain('configFrom');
+      expect((config as Error).message).toBe(`configFrom ${METHODS_ORCHESTRATOR_BYTES_ANSWER_MESSAGE}`);
     });
   }
 
@@ -190,7 +198,7 @@ describe('an implementation that answers junk: TypeError naming the member', () 
       const error = await rejectionOf(() => orchestratorOver([[REQUEST_METHOD, method]]).verify(request, request.place, '0x01'));
 
       expect(error).toBeInstanceOf(TypeError);
-      expect((error as Error).message).toContain('verify');
+      expect((error as Error).message).toBe(`verify ${METHODS_ORCHESTRATOR_VERDICT_ANSWER_MESSAGE}`);
     });
   }
 

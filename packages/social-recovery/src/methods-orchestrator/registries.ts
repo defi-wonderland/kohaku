@@ -1,9 +1,14 @@
 import {
   FORMATS_ZERO_ADDRESS,
   METHODS_ORCHESTRATOR_ACTION_CODEC_MEMBERS,
+  METHODS_ORCHESTRATOR_ENTRY_LENGTH,
+  METHODS_ORCHESTRATOR_ENTRY_PAIR_MESSAGE,
   METHODS_ORCHESTRATOR_FOREIGN_ACTION_MESSAGE,
   METHODS_ORCHESTRATOR_METHOD_CODEC_MEMBERS,
   METHODS_ORCHESTRATOR_METHOD_MEMBERS,
+  METHODS_ORCHESTRATOR_MISSING_MESSAGE,
+  METHODS_ORCHESTRATOR_NOT_ITERABLE_MESSAGE,
+  METHODS_ORCHESTRATOR_NOT_STRING_MESSAGE,
   METHODS_ORCHESTRATOR_REGISTRY_MEMBERS,
   METHODS_ORCHESTRATOR_REPEAT_MESSAGE,
   METHODS_ORCHESTRATOR_UNKNOWN_VALUE_MESSAGE,
@@ -21,7 +26,7 @@ import {
 
 /** Refuses a value outside a closed list: a `TypeError` for a non-string, a `RangeError` for an unknown string. */
 function assertOneOf<Value extends string>(value: unknown, allowed: readonly Value[], name: string): asserts value is Value {
-  if (typeof value !== 'string') throw new TypeError(`${name} must be a string`);
+  if (typeof value !== 'string') throw new TypeError(`${name} ${METHODS_ORCHESTRATOR_NOT_STRING_MESSAGE}`);
 
   if (!(allowed as readonly string[]).includes(value)) {
     throw new RangeError(`${name} ${METHODS_ORCHESTRATOR_UNKNOWN_VALUE_MESSAGE} ${allowed.join(', ')}`);
@@ -33,10 +38,23 @@ function assertStrings(value: unknown, name: string): void {
   assertArray(value, name);
 
   for (let index = 0; index < value.length; index += 1) {
-    if (!Object.hasOwn(value, index)) throw new TypeError(`${name}[${index}] is missing`);
+    if (!Object.hasOwn(value, index)) throw new TypeError(`${name}[${index}] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
 
-    if (typeof value[index] !== 'string') throw new TypeError(`${name}[${index}] must be a string`);
+    if (typeof value[index] !== 'string') throw new TypeError(`${name}[${index}] ${METHODS_ORCHESTRATOR_NOT_STRING_MESSAGE}`);
   }
+}
+
+/** The key and value of one registry entry, refusing an entry that is not exactly two own slots. */
+function pairOf(entry: unknown, name: string): readonly [unknown, unknown] {
+  assertArray(entry, name);
+
+  for (let index = 0; index < METHODS_ORCHESTRATOR_ENTRY_LENGTH; index += 1) {
+    if (!Object.hasOwn(entry, index)) throw new TypeError(`${name}[${index}] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
+  }
+
+  if (entry.length !== METHODS_ORCHESTRATOR_ENTRY_LENGTH) throw new TypeError(`${name} ${METHODS_ORCHESTRATOR_ENTRY_PAIR_MESSAGE}`);
+
+  return [entry[0], entry[1]];
 }
 
 /** Every entry of a map-like registry, keys checksummed, refusing a malformed, zero or repeated key. */
@@ -44,23 +62,25 @@ function checkedEntries(registry: unknown, name: string): [Address, unknown][] {
   assertDependency(registry, METHODS_ORCHESTRATOR_REGISTRY_MEMBERS, name);
 
   if (typeof (registry as Partial<Iterable<unknown>>)[Symbol.iterator] !== 'function') {
-    throw new TypeError(`${name} must be iterable`);
+    throw new TypeError(`${name} ${METHODS_ORCHESTRATOR_NOT_ITERABLE_MESSAGE}`);
   }
 
   const entries: [Address, unknown][] = [];
   const seen = new Set<Address>();
 
-  for (const entry of registry as Iterable<unknown>) {
-    assertArray(entry, `${name} entry`);
+  let position = 0;
 
-    const key = normalizeAddress(entry[0], `${name} key`);
+  for (const entry of registry as Iterable<unknown>) {
+    const [rawKey, value] = pairOf(entry, `${name} entry ${position}`);
+    const key = normalizeAddress(rawKey, `${name} key`);
 
     if (key === FORMATS_ZERO_ADDRESS) throw new RangeError(`${name} key ${METHODS_ORCHESTRATOR_ZERO_KEY_MESSAGE}`);
 
     if (seen.has(key)) throw new TypeError(`${name} ${METHODS_ORCHESTRATOR_REPEAT_MESSAGE}: ${key}`);
 
     seen.add(key);
-    entries.push([key, entry[1]]);
+    entries.push([key, value]);
+    position += 1;
   }
 
   return entries;
@@ -117,7 +137,7 @@ export function checkedBindings(value: unknown): ReadonlySet<DeviceBinding> {
   const bindings = new Set<DeviceBinding>();
 
   for (let index = 0; index < value.length; index += 1) {
-    if (!Object.hasOwn(value, index)) throw new TypeError(`bindings[${index}] is missing`);
+    if (!Object.hasOwn(value, index)) throw new TypeError(`bindings[${index}] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
 
     const binding: unknown = value[index];
 

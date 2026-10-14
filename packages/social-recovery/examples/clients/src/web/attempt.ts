@@ -3,9 +3,9 @@ import { zeroAddress } from 'viem';
 import { check, note, step } from '../trace';
 import { checkRequest } from '../validation';
 import { addressField } from './config';
-import { holder, kitForOrder, requireKit } from './kit';
+import { holder, kitForOrder, noteStandIn, requireKit } from './kit';
+import { nativeBalanceFor } from './reads';
 import { copyableBlock, requestsBox, valueOf } from './page';
-import { walletNativeBalance } from './provider';
 import { sendFromConnected } from './send';
 import { backupPassword } from './setup';
 import { type Connection, ensureSession } from './wallet';
@@ -26,6 +26,8 @@ function orderAmount(): bigint {
  * approver request as JSON with a Copy button. The gathering stays cached across an account switch.
  */
 export async function startGathering(conn: Connection): Promise<void> {
+  noteStandIn();
+
   const handover = { newAuthority: addressField('new-authority'), removedAuthority: conn.account };
   const order = { token: addressField('order-token', zeroAddress), amount: orderAmount(), payee: addressField('order-payee', conn.account) };
   const kit = kitForOrder(order.token);
@@ -87,6 +89,8 @@ export function fileReply(conn: Connection): void {
  * prepareStartAttempt from the connected account → the wallet sends → recoveryState shows the waiting attempt.
  */
 export async function submitAttempt(conn: Connection): Promise<void> {
+  noteStandIn();
+
   const { kit, provider } = requireKit();
   const { gathering } = holder;
 
@@ -108,7 +112,7 @@ export async function submitAttempt(conn: Connection): Promise<void> {
   if (!('payload' in request)) throw new Error('complete returned a cancellation for an approval gathering');
 
   note('request', { attemptId: request.attemptId, validUntil: request.validUntil, places: request.proofs.map((proof) => proof.place) });
-  await checkRequest(kit, provider, walletNativeBalance(conn.wallet), request, now, () => ensureSession(conn.session));
+  await checkRequest(kit, provider, nativeBalanceFor(conn), request, now, () => ensureSession(conn.session));
   ensureSession(conn.session);
   step(`prepareStartAttempt (from ${conn.account})`);
 

@@ -1,9 +1,9 @@
 import type { Attempt, Hex } from '@kohaku-eth/social-recovery';
 import { type Address, decodeFunctionResult, encodeFunctionData, erc20Abi, isAddressEqual, zeroAddress } from 'viem';
 import { note, step } from '../trace';
-import { holder, requireKit } from './kit';
+import { holder, noteStandIn, requireKit } from './kit';
 import { checkLine, executeOut } from './page';
-import { walletNativeBalance } from './provider';
+import { nativeBalanceFor } from './reads';
 import { type MinedReceipt, sendFromConnected } from './send';
 import { type Connection, ensureSession } from './wallet';
 
@@ -80,7 +80,7 @@ async function balanceAt(conn: Connection, attempt: Attempt, payee: Address, blo
   const { token } = attempt.order;
 
   if (isAddressEqual(token, zeroAddress)) {
-    const native = await walletNativeBalance(conn.wallet)(payee, block);
+    const native = await nativeBalanceFor(conn)(payee, block);
 
     ensureSession(conn.session);
 
@@ -123,6 +123,8 @@ async function paymentLine(conn: Connection, attempt: Attempt, receipt: MinedRec
  * and, for a nonzero order, the payee paid.
  */
 export async function executeHandover(conn: Connection): Promise<void> {
+  noteStandIn();
+
   const { kit } = requireKit();
   const waiting = await waitingAttempt(conn);
 

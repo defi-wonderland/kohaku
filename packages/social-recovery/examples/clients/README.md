@@ -93,7 +93,18 @@ When the wallet is on another chain, Connect asks it to switch to Sepolia (`wall
 the chain (`wallet_addEthereumChain`, with a public Sepolia RPC and Etherscan) when the wallet does not know it; Connect
 refuses only when you reject the switch or the wallet stays elsewhere.
 Each Connect reads the wallet object the browser holds at that moment, shows "Connecting… confirm in your wallet" while
-a request is pending, and reports a request the wallet has not answered within 60 seconds as an error.
+a request is pending, and reports a request the wallet has not answered in time (5 minutes for one you confirm, 60 seconds
+for a read) as an error.
+The page reads logs in chunks of 2,000 blocks (the scripts use 10,000), because the RPC nodes wallets read through refuse
+wider `eth_getLogs` ranges on their free plans.
+
+The Read RPC URL (optional, prefilled from `VITE_READ_RPC_URL`): some wallets' nodes refuse `eth_getLogs` with a topic
+filter, or over more than about a hundred blocks, so the SDK's event scan from the deploy block fails through the
+wallet. With the field set, Apply checks that the URL answers Sepolia's chain id and the page sends every chain read
+(calls, logs, blocks, code, transactions, chain id, the order's native balance) to it through viem, while the wallet
+still connects, switches chain, signs, sends and polls receipts; empty, the wallet answers everything as before. Use a
+public Sepolia endpoint or one with your own key; it lives only in your gitignored `.env` or the form, never in a commit,
+and like every `VITE_` variable it is visible in the served page.
 
 - **Deployment**: the manager, the methods, the action, the Ambire implementation, the deploy block, the factory and its
   deploy function, the optional manager version and the optional existing account. Each field is prefilled from the

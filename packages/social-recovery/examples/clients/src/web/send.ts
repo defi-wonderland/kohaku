@@ -3,6 +3,7 @@ import { hexToBigInt, hexToNumber, toHex } from 'viem';
 import { assertSimulated, executeBySenderData } from '../send';
 import { note } from '../trace';
 import { requireKit } from './kit';
+import { readsAt } from './reads';
 import { type Connection, ensureSession, wallet } from './wallet';
 
 /** How often the page asks the wallet for a pending transaction's receipt. */
@@ -61,6 +62,9 @@ export async function sendTransaction(conn: Connection, to: Address, data: Hex, 
   note('tx mined', `block ${mined.blockNumber}, status ${receipt.status}, gas ${mined.gasUsed}`);
 
   if (hexToNumber(receipt.status) !== 1) throw new Error(`transaction ${hash} reverted`);
+
+  await readsAt(conn, mined.blockNumber);
+  ensureSession(conn.session);
 
   return mined;
 }

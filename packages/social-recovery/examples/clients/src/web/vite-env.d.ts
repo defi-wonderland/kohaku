@@ -14,4 +14,5 @@ interface ImportMetaEnv {
   readonly VITE_AMBIRE_FACTORY_DEPLOY_FUNCTION?: string;
   readonly VITE_MANAGER_VERSION?: string;
   readonly VITE_ACCOUNT_ADDRESS?: string;
+  readonly VITE_READ_RPC_URL?: string;
 }

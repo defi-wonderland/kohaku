@@ -6,12 +6,12 @@ import {
   METHODS_ORCHESTRATOR_ENROLL_ANSWER_MESSAGE,
   METHODS_ORCHESTRATOR_ENROLL_KINDS,
   METHODS_ORCHESTRATOR_INPUT_ANSWER_MESSAGE,
-  METHODS_ORCHESTRATOR_METHOD_UNSUPPORTED,
   METHODS_ORCHESTRATOR_VERDICT_ANSWER_MESSAGE,
 } from '../constants';
-import { lowerHex } from '../formats/guards';
+import { isRecord, lowerHex } from '../formats/guards';
 import {
   REPLY_FAILURE_CAUSES,
+  REPLY_FAILURE_KIND,
   VERDICTS,
   type Ctx,
   type EnrollInput,
@@ -23,18 +23,16 @@ import {
   type Verdict,
 } from '../interfaces';
 
-const isObject = (value: unknown): value is Readonly<Record<string, unknown>> => typeof value === 'object' && value !== null;
-
 /** A fresh frozen failure built from the cause read once, or undefined where the answer is not a typed failure with a known cause. */
 function failureOf(value: unknown): ReplyFailure | undefined {
-  if (!isObject(value)) return undefined;
+  if (!isRecord(value)) return undefined;
 
   const kind = value['kind'];
   const cause = value['cause'];
 
-  if (kind !== METHODS_ORCHESTRATOR_METHOD_UNSUPPORTED.kind || !(REPLY_FAILURE_CAUSES as readonly unknown[]).includes(cause)) return undefined;
+  if (kind !== REPLY_FAILURE_KIND || !(REPLY_FAILURE_CAUSES as readonly unknown[]).includes(cause)) return undefined;
 
-  return Object.freeze({ kind: METHODS_ORCHESTRATOR_METHOD_UNSUPPORTED.kind, cause: cause as ReplyFailureCause });
+  return Object.freeze({ kind: REPLY_FAILURE_KIND, cause: cause as ReplyFailureCause });
 }
 
 /** The implementation's verdict, refusing any other answer with a `TypeError` naming the member. */
@@ -55,16 +53,16 @@ export function checkedBytes(answer: unknown, member: string): Hex | ReplyFailur
   throw new TypeError(`${member} ${METHODS_ORCHESTRATOR_BYTES_ANSWER_MESSAGE}`);
 }
 
-/** The implementation's signing input, refusing a non-object answer with a `TypeError` naming the member. */
+/** The implementation's signing input, refusing a non-object, an array or a promise with a `TypeError` naming the member. */
 export function checkedInput(answer: unknown, member: string): Input {
-  if (!isObject(answer)) throw new TypeError(`${member} ${METHODS_ORCHESTRATOR_INPUT_ANSWER_MESSAGE}`);
+  if (!isRecord(answer) || typeof answer['then'] === 'function') throw new TypeError(`${member} ${METHODS_ORCHESTRATOR_INPUT_ANSWER_MESSAGE}`);
 
   return answer;
 }
 
 /** The implementation's enrollment input, refusing an answer of neither enrollment kind with a `TypeError` naming the member. */
 export function checkedEnrollInput(answer: unknown, member: string): EnrollInput {
-  if (!isObject(answer) || !METHODS_ORCHESTRATOR_ENROLL_KINDS.includes(answer['kind'] as string)) {
+  if (!isRecord(answer) || !METHODS_ORCHESTRATOR_ENROLL_KINDS.includes(answer['kind'] as string)) {
     throw new TypeError(`${member} ${METHODS_ORCHESTRATOR_ENROLL_ANSWER_MESSAGE}`);
   }
 

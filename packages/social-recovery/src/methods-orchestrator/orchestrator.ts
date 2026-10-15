@@ -9,9 +9,9 @@ import {
   METHODS_ORCHESTRATOR_UNMET_BINDING_MESSAGE,
   METHODS_ORCHESTRATOR_UNSERVED_METHOD_MESSAGE,
 } from '../constants';
-import { checkedRequest, isRequestRead } from '../description/ctx';
+import { checkedRequest, readRequest } from '../description/ctx';
 import { describeRequest } from '../description/request';
-import { assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
+import { assertBytes, assertObject, assertUintNumber, normalizeAddress } from '../formats/guards';
 import {
   type Address,
   type ApproverRequest,
@@ -57,13 +57,15 @@ export class MethodsOrchestrator implements IMethodsOrchestrator {
     return describeRequest(request, this.#codecs, this.#methods);
   }
 
-  /** The implementation's verdict for the request's own place; throws for another place or a method no implementation serves. */
+  /** The implementation's verdict for the request's own place; throws for a malformed proof, another place or a method no implementation serves. */
   async verify(request: ApproverRequest, place: number, proof: Hex): Promise<Verdict> {
     const { ctx } = checkedRequest(request);
 
     assertUintNumber(place, FORMATS_PLACE_BITS, 'place');
 
     if (place !== ctx.place) throw new RangeError(METHODS_ORCHESTRATOR_PLACE_MISMATCH_MESSAGE);
+
+    assertBytes(proof, 'proof');
 
     const implementation = this.#served(ctx.request.method);
 
@@ -86,13 +88,13 @@ export class MethodsOrchestrator implements IMethodsOrchestrator {
   /** The reply carrying the implementation's proof, or a typed failure; a malformed argument still throws. */
   async replyFrom(request: ApproverRequest, input: Input, material: Material): Promise<Reply | ReplyFailure> {
     assertObject(request, 'request');
-
-    if (!isRequestRead(request)) return METHODS_ORCHESTRATOR_REQUEST_UNSUPPORTED;
-
-    const { ctx } = checkedRequest(request);
-
     assertObject(input, 'input');
 
+    const read = readRequest(request);
+
+    if ('unread' in read) return METHODS_ORCHESTRATOR_REQUEST_UNSUPPORTED;
+
+    const { ctx } = read;
     const implementation = this.#methods.get(ctx.request.method);
 
     if (implementation === undefined) return METHODS_ORCHESTRATOR_METHOD_UNSUPPORTED;

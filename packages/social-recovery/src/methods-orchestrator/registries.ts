@@ -6,7 +6,6 @@ import {
   METHODS_ORCHESTRATOR_FOREIGN_ACTION_MESSAGE,
   METHODS_ORCHESTRATOR_METHOD_CODEC_MEMBERS,
   METHODS_ORCHESTRATOR_METHOD_MEMBERS,
-  METHODS_ORCHESTRATOR_MISSING_MESSAGE,
   METHODS_ORCHESTRATOR_NOT_ITERABLE_MESSAGE,
   METHODS_ORCHESTRATOR_NOT_STRING_MESSAGE,
   METHODS_ORCHESTRATOR_REGISTRY_MEMBERS,
@@ -14,7 +13,7 @@ import {
   METHODS_ORCHESTRATOR_UNKNOWN_VALUE_MESSAGE,
   METHODS_ORCHESTRATOR_ZERO_KEY_MESSAGE,
 } from '../constants';
-import { assertArray, assertDependency, normalizeAddress, normalizeAddresses } from '../formats/guards';
+import { assertDense, assertDependency, normalizeAddress, normalizeAddresses } from '../formats/guards';
 import {
   DEVICE_BINDINGS,
   METHOD_TIERS,
@@ -35,22 +34,16 @@ function assertOneOf<Value extends string>(value: unknown, allowed: readonly Val
 
 /** Refuses anything but an array of strings with no hole. */
 function assertStrings(value: unknown, name: string): void {
-  assertArray(value, name);
+  assertDense(value, name);
 
   for (let index = 0; index < value.length; index += 1) {
-    if (!Object.hasOwn(value, index)) throw new TypeError(`${name}[${index}] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
-
     if (typeof value[index] !== 'string') throw new TypeError(`${name}[${index}] ${METHODS_ORCHESTRATOR_NOT_STRING_MESSAGE}`);
   }
 }
 
 /** The key and value of one registry entry, refusing an entry that is not exactly two own slots. */
 function pairOf(entry: unknown, name: string): readonly [unknown, unknown] {
-  assertArray(entry, name);
-
-  for (let index = 0; index < METHODS_ORCHESTRATOR_ENTRY_LENGTH; index += 1) {
-    if (!Object.hasOwn(entry, index)) throw new TypeError(`${name}[${index}] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
-  }
+  assertDense(entry, name, METHODS_ORCHESTRATOR_ENTRY_LENGTH);
 
   if (entry.length !== METHODS_ORCHESTRATOR_ENTRY_LENGTH) throw new TypeError(`${name} ${METHODS_ORCHESTRATOR_ENTRY_PAIR_MESSAGE}`);
 
@@ -132,13 +125,11 @@ export function checkedCodecs(registry: unknown): ReadonlyMap<Address, IActionCo
 
 /** The device bindings this runtime meets, refusing a hole, an unknown binding and a repeat. */
 export function checkedBindings(value: unknown): ReadonlySet<DeviceBinding> {
-  assertArray(value, 'bindings');
+  assertDense(value, 'bindings');
 
   const bindings = new Set<DeviceBinding>();
 
   for (let index = 0; index < value.length; index += 1) {
-    if (!Object.hasOwn(value, index)) throw new TypeError(`bindings[${index}] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
-
     const binding: unknown = value[index];
 
     assertOneOf(binding, DEVICE_BINDINGS, `bindings[${index}]`);

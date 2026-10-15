@@ -11,22 +11,14 @@ import {
   GATHERING_REQUEST_KIND,
   GATHERING_REQUEST_VERSION,
 } from '../constants';
-import { approvalDigest, approvalTypedData, cancellationDigest, cancellationTypedData } from '../formats/digests';
+import { approvalTypedData, cancellationTypedData, typedDataDigest } from '../formats/digests';
 import { assertBool, assertBytes, assertBytes32, assertObject, assertUintNumber, lowerHex, normalizeAddress } from '../formats/guards';
 import { decimalBigint, decimalNumber } from '../gathering/edge';
-import { PURPOSES, type ApproverRequest, type Ctx, type Hex, type PaymentOrder } from '../interfaces';
-import type { CancellationMembers } from '../types';
-import type { CheckedRequest } from '../types/methods-orchestrator';
-
-/** Whether the request's kind, version and purpose are the ones this build reads. */
-export function isRequestRead(request: object): boolean {
-  const { kind, version, purpose } = request as Partial<Record<'kind' | 'version' | 'purpose', unknown>>;
-
-  return kind === GATHERING_REQUEST_KIND && version === GATHERING_REQUEST_VERSION && (PURPOSES as readonly unknown[]).includes(purpose);
-}
+import type { ApproverRequest, Ctx, Hex, PaymentOrder } from '../interfaces';
+import type { CheckedRequest, RequestMembers, UnreadRequest } from '../types/methods-orchestrator';
 
 /** The members a digest closes over, converted from the request's decimal strings, addresses checksummed. */
-function membersOf(request: ApproverRequest): CancellationMembers {
+function membersOf(request: ApproverRequest): RequestMembers {
   const setupBodyHash = request.setupBodyHash;
 
   assertBytes32(setupBodyHash, 'request.setupBodyHash');
@@ -64,7 +56,7 @@ function orderOf(request: Extract<ApproverRequest, { readonly purpose: 'approval
  * Built from values already checked, so nothing the caller added or can still change reaches an implementation.
  */
 function frozenRequest(
-  members: CancellationMembers,
+  members: RequestMembers,
   own: Pick<ApproverRequest, 'place' | 'method' | 'config' | 'salt' | 'credentialHoldsCode'>,
   order: PaymentOrder | undefined,
   payload: Hex | undefined,
@@ -74,7 +66,7 @@ function frozenRequest(
     version: GATHERING_REQUEST_VERSION,
     chainId: members.chainId.toString(),
     manager: members.manager,
-    digestVersion: members.digestVersion ?? '',
+    digestVersion: members.digestVersion,
     account: members.account,
     action: members.action,
     attemptId: members.attemptId.toString(),
@@ -95,35 +87,35 @@ function frozenRequest(
   return Object.freeze({ ...shared, purpose: 'approval', payload: lowerHex(payload), order: copiedOrder });
 }
 
-/** The per-place record a method implementation reads, its digest and typed data derived from the copy's members. */
-function ctxOf(request: ApproverRequest, members: CancellationMembers, order: PaymentOrder | undefined): Ctx {
+/** The per-place record a method implementation reads, its typed data built once from the copy's members and its digest hashed from it. */
+function ctxOf(request: ApproverRequest, members: RequestMembers, order: PaymentOrder | undefined): Ctx {
   const { place } = request;
+  const typedData =
+    request.purpose === 'cancellation' || order === undefined
+      ? cancellationTypedData(members, place)
+      : approvalTypedData({ ...members, payload: request.payload, order }, place);
 
-  if (request.purpose === 'cancellation' || order === undefined) {
-    return Object.freeze({ request, place, digest: cancellationDigest(members, place), typedData: cancellationTypedData(members, place) });
-  }
-
-  const approval = { ...members, payload: request.payload, order };
-
-  return Object.freeze({ request, place, digest: approvalDigest(approval, place), typedData: approvalTypedData(approval, place) });
+  return Object.freeze({ request, place, digest: typedDataDigest(typedData), typedData });
 }
 
 /**
- * The request checked whole and the ctx built from it alone, with no chain read.
- * Throws a TypeError or RangeError on a request this build does not read or whose members are malformed.
+ * The request checked whole and the ctx built from it alone, with no chain read, or the reason it is not one this build reads.
+ * Its kind, version and purpose are each read once; a malformed member throws a TypeError or RangeError.
  */
-export function checkedRequest(request: ApproverRequest): CheckedRequest {
+export function readRequest(request: ApproverRequest): CheckedRequest | UnreadRequest {
   assertObject(request, 'request');
 
-  if (request.kind !== GATHERING_REQUEST_KIND || request.version !== GATHERING_REQUEST_VERSION) {
-    throw new TypeError(DESCRIPTION_UNREAD_REQUEST_MESSAGE);
-  }
+  const kind: unknown = request.kind;
+
+  if (kind !== GATHERING_REQUEST_KIND) return { unread: DESCRIPTION_UNREAD_REQUEST_MESSAGE };
+
+  const version: unknown = request.version;
+
+  if (version !== GATHERING_REQUEST_VERSION) return { unread: DESCRIPTION_UNREAD_REQUEST_MESSAGE };
 
   const purpose: unknown = request.purpose;
 
-  if (purpose !== 'approval' && purpose !== 'cancellation') {
-    throw new TypeError(DESCRIPTION_UNREAD_PURPOSE_MESSAGE);
-  }
+  if (purpose !== 'approval' && purpose !== 'cancellation') return { unread: DESCRIPTION_UNREAD_PURPOSE_MESSAGE };
 
   const { place, config, salt, credentialHoldsCode } = request;
 
@@ -143,4 +135,16 @@ export function checkedRequest(request: ApproverRequest): CheckedRequest {
   const copy = frozenRequest(members, { place, method, config, salt, credentialHoldsCode }, order, payload as Hex | undefined);
 
   return { ctx: ctxOf(copy, members, order), members, order };
+}
+
+/**
+ * The request checked whole and the ctx built from it alone, with no chain read.
+ * Throws a TypeError on a request this build does not read, and a TypeError or RangeError on a malformed member.
+ */
+export function checkedRequest(request: ApproverRequest): CheckedRequest {
+  const read = readRequest(request);
+
+  if ('unread' in read) throw new TypeError(read.unread);
+
+  return read;
 }

@@ -123,12 +123,21 @@ describe('verify with the wallet method', () => {
     expect(await wallet().verify(request, request.place, good)).toBe('not-judged');
   });
 
-  it('a proof that is not hex gets the method\'s verdict, not a throw', async () => {
+  it('a proof that is not hex of whole bytes, or no proof, is a TypeError naming the proof', async () => {
     const request = requests(walletGathering('approval'))[0]!;
 
-    for (const proof of ['signature', '0x', '0xabc', '']) {
-      expect(await wallet().verify(request, request.place, proof as `0x${string}`)).toBe('rejected');
+    for (const proof of ['signature', '0xabc', '0xZZ', '', 'c0ffee', undefined, null, 5]) {
+      const error = await rejectionOf(() => wallet().verify(request, request.place, proof as `0x${string}`));
+
+      expect(error, String(proof)).toBeInstanceOf(TypeError);
+      expect((error as Error).message).toContain('proof');
     }
+  });
+
+  it('a proof of no bytes is hex and gets the method\'s verdict', async () => {
+    const request = requests(walletGathering('approval'))[0]!;
+
+    expect(await wallet().verify(request, request.place, '0x')).toBe('rejected');
   });
 
   it('a signature over another place is rejected for this one', async () => {

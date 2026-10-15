@@ -1,7 +1,7 @@
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
 import {
-  METHODS_ORCHESTRATOR_MISSING_MESSAGE,
+  FORMATS_MISSING_MESSAGE,
   MethodsOrchestrator,
   type ActionCodecRegistry,
   type Address,
@@ -287,14 +287,14 @@ describe('each registry entry must hold its key and value as its own two slots',
       const error = thrownBy(() => buildWith(mapLike([holedEntry(1, value)])));
 
       expect(error).toBeInstanceOf(TypeError);
-      expect((error as Error).message).toContain(`${name} entry 0[0] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
+      expect((error as Error).message).toContain(`${name} entry 0[0] ${FORMATS_MISSING_MESSAGE}`);
     });
 
     it(`${name}: a hole at slot 1 is a TypeError naming the entry and index 1`, () => {
       const error = thrownBy(() => buildWith(mapLike([holedEntry(0, key)])));
 
       expect(error).toBeInstanceOf(TypeError);
-      expect((error as Error).message).toContain(`${name} entry 0[1] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
+      expect((error as Error).message).toContain(`${name} entry 0[1] ${FORMATS_MISSING_MESSAGE}`);
     });
 
     it(`${name}: a value inherited at index 1 through the prototype is refused`, () => {
@@ -305,17 +305,73 @@ describe('each registry entry must hold its key and value as its own two slots',
       const error = thrownBy(() => buildWith(mapLike([entry])));
 
       expect(error).toBeInstanceOf(TypeError);
-      expect((error as Error).message).toContain(`${name} entry 0[1] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
+      expect((error as Error).message).toContain(`${name} entry 0[1] ${FORMATS_MISSING_MESSAGE}`);
     });
 
     it(`${name}: the hole is named at its entry's position`, () => {
       const error = thrownBy(() => buildWith(mapLike([[key, value], holedEntry(0, OTHER_METHOD)])));
 
-      expect((error as Error).message).toContain(`${name} entry 1[1] ${METHODS_ORCHESTRATOR_MISSING_MESSAGE}`);
+      expect((error as Error).message).toContain(`${name} entry 1[1] ${FORMATS_MISSING_MESSAGE}`);
     });
 
     it(`${name}: a native Map with valid entries is accepted as before`, () => {
       expect(buildWith(new Map([[key, value]]))).toBeInstanceOf(MethodsOrchestrator);
     });
   }
+});
+
+describe('the dense-array checks on a codec\'s actions and the bindings list', () => {
+  const codec = strictCodec([ACTION]);
+
+  /** A two-slot array whose first slot is its own and whose second comes from its prototype. */
+  const inheritedSecond = <T>(first: T, second: T): T[] => {
+    const proto: T[] = Object.create(Array.prototype) as T[];
+
+    proto[1] = second;
+
+    const array: T[] = [first];
+
+    Object.setPrototypeOf(array, proto);
+    array.length = 2;
+
+    return array;
+  };
+
+  it('an action inherited through the prototype is refused, naming its position', () => {
+    const actions = inheritedSecond<Address>(ACTION, OTHER_METHOD);
+
+    expect(actions[1]).toBe(OTHER_METHOD);
+
+    const error = thrownBy(() => build(new Map(), new Map([[ACTION, { ...codec, actions }]])));
+
+    expect(error).toBeInstanceOf(TypeError);
+    expect((error as Error).message).toMatch(/actions\[1\]/);
+  });
+
+  it('a hole at the first action is refused, naming its position', () => {
+    const actions: Address[] = [];
+
+    actions[1] = ACTION;
+
+    const error = thrownBy(() => build(new Map(), new Map([[ACTION, { ...codec, actions }]])));
+
+    expect(error).toBeInstanceOf(TypeError);
+    expect((error as Error).message).toMatch(/actions\[0\]/);
+  });
+
+  it('a binding inherited through the prototype is refused', () => {
+    const bindings = inheritedSecond<DeviceBinding>('none', 'external-app');
+
+    expect(isArgumentError(thrownBy(() => build(new Map(), new Map(), bindings)))).toBe(true);
+  });
+
+  it('an array as a method value or a codec value is refused', () => {
+    expect(thrownBy(() => build(new Map([[REQUEST_METHOD, []]])))).toBeInstanceOf(TypeError);
+    expect(thrownBy(() => build(new Map(), new Map([[ACTION, [ACTION]]])))).toBeInstanceOf(TypeError);
+  });
+
+  it('a null method value or codec value is refused', () => {
+    expect(thrownBy(() => build(new Map([[REQUEST_METHOD, null]])))).toBeInstanceOf(TypeError);
+    expect(thrownBy(() => build(new Map(), new Map([[ACTION, null]])))).toBeInstanceOf(TypeError);
+  });
 });

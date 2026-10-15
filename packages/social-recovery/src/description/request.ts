@@ -50,7 +50,8 @@ export function describeRequest(
   methods: MethodRegistry,
 ): RequestDescription {
   const { ctx, members, order } = checkedRequest(request);
-  const { method, config } = ctx.request;
+  const checked = ctx.request;
+  const { method, config } = checked;
   const implementation = entryFor(methods, method);
   const shared = {
     account: members.account,
@@ -59,18 +60,18 @@ export function describeRequest(
     action: members.action,
     attemptId: members.attemptId,
     setupNonce: members.setupNonce,
-    purpose: ctx.request.purpose,
+    purpose: checked.purpose,
     validUntil: members.validUntil,
     place: ctx.place,
     identityPublic: { method, config, saltPublished: true },
     device: implementation === undefined ? 'no-implementation' : implementation.describe(ctx),
   } as const;
 
-  if (request.purpose === 'cancellation' || order === undefined) return shared;
+  if (checked.purpose === 'cancellation' || order === undefined) return shared;
 
   return {
     ...shared,
-    handover: describedHandover(request.payload, entryFor(codecs, members.action)),
+    handover: describedHandover(checked.payload, entryFor(codecs, members.action)),
     order: describedOrder(order),
   };
 }

@@ -4,13 +4,16 @@ import {
   METHODS_ORCHESTRATOR_BYTES_ANSWER_MESSAGE,
   METHODS_ORCHESTRATOR_VERDICT_ANSWER_MESSAGE,
   REPLY_FAILURE_CAUSES,
+  REPLY_FAILURE_KIND,
   type ApproverRequest,
+  type Input,
   type Hex,
   type Verdict,
 } from '../../src/index';
 import {
   approval,
   BROKEN_CHECKSUM,
+  callsTo,
   cancellation,
   isArgumentError,
   orchestratorOver,
@@ -19,6 +22,7 @@ import {
   REQUEST_METHOD,
   thrownBy,
 } from './doubles';
+import { flipping } from './flipping';
 
 const malformed: readonly [string, ApproverRequest][] = [
   ['a manager that is not an address', approval({ manager: '0x1234' })],
@@ -31,6 +35,7 @@ const malformed: readonly [string, ApproverRequest][] = [
   ['a window end past uint48', approval({ validUntil: (2 ** 48).toString() })],
   ['a digest version that is not decimal', approval({ digestVersion: 'v1' })],
   ['an empty digest version', approval({ digestVersion: '' })],
+  ['no digest version', approval({ digestVersion: undefined })],
   ['a negative place', approval({ place: -1 })],
   ['a fractional place', approval({ place: 1.5 })],
   ['a place given as a string', approval({ place: '0' })],
@@ -242,5 +247,163 @@ describe('an implementation that answers junk: TypeError naming the member', () 
     expect(Object.isFrozen(settled)).toBe(true);
     expect(settled).toStrictEqual({ kind: 'reply-failure', cause: 'device-refused' });
     expect(REPLY_FAILURE_CAUSES).toContain((settled as { cause: string }).cause);
+  });
+});
+
+describe('verify checks the proof before any method is asked', () => {
+  for (const proof of [undefined, null, 5, 'signature', '0xabc', '0xZZ', '', 'c0ffee']) {
+    it(`${JSON.stringify(proof) ?? 'undefined'}: TypeError naming the proof, and no method is called`, async () => {
+      const { method, calls } = recordingMethod();
+      const request = approval();
+      const error = await rejectionOf(() => orchestratorOver([[REQUEST_METHOD, method]]).verify(request, request.place, proof as Hex));
+
+      expect(error).toBeInstanceOf(TypeError);
+      expect(error).not.toBeInstanceOf(KitRefusalError);
+      expect((error as Error).message).toContain('proof');
+      expect(calls).toHaveLength(0);
+    });
+  }
+
+  it('a proof in upper-case hex reaches the method', async () => {
+    const { method, calls } = recordingMethod();
+    const request = approval();
+
+    expect(await orchestratorOver([[REQUEST_METHOD, method]]).verify(request, request.place, '0xC0FFEE')).toBe('satisfied');
+    expect(callsTo(calls, 'verify')).toHaveLength(1);
+  });
+});
+
+describe('a signingInput answer that is not a plain record: TypeError naming signingInput', () => {
+  const answers: readonly [string, () => unknown][] = [
+    ['an array of hex', () => ['0x01']],
+    ['an empty array', () => []],
+    ['a promise of a record', () => Promise.resolve({ digest: '0x01' })],
+    ['a promise that never settles', () => new Promise(() => undefined)],
+  ];
+
+  for (const [name, answer] of answers) {
+    it(name, () => {
+      const { method } = recordingMethod('none', { signingInput: answer as () => Input });
+      const error = thrownBy(() => orchestratorOver([[REQUEST_METHOD, method]]).signingInput(approval()));
+
+      expect(error).toBeInstanceOf(TypeError);
+      expect((error as Error).message).toContain('signingInput');
+    });
+  }
+
+  it('a plain record comes back as the method gave it', () => {
+    const answer = { primaryType: 'Approval', nested: { place: 0 } };
+    const { method } = recordingMethod('none', { signingInput: () => answer });
+
+    expect(orchestratorOver([[REQUEST_METHOD, method]]).signingInput(approval())).toBe(answer);
+  });
+});
+
+describe('the shared object checks behave as before', () => {
+  it('an array as the request is an unread request: the throwing members throw TypeError, replyFrom answers request-unsupported', async () => {
+    const { method, calls } = recordingMethod();
+    const orchestrator = orchestratorOver([[REQUEST_METHOD, method]]);
+    const given = [] as unknown as ApproverRequest;
+
+    expect(thrownBy(() => orchestrator.signingInput(given))).toBeInstanceOf(TypeError);
+    expect(thrownBy(() => orchestrator.describeRequest(given))).toBeInstanceOf(TypeError);
+    expect(await rejectionOf(() => orchestrator.verify(given, 0, '0x01'))).toBeInstanceOf(TypeError);
+    expect(await orchestrator.replyFrom(given, {}, undefined)).toStrictEqual({ kind: REPLY_FAILURE_KIND, cause: 'request-unsupported' });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('array params and an array input are objects and reach the method', async () => {
+    const { method, calls } = recordingMethod();
+    const orchestrator = orchestratorOver([[REQUEST_METHOD, method]]);
+    const params: unknown[] = [];
+    const input: unknown[] = [];
+
+    orchestrator.signingInput(approval(), params as never);
+    orchestrator.enrollInput(REQUEST_METHOD, params as never);
+    await orchestrator.replyFrom(approval(), input as never, undefined);
+    await orchestrator.configFrom(REQUEST_METHOD, input as never, undefined);
+
+    expect(calls.map((call) => call.member)).toStrictEqual(['signingInput', 'enrollInput', 'replyFrom', 'configFrom']);
+    expect(callsTo(calls, 'signingInput')[0]?.args[1]).toBe(params);
+    expect(callsTo(calls, 'replyFrom')[0]?.args[1]).toBe(input);
+  });
+
+  it('an array carrying a typed failure\'s kind and cause is refused with a TypeError naming the member', async () => {
+    const dressed = Object.assign([], { kind: REPLY_FAILURE_KIND, cause: 'device-refused' });
+    const { method } = recordingMethod('none', { replyFrom: async () => dressed as never, configFrom: async () => dressed as never });
+    const orchestrator = orchestratorOver([[REQUEST_METHOD, method]]);
+    const reply = await rejectionOf(() => orchestrator.replyFrom(approval(), {}, undefined));
+    const config = await rejectionOf(() => orchestrator.configFrom(REQUEST_METHOD, { kind: 'ceremony' }, undefined));
+
+    expect(reply).toBeInstanceOf(TypeError);
+    expect((reply as Error).message).toContain('replyFrom');
+    expect(config).toBeInstanceOf(TypeError);
+    expect((config as Error).message).toContain('configFrom');
+  });
+
+  it('an enrollInput answer that is an array carrying an enrollment kind is refused with a TypeError naming the member', () => {
+    const dressed = Object.assign([], { kind: 'nothing-to-perform' });
+    const { method } = recordingMethod('none', { enrollInput: () => dressed as never });
+    const error = thrownBy(() => orchestratorOver([[REQUEST_METHOD, method]]).enrollInput(REQUEST_METHOD, {}));
+
+    expect(error).toBeInstanceOf(TypeError);
+    expect((error as Error).message).toContain('enrollInput');
+  });
+
+  it('a null input for replyFrom and configFrom is a TypeError, and no method is called', async () => {
+    const { method, calls } = recordingMethod();
+    const orchestrator = orchestratorOver([[REQUEST_METHOD, method]]);
+
+    expect(await rejectionOf(() => orchestrator.replyFrom(approval(), null as never, undefined))).toBeInstanceOf(TypeError);
+    expect(await rejectionOf(() => orchestrator.configFrom(REQUEST_METHOD, null as never, undefined))).toBeInstanceOf(TypeError);
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe('every failure the orchestrator answers carries the reply-failure kind constant', () => {
+  it('the constant is the reply-failure literal', () => {
+    expect(REPLY_FAILURE_KIND).toBe('reply-failure');
+  });
+
+  it('its own failures: method-unsupported, request-unsupported and device-unavailable', async () => {
+    const { method } = recordingMethod('external-app');
+    const orchestrator = orchestratorOver([[REQUEST_METHOD, method]], ['none']);
+    const own = [
+      await orchestratorOver([]).replyFrom(approval(), {}, undefined),
+      await orchestratorOver([]).configFrom(REQUEST_METHOD, { kind: 'ceremony' }, undefined),
+      await orchestrator.replyFrom(approval({ version: 2 }), {}, undefined),
+      await orchestrator.replyFrom(flipping(approval(), 'purpose', 'handover', 'approval'), {}, undefined),
+      await orchestrator.replyFrom(approval(), {}, undefined),
+      await orchestrator.configFrom(REQUEST_METHOD, { kind: 'ceremony' }, undefined),
+    ];
+
+    expect(own.map((failure) => (failure as { cause: string }).cause)).toStrictEqual([
+      'method-unsupported',
+      'method-unsupported',
+      'request-unsupported',
+      'request-unsupported',
+      'device-unavailable',
+      'device-unavailable',
+    ]);
+
+    for (const failure of own) {
+      expect((failure as { kind: string }).kind).toBe(REPLY_FAILURE_KIND);
+      expect(Object.keys(failure).sort()).toStrictEqual(['cause', 'kind']);
+    }
+  });
+
+  it('every cause a method answers comes back under the constant', async () => {
+    for (const cause of REPLY_FAILURE_CAUSES) {
+      const failure = { kind: REPLY_FAILURE_KIND, cause } as const;
+      const { method } = recordingMethod('none', { replyFrom: async () => failure, configFrom: async () => failure });
+      const orchestrator = orchestratorOver([[REQUEST_METHOD, method]]);
+
+      for (const settled of [
+        await orchestrator.replyFrom(approval(), {}, undefined),
+        await orchestrator.configFrom(REQUEST_METHOD, { kind: 'ceremony' }, undefined),
+      ]) {
+        expect(settled).toStrictEqual({ kind: REPLY_FAILURE_KIND, cause });
+      }
+    }
   });
 });

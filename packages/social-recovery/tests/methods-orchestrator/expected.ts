@@ -61,3 +61,26 @@ export function expectedDigest(request: ApproverRequest, place: number = request
 
 /** The digest viem computes over a typed data record as the orchestrator handed it, `EIP712Domain` supplied by viem. */
 export const hashOf = (typedData: unknown): Hex => hashTypedData(typedData as Parameters<typeof hashTypedData>[0]);
+
+/** The request's members as the merged digest builders take them. */
+export const membersOf = (request: ApproverRequest) => {
+  const shared = {
+    chainId: Number(request.chainId),
+    manager: request.manager,
+    digestVersion: request.digestVersion,
+    account: request.account,
+    action: request.action,
+    attemptId: BigInt(request.attemptId),
+    setupNonce: BigInt(request.setupNonce),
+    setupBodyHash: request.setupBodyHash,
+    validUntil: Number(request.validUntil),
+  };
+
+  return request.purpose === 'approval'
+    ? {
+        ...shared,
+        payload: request.payload,
+        order: { token: request.order.token, amount: BigInt(request.order.amount), payee: request.order.payee },
+      }
+    : shared;
+};

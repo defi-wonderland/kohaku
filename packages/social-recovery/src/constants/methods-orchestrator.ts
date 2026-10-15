@@ -1,13 +1,13 @@
-import type { DeviceBinding, ReplyFailure } from '../interfaces/records';
+import { REPLY_FAILURE_KIND, type DeviceBinding, type ReplyFailure } from '../interfaces/records';
 
 /** The failure answered for a method address no registered implementation serves. */
-export const METHODS_ORCHESTRATOR_METHOD_UNSUPPORTED: ReplyFailure = Object.freeze({ kind: 'reply-failure', cause: 'method-unsupported' });
+export const METHODS_ORCHESTRATOR_METHOD_UNSUPPORTED: ReplyFailure = Object.freeze({ kind: REPLY_FAILURE_KIND, cause: 'method-unsupported' });
 
 /** The failure answered for a request whose kind, version or purpose this build does not read. */
-export const METHODS_ORCHESTRATOR_REQUEST_UNSUPPORTED: ReplyFailure = Object.freeze({ kind: 'reply-failure', cause: 'request-unsupported' });
+export const METHODS_ORCHESTRATOR_REQUEST_UNSUPPORTED: ReplyFailure = Object.freeze({ kind: REPLY_FAILURE_KIND, cause: 'request-unsupported' });
 
 /** The failure answered where this runtime cannot meet the implementation's device binding. */
-export const METHODS_ORCHESTRATOR_DEVICE_UNAVAILABLE: ReplyFailure = Object.freeze({ kind: 'reply-failure', cause: 'device-unavailable' });
+export const METHODS_ORCHESTRATOR_DEVICE_UNAVAILABLE: ReplyFailure = Object.freeze({ kind: REPLY_FAILURE_KIND, cause: 'device-unavailable' });
 
 /** The binding every runtime meets, whether it names it or not, since it asks for no device. */
 export const METHODS_ORCHESTRATOR_UNBOUND: DeviceBinding = 'none';
@@ -64,17 +64,14 @@ export const METHODS_ORCHESTRATOR_VERDICT_ANSWER_MESSAGE = 'answered something o
 /** Follows the member's name where an implementation answered neither hex bytes nor a typed failure with a known cause. */
 export const METHODS_ORCHESTRATOR_BYTES_ANSWER_MESSAGE = 'answered neither hex bytes nor a reply failure with a known cause';
 
-/** Follows the member's name where an implementation's `signingInput` answered something other than an object. */
-export const METHODS_ORCHESTRATOR_INPUT_ANSWER_MESSAGE = 'answered something other than an object';
+/** Follows the member's name where an implementation's `signingInput` answered a non-object, an array or a promise. */
+export const METHODS_ORCHESTRATOR_INPUT_ANSWER_MESSAGE = 'answered something other than a record of named members';
 
 /** Follows the member's name where an implementation's `enrollInput` answered neither a ceremony nor nothing to perform. */
 export const METHODS_ORCHESTRATOR_ENROLL_ANSWER_MESSAGE = 'answered neither a ceremony nor nothing to perform';
 
 /** The kinds an implementation's `enrollInput` may answer. */
 export const METHODS_ORCHESTRATOR_ENROLL_KINDS: readonly string[] = Object.freeze(['nothing-to-perform', 'ceremony']);
-
-/** Follows the position's name where an array or a registry entry has no own value there. */
-export const METHODS_ORCHESTRATOR_MISSING_MESSAGE = 'is missing';
 
 /** Follows the value's name where it must be a string and is not. */
 export const METHODS_ORCHESTRATOR_NOT_STRING_MESSAGE = 'must be a string';

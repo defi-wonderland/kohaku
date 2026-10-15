@@ -140,7 +140,7 @@ export function assembleParts(
 export function assembleKit(parts: KitParts, configuration: ClientConfiguration): Kit {
   const { provider, descriptor, account, action, policyManager, recoveryAction, codec, events, method, methods } = parts;
   const setup = new SetupClient(
-    provider, descriptor, account, action, configuration, 'integrator',
+    provider, descriptor, account, action, configuration,
     policyManager, recoveryAction, events, methods, codec, signerRecovery,
   );
   // The recovery client over the same parts, typed by its interface: callers use only what `IRecoveryClient` declares.

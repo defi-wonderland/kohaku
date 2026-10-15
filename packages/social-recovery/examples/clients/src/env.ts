@@ -2,9 +2,6 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { type Address, getAddress, type Hex, isAddress, isHex, zeroAddress } from 'viem';
 
-/** Sepolia, the only chain the sample runs against. */
-export const SEPOLIA_CHAIN_ID = 11155111;
-
 /** How the holder's account is provided: an existing Ambire account, one created here, or an EOA stand-in. */
 export const ACCOUNT_MODES = ['existing', 'create', 'eoa'] as const;
 

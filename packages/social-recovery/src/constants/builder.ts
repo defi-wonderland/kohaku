@@ -131,3 +131,9 @@ export const BUILDER_EVENT_MANAGER_OPTIONS: readonly string[] = Object.freeze(['
 
 /** The members an action codec arguments record may carry. */
 export const BUILDER_CODEC_OPTIONS: readonly string[] = Object.freeze(['actions']);
+
+/** The members a holder's builder inputs may carry. */
+export const BUILDER_HOLDER_INPUT_MEMBERS: readonly string[] = Object.freeze(['provider', 'account', 'descriptor', 'chainId', 'configuration', 'deviceBindings']);
+
+/** The members an approver's builder inputs may carry. */
+export const BUILDER_APPROVER_INPUT_MEMBERS: readonly string[] = Object.freeze(['descriptor', 'chainId', 'deviceBindings']);

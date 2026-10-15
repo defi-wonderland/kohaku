@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it } from 'vitest';
@@ -47,5 +48,13 @@ describe('the builder surface', () => {
 
     expect(Object.keys(builder)).toEqual([]);
     expect(JSON.stringify(builder)).toBe('{}');
+  });
+
+  it.each(['answersOf', 'ManagerAnswers'])('no longer exports %s from the source entry, the built entry or the built declaration', async (name) => {
+    const declaration = readFileSync(join(PACKAGE_ROOT, 'dist', 'index.d.ts'), 'utf8');
+
+    expect(name in source).toBe(false);
+    expect(name in (await loadBuilt())).toBe(false);
+    expect(declaration).not.toMatch(new RegExp(`\\b${name}\\b`));
   });
 });

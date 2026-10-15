@@ -1,6 +1,8 @@
 import {
+  BUILDER_APPROVER_INPUT_MEMBERS,
   BUILDER_CHAIN_ID_MISMATCH_MESSAGE,
   BUILDER_DEFAULT_CONFIGURATION,
+  BUILDER_HOLDER_INPUT_MEMBERS,
   BUILDER_HOLDER_INPUTS_MESSAGE,
   BUILDER_NO_CHAIN_MESSAGE,
   BUILDER_NO_PUBLIC_DEPLOYMENT_MESSAGE,
@@ -16,6 +18,7 @@ import { DEVICE_BINDINGS, type ClientConfiguration, type DeploymentDescriptor, t
 import { checkedBindings } from '../methods-orchestrator/registries';
 import type { BuilderHolder, BuilderInputs, SocialRecoveryInputs } from '../types/builder';
 import { shippedDescriptor } from './origin';
+import { assertOnly } from './shapes';
 
 /** The partial configuration merged over the shipped default member by member, a member given as `undefined` left at the default. */
 function mergedConfiguration(value: unknown): ClientConfiguration {
@@ -28,13 +31,22 @@ function mergedConfiguration(value: unknown): ClientConfiguration {
   return checkedConfiguration({ ...BUILDER_DEFAULT_CONFIGURATION, ...given }, 'configuration');
 }
 
-/** The provider, account and configuration of a holder's inputs, or nothing where neither a provider nor an account is given. */
+/**
+ * The provider, account and configuration of a holder's inputs, or nothing where neither a provider nor an account is given;
+ * either way an own member the shape does not take is refused with a `TypeError` naming it.
+ */
 function checkedHolder(inputs: Readonly<Record<string, unknown>>): BuilderHolder | undefined {
   const { provider, account, configuration } = inputs;
 
-  if (provider === undefined && account === undefined) return undefined;
+  if (provider === undefined && account === undefined) {
+    assertOnly(inputs, BUILDER_APPROVER_INPUT_MEMBERS, 'inputs', "a member of an approver's inputs");
+
+    return undefined;
+  }
 
   if (provider === undefined || account === undefined) throw new TypeError(BUILDER_HOLDER_INPUTS_MESSAGE);
+
+  assertOnly(inputs, BUILDER_HOLDER_INPUT_MEMBERS, 'inputs', "a member of a holder's inputs");
 
   assertDependency(provider, BUILDER_PROVIDER_MEMBERS, 'provider');
 
@@ -46,7 +58,7 @@ function checkedHolder(inputs: Readonly<Record<string, unknown>>): BuilderHolder
 }
 
 /**
- * The builder's inputs checked before any provider call: a `TypeError` or `RangeError` for a malformed member, a provider
+ * The builder's inputs checked before any provider call: a `TypeError` or `RangeError` for a malformed or unknown member, a provider
  * without an account or the reverse, inputs without a provider that name no chain, and a descriptor naming another chain id.
  */
 export function checkedInputs(value: SocialRecoveryInputs): BuilderInputs {

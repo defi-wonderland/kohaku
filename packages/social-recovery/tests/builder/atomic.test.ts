@@ -151,3 +151,61 @@ describe('a setter called while a build is pending', () => {
     expect(builder.managerReading()?.versionMismatch).toBe(false);
   });
 });
+
+/** Every setter handed an argument its own check refuses, so the answer shows whether the state or the argument was judged first; the first four check it at the call. */
+const MALFORMED_SETTERS = [
+  ['withPolicyManager', (builder: Builder) => builder.withPolicyManager({} as never)],
+  ['withEventManager', (builder: Builder) => builder.withEventManager({ logChunkSize: 0 })],
+  ['withRecoveryAction', (builder: Builder) => builder.withRecoveryAction('0x1234')],
+  ['withCodec', (builder: Builder) => builder.withCodec({ actions: [] })],
+  ['withMethod', (builder: Builder) => builder.withMethod({} as never)],
+  ['withSignerRecovery', (builder: Builder) => builder.withSignerRecovery({} as never)],
+  ['withManagerReading', (builder: Builder) => builder.withManagerReading({} as never)],
+] as const;
+
+describe('a setter handed a malformed argument', () => {
+  it.each(MALFORMED_SETTERS)('%s answers the frozen message after a successful build, whatever the argument', async (_name, set) => {
+    const builder = SocialRecoveryBuilder.from(holder());
+
+    await builder.build();
+
+    expect(setterRefusal(() => set(builder))).toBe(BUILDER_FROZEN_MESSAGE);
+  });
+
+  it.each(MALFORMED_SETTERS)('%s answers the pending message while the first build runs', async (_name, set) => {
+    const provider = new GatedDouble();
+    const builder = SocialRecoveryBuilder.from(holder(provider));
+
+    provider.hold();
+
+    const pending = builder.build();
+
+    expect(setterRefusal(() => set(builder))).toBe(BUILDER_PENDING_MESSAGE);
+
+    provider.release();
+    await pending;
+  });
+
+  it.each(MALFORMED_SETTERS.slice(0, 4))('%s answers its argument\'s own refusal before any build', (_name, set) => {
+    const builder = SocialRecoveryBuilder.from(holder());
+    let thrown: unknown;
+
+    try {
+      set(builder);
+    } catch (caught) {
+      thrown = caught;
+    }
+
+    expect(thrown instanceof TypeError || thrown instanceof RangeError).toBe(true);
+    expect((thrown as Error).message).not.toBe(BUILDER_FROZEN_MESSAGE);
+    expect((thrown as Error).message).not.toBe(BUILDER_PENDING_MESSAGE);
+  });
+
+  it('answers the frozen message for withPolicyManager({}) where a well-formed manager also gets it', async () => {
+    const builder = SocialRecoveryBuilder.from(holder());
+
+    await builder.buildSetupClient();
+
+    expect(setterRefusal(() => builder.withPolicyManager({} as never))).toBe(BUILDER_FROZEN_MESSAGE);
+  });
+});

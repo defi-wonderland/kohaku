@@ -10,7 +10,7 @@ import {
   METHODS_ORCHESTRATOR_METHOD_MEMBERS,
   METHODS_ORCHESTRATOR_REPEAT_MESSAGE,
 } from '../constants';
-import { assertArray, assertDependency, assertObject, assertUintNumber, normalizeAddress, normalizeAddresses } from '../formats/guards';
+import { assertDependency, assertObject, assertUintNumber, normalizeAddress, normalizeAddresses } from '../formats/guards';
 import type { Address, IActionCodec, IEventManager, IRecoveryMethod, ISignerRecovery } from '../interfaces';
 import type {
   ActionCodecOptions,
@@ -20,16 +20,17 @@ import type {
   RecoveryActionFactory,
   RecoveryActionPart,
 } from '../types/builder';
+import { assertOnly, isActionCodec, isEventManager } from './shapes';
 
-/** Whether the value carries any of the members as a function, which marks it as an instance rather than an arguments record. */
-const looksLikeInstance = (value: object, members: readonly string[]): boolean =>
-  members.some((member) => typeof (value as Readonly<Record<string, unknown>>)[member] === 'function');
+/** The actions a codec serves, checksummed: an empty list is a `TypeError` and a repeated action a `RangeError`. */
+function servedActions(value: unknown): Address[] {
+  const actions = normalizeAddresses(value, 'codec.actions');
 
-/** Refuses an arguments record carrying any member but the shipped constructor's own. */
-function assertOnly(value: object, members: readonly string[], name: string): void {
-  for (const member of Object.keys(value)) {
-    if (!members.includes(member)) throw new TypeError(`${name}.${member} is not an argument of the shipped part`);
-  }
+  if (actions.length === 0) throw new TypeError('codec.actions must name at least one action address');
+
+  if (new Set(actions).size !== actions.length) throw new RangeError(`codec.actions ${METHODS_ORCHESTRATOR_REPEAT_MESSAGE}`);
+
+  return actions;
 }
 
 /** The policy manager instance, refused with a `TypeError` where a member of either interface is missing. */
@@ -43,7 +44,7 @@ export function checkedPolicyManager(value: unknown): BuilderPolicyManager {
 export function checkedEventManager(value: unknown): IEventManager | EventManagerOptions {
   assertObject(value, 'eventManager');
 
-  if (looksLikeInstance(value, BUILDER_EVENT_MANAGER_MEMBERS)) {
+  if (isEventManager(value)) {
     assertDependency(value, BUILDER_EVENT_MANAGER_MEMBERS, 'eventManager');
 
     return value as IEventManager;
@@ -60,24 +61,23 @@ export function checkedEventManager(value: unknown): IEventManager | EventManage
   return Object.freeze({ logChunkSize });
 }
 
-/** An action codec instance as given, or its arguments as a frozen copy of checksummed actions, none repeated and at least one. */
+/**
+ * An action codec instance as given, or its arguments as a frozen copy; either way its actions are refused at the call where
+ * malformed, empty or repeated.
+ */
 export function checkedCodec(value: unknown): IActionCodec | ActionCodecOptions {
   assertObject(value, 'codec');
 
-  if (looksLikeInstance(value, METHODS_ORCHESTRATOR_ACTION_CODEC_MEMBERS)) {
+  if (isActionCodec(value)) {
     assertDependency(value, METHODS_ORCHESTRATOR_ACTION_CODEC_MEMBERS, 'codec');
-    assertArray((value as Partial<IActionCodec>).actions, 'codec.actions');
+    servedActions(value.actions);
 
-    return value as IActionCodec;
+    return value;
   }
 
   assertOnly(value, BUILDER_CODEC_OPTIONS, 'codec');
 
-  const actions = normalizeAddresses((value as Partial<ActionCodecOptions>).actions, 'codec.actions');
-
-  if (actions.length === 0) throw new RangeError('codec.actions must name at least one action address');
-
-  if (new Set(actions).size !== actions.length) throw new RangeError(`codec.actions ${METHODS_ORCHESTRATOR_REPEAT_MESSAGE}`);
+  const actions = servedActions((value as Partial<ActionCodecOptions>).actions);
 
   return Object.freeze({ actions: Object.freeze(actions) });
 }

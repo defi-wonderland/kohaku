@@ -5,7 +5,7 @@ import {
   SETUP_CLIENT_PASSWORD_UNUSED_MESSAGE,
   SETUP_CLIENT_VERSION_ESCAPED_MESSAGE,
 } from '../constants';
-import { descriptorOriginOf } from '../builder/origin';
+import { checkedDescriptorOrigin } from '../builder/origin';
 import { KitRefusalError } from '../client-core';
 import { assertPassword } from '../encryption/cipher';
 import { serializedConfigurationSize } from '../encryption/serialize';
@@ -52,7 +52,7 @@ export function checkedParts(parts: Omit<SetupClientParts, 'descriptorOrigin'>):
 
   assertServes(codec, action);
 
-  return { ...parts, ...checkedRecords, descriptorOrigin: descriptorOriginOf(checkedRecords.descriptor), account, action };
+  return { ...parts, ...checkedRecords, descriptorOrigin: checkedDescriptorOrigin(checkedRecords.descriptor), account, action };
 }
 
 /** Refuses options that are not an object, whose `simulate` is present and not a boolean, or whose `from` is present and not an address. */

@@ -473,6 +473,65 @@ describe('the parts the integrator supplies', () => {
   });
 });
 
+describe('a codec instance', () => {
+  it.each([
+    ['an empty list', []],
+    ['a malformed address', ['0x1234']],
+    ['a list with an undefined entry', [ACTION, undefined]],
+    ['not a list', ACTION],
+  ])('whose actions are %s is refused with a TypeError at the call, before any read', (_name, actions) => {
+    const provider = new ChainDouble();
+    const builder = SocialRecoveryBuilder.from(holder(provider));
+
+    expect(() => builder.withCodec({ ...codecServing(ACTION), actions } as never)).toThrow(TypeError);
+    expect(provider.reads).toEqual([]);
+    expect([...made.values()].flat()).toEqual([]);
+    expect(builder.withVersionEscape()).toBe(builder);
+  });
+
+  it('with an empty list is refused like the options form with an empty list', () => {
+    const builder = SocialRecoveryBuilder.from(holder());
+
+    expect(() => builder.withCodec({ actions: [] })).toThrow(TypeError);
+    expect(() => builder.withCodec({ ...codecServing(ACTION), actions: [] })).toThrow(TypeError);
+  });
+
+  it('registered twice builds and keys one entry per action it serves', async () => {
+    const codec = codecServing(ACTION, OTHER_ACTION);
+
+    await SocialRecoveryBuilder.from(holder()).withCodec(codec).withCodec(codec).build();
+
+    const codecs = orchestratorArgs().codecs;
+
+    expect([...codecs.keys()].map((key) => getAddress(key)).sort()).toEqual([ACTION, OTHER_ACTION].sort());
+
+    for (const value of codecs.values()) expect(value).toBe(codec);
+
+    expect(setupArgs().codec).toBe(codec);
+    expect(recoveryArgs().codec).toBe(codec);
+  });
+
+  it('is still refused at the first build where another codec serves one of its actions', async () => {
+    const twoInstances = SocialRecoveryBuilder.from(holder()).withCodec(codecServing(OTHER_ACTION)).withCodec(codecServing(OTHER_ACTION));
+    const instanceAndOptions = SocialRecoveryBuilder.from(holder()).withCodec({ actions: [OTHER_ACTION] }).withCodec(codecServing(OTHER_ACTION));
+
+    expect(await failureOf(() => twoInstances.build())).toBeInstanceOf(TypeError);
+    expect(await failureOf(() => instanceAndOptions.build())).toBeInstanceOf(TypeError);
+    expect(twoInstances.withVersionEscape()).toBe(twoInstances);
+  });
+});
+
+describe('a method instance registered twice', () => {
+  it('builds and keys its module once', async () => {
+    const method = methodServing([EXTRA_MODULE]);
+
+    await SocialRecoveryBuilder.from(holder()).withMethod(method).withMethod(method).build();
+
+    expect(entryOf(orchestratorArgs().methods, EXTRA_MODULE)).toBe(method);
+    expect(keysOf(orchestratorArgs().methods)).toEqual([METHOD_ECDSA, METHOD_PASSKEY, EXTRA_MODULE].sort());
+  });
+});
+
 describe('the escape reaching the clients', () => {
   it('marks both clients escaped where an escapable check failed', async () => {
     await SocialRecoveryBuilder.from(holder(new ChainDouble({ ...goodWorld(), domain: { ...goodDomain(), name: 'Other' } })))

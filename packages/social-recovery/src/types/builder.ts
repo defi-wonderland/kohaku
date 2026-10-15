@@ -67,7 +67,10 @@ export type RecoveryActionContext = {
   readonly blockTags: BlockTags;
 };
 
-/** Constructs a recovery action part over the builder's inputs; called once, at the first build. */
+/**
+ * Constructs a recovery action part over the builder's inputs; called on each construction attempt, its product kept once a
+ * build succeeds and nothing kept from an attempt that fails.
+ */
 export type RecoveryActionFactory = (context: RecoveryActionContext) => RecoveryActionPart;
 
 /** A construction check the version escape downgraded instead of refusing. */
@@ -144,12 +147,6 @@ export type BuilderSession = {
   readonly recoveryClient: IRecoveryClient;
   readonly recoveryAction: IRecoveryActionInteractor;
   readonly moduleReads: IMethodModuleReads;
-};
-
-/** The manager's domain and `version()` answer, as read or as handed over in another builder's reading. */
-export type ManagerAnswers = {
-  readonly domain: Domain;
-  readonly version: string;
 };
 
 /** What a build reads the chain under: the inputs as checked, the read tag, the escape option and any reading handed over. */

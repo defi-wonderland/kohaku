@@ -58,13 +58,17 @@ function diagnosticsOf(entry: string, lines: readonly string[]): { readonly byLi
 
 const message = (diagnostic: ts.Diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
 
-const APPROVER_CALLS = HOLDER_ONLY.flatMap((name) => [`void byChain.${name}();`, `void byDescriptor.${name}();`]);
+const APPROVER_CALLS = [
+  ...HOLDER_ONLY.flatMap((name) => [`void byChain.${name}();`, `void byDescriptor.${name}();`]),
+  'const annotatedApprover: SocialRecoveryBuilder = SocialRecoveryBuilder.from({ chainId: 1 }); void annotatedApprover;',
+];
 const ALLOWED_CALLS = [
   ...HOLDER_ONLY.map((name) => `void holderBuilder.${name}();`),
   'void holderBuilder.buildMethodsOrchestrator();',
   'void byChain.buildMethodsOrchestrator();',
   'void byDescriptor.buildMethodsOrchestrator();',
   'void SocialRecoveryBuilder.build({ provider: {} as never, account: \'0x0000000000000000000000000000000000000001\' });',
+  'const annotatedHolder: SocialRecoveryBuilder = SocialRecoveryBuilder.from({ provider: {} as never, account: \'0x0000000000000000000000000000000000000001\' }); void annotatedHolder.build();',
 ];
 
 describe.each([
@@ -72,7 +76,7 @@ describe.each([
   ['the source entry', '../../src/index'],
 ])('a consumer compiled against %s', (_label, entry) => {
   it(
-    'gets one diagnostic per holder-only call on an approver builder and none on the allowed calls',
+    'gets one diagnostic per holder-only call on an approver builder, and on an approver annotated as the default builder, and none on the allowed calls',
     () => {
       const { byLine, program } = diagnosticsOf(entry, [...APPROVER_CALLS, ...ALLOWED_CALLS]);
 

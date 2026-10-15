@@ -4,7 +4,8 @@ import type { Address, DeploymentDescriptor, IActionCodec, IRecoveryMethod } fro
 import { walletMethod } from '../method-ecdsa';
 import { passkeyMethod } from '../method-passkey';
 import { AmbireActionCodec } from '../recovery-action/codec';
-import type { ActionCodecOptions, BuilderRegistries, BuilderSettings } from '../types/builder';
+import type { BuilderRegistries, BuilderSettings } from '../types/builder';
+import { isActionCodec } from './shapes';
 
 /** The modules an implementation claims under the descriptor, checksummed, the zero address left out as a module not deployed. */
 const claimedModules = (method: IRecoveryMethod, descriptor: DeploymentDescriptor): Address[] =>
@@ -42,21 +43,21 @@ function methodRegistry(descriptor: DeploymentDescriptor, added: readonly IRecov
   return new Map([...claimed(descriptor, [walletMethod(), passkeyMethod()], overrides), ...overrides]);
 }
 
-/** Whether a registered codec entry is an instance rather than the shipped codec's arguments. */
-const isCodec = (entry: IActionCodec | ActionCodecOptions): entry is IActionCodec => typeof (entry as Partial<IActionCodec>).decode === 'function';
-
 /**
  * The codec registry keyed on every action each codec serves, the shipped codec constructed for each arguments entry and
- * for the bound action where no registered codec serves it; an action two codecs serve is a `TypeError`.
+ * for the bound action where no registered codec serves it; the same instance registered twice is keyed once, and an
+ * action two different codecs serve is a `TypeError`.
  */
 function codecRegistry(registered: BuilderSettings['codecs'], action: Address): Map<Address, IActionCodec> {
   const registry = new Map<Address, IActionCodec>();
 
   for (const entry of registered) {
-    const codec = isCodec(entry) ? entry : new AmbireActionCodec(entry.actions);
+    const codec = isActionCodec(entry) ? entry : new AmbireActionCodec(entry.actions);
 
     for (const served of normalizeAddresses(codec.actions, 'codec.actions')) {
-      if (registry.has(served)) throw new TypeError(`${BUILDER_ACTION_CLAIMED_MESSAGE} ${served}`);
+      const holder = registry.get(served);
+
+      if (holder !== undefined && holder !== codec) throw new TypeError(`${BUILDER_ACTION_CLAIMED_MESSAGE} ${served}`);
 
       registry.set(served, codec);
     }

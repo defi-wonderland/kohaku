@@ -16,6 +16,7 @@ import {
   DEVICE_BINDINGS,
   KitRefusalError,
   SocialRecoveryBuilder,
+  checkedDescriptor,
   type DeploymentDescriptor,
   type SocialRecoveryInputs,
 } from '../../src/index';
@@ -246,5 +247,76 @@ describe('a descriptor that differs from the default', () => {
     await builder.buildSetupClient();
 
     expect(builder.managerReading()?.manager).toBe(DESCRIPTOR.manager);
+  });
+});
+
+describe('the shipped descriptors', () => {
+  it.each([
+    ['Sepolia', BUILDER_SEPOLIA_DESCRIPTOR],
+    ['mainnet', BUILDER_MAINNET_DESCRIPTOR],
+  ])('of %s are already the checked record, member for member', (_name, descriptor) => {
+    const checked = checkedDescriptor(descriptor, 'descriptor');
+
+    expect(Object.keys(descriptor).sort()).toEqual(Object.keys(checked).sort());
+
+    for (const member of Object.keys(checked)) {
+      expect((descriptor as Record<string, unknown>)[member], member).toEqual((checked as Record<string, unknown>)[member]);
+    }
+  });
+});
+
+/** The message of the TypeError `from` throws for the inputs, failing the test when it throws none. */
+function fromRefusal(inputs: unknown): string {
+  let thrown: unknown;
+
+  try {
+    SocialRecoveryBuilder.from(inputs as never);
+  } catch (caught) {
+    thrown = caught;
+  }
+
+  expect(thrown).toBeInstanceOf(TypeError);
+
+  return (thrown as TypeError).message;
+}
+
+describe('an inputs object carrying a member of its own', () => {
+  it.each([
+    ['a misspelt configuration on a holder', 'configuraton', (provider: ChainDouble) => ({ ...holder(provider), configuraton: { simulate: false } })],
+    ['a singular binding list on a holder', 'deviceBinding', (provider: ChainDouble) => ({ ...holder(provider), deviceBinding: ['none'] })],
+    ['an unknown member on a holder with no descriptor', 'descripton', (provider: ChainDouble) => ({ provider, account: ACCOUNT, descripton: DESCRIPTOR })],
+  ])('refuses %s with a TypeError naming it at from, before any read', (_name, member, make) => {
+    const provider = new ChainDouble();
+
+    expect(fromRefusal(make(provider))).toContain(member);
+    expect(provider.reads).toEqual([]);
+  });
+
+  it.each([
+    ['a chain id', 'configuration', { chainId: SEPOLIA, configuration: { simulate: false } }],
+    ['a descriptor', 'configuration', { descriptor: DESCRIPTOR, configuration: {} }],
+    ['a chain id', 'account', { chainId: SEPOLIA, account: ACCOUNT }],
+    ['a descriptor', 'account', { descriptor: DESCRIPTOR, account: ACCOUNT }],
+    ['a descriptor', 'deviceBinding', { descriptor: DESCRIPTOR, deviceBinding: ['none'] }],
+  ])('refuses an approver over %s carrying %s with a TypeError naming it at from', (_name, member, inputs) => {
+    expect(fromRefusal(inputs)).toContain(member);
+  });
+
+  it('accepts a member it inherits, on a holder and on an approver', async () => {
+    const holderInputs = Object.assign(Object.create({ configuraton: { simulate: false }, deviceBinding: ['none'] }) as object, holder());
+    const approverInputs = Object.assign(Object.create({ configuration: {}, configuraton: {} }) as object, { descriptor: DESCRIPTOR });
+
+    await SocialRecoveryBuilder.from(holderInputs as never).buildSetupClient();
+
+    expect(() => SocialRecoveryBuilder.from(approverInputs as never).buildMethodsOrchestrator()).not.toThrow();
+  });
+
+  it('accepts every member the two shapes name', async () => {
+    const provider = new ChainDouble();
+    const full = { provider, account: ACCOUNT, descriptor: DESCRIPTOR, chainId: SEPOLIA, configuration: {}, deviceBindings: ['none'] as const };
+
+    await SocialRecoveryBuilder.from(full).buildSetupClient();
+
+    expect(() => SocialRecoveryBuilder.from({ descriptor: DESCRIPTOR, chainId: SEPOLIA, deviceBindings: ['none'] }).buildMethodsOrchestrator()).not.toThrow();
   });
 });

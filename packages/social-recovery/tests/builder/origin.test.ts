@@ -20,6 +20,7 @@ import {
 import { DESCRIPTOR, EXTRA_MODULE } from './doubles';
 
 const DEFAULTS = [BUILDER_SEPOLIA_DESCRIPTOR, BUILDER_MAINNET_DESCRIPTOR] as const;
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
 
 /** The descriptor origin a directly constructed setup client hands its judgments. */
 async function originSeenBy(descriptor: DeploymentDescriptor): Promise<unknown> {
@@ -66,6 +67,32 @@ describe('descriptorOriginOf', () => {
     for (const change of changes) expect(descriptorOriginOf({ ...descriptor, ...change }), JSON.stringify(change)).toBe('integrator');
   });
 
+  it.each(DEFAULTS)('reads integrator for every member of the default of chain $chainId changed in turn, whatever members the record carries', (descriptor) => {
+    const members = Object.keys(descriptor);
+
+    expect(members.length).toBeGreaterThanOrEqual(13);
+
+    for (const member of members) {
+      const value = (descriptor as Record<string, unknown>)[member];
+      let changed: unknown;
+
+      if (Array.isArray(value)) changed = [...(value as unknown[]), EXTRA_MODULE];
+      else if (typeof value === 'number') changed = value + 1;
+      else if (typeof value === 'string' && /^0x[0-9a-fA-F]{40}$/.test(value)) changed = EXTRA_MODULE;
+      else if (typeof value === 'string') changed = `${value}1`;
+      else throw new Error(`no change written for the member ${member}`);
+
+      expect(descriptorOriginOf({ ...descriptor, [member]: changed }), member).toBe('integrator');
+    }
+  });
+
+  it.each(DEFAULTS)('reads integrator for an audited list of the default of chain $chainId holding any entry, the zero address included', (descriptor) => {
+    for (const member of ['shippedMethods', 'auditedActions'] as const) {
+      expect(descriptorOriginOf({ ...descriptor, [member]: [EXTRA_MODULE] }), member).toBe('integrator');
+      expect(descriptorOriginOf({ ...descriptor, [member]: [ZERO_ADDRESS] }), member).toBe('integrator');
+    }
+  });
+
   it('reads integrator for a zero descriptor on a chain no default ships for', () => {
     expect(descriptorOriginOf({ ...BUILDER_SEPOLIA_DESCRIPTOR, chainId: 31_337 })).toBe('integrator');
   });
@@ -89,5 +116,21 @@ describe('the setup client', () => {
 
   it('derives the kit origin from a shipped default', async () => {
     expect(await originSeenBy(BUILDER_SEPOLIA_DESCRIPTOR)).toBe('kit');
+  });
+});
+
+describe('the setup client construction', () => {
+  it.each([
+    ['a working descriptor', SETUP_DESCRIPTOR],
+    ['a shipped default', BUILDER_SEPOLIA_DESCRIPTOR],
+  ])('asks the provider nothing over %s', (_name, descriptor) => {
+    const made = doubles(defaultWorld());
+
+    const client = new SetupClient(made.provider, descriptor, ACCOUNT, OTHER_ACTION, CONFIGURATION, made.manager, made.action, made.events, defaultRegistry(), codecFor(OTHER_ACTION));
+
+    expect(client).toBeInstanceOf(SetupClient);
+
+    expect(made.seen.provider).toEqual([]);
+    expect(made.seen.parts).toEqual([]);
   });
 });

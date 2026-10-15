@@ -7,34 +7,55 @@ import type { DescriptorOrigin } from '../types/validation';
 export const shippedDescriptor = (chainId: number): DeploymentDescriptor | undefined =>
   Object.hasOwn(BUILDER_DEFAULT_DESCRIPTORS, chainId) ? BUILDER_DEFAULT_DESCRIPTORS[chainId] : undefined;
 
+/** Whether two values are the same; addresses compare checksummed. */
+const same = <T>(left: T, right: T): boolean => left === right;
+
 /** Whether two checksummed address lists name the same addresses in the same order. */
 const sameList = (left: readonly Address[], right: readonly Address[]): boolean =>
   left.length === right.length && left.every((entry, index) => entry === right[index]);
 
+/** One comparison per descriptor member: a member added to the record does not compile until it is named here. */
+const DESCRIPTOR_MEMBER_EQUALITY: { [K in keyof DeploymentDescriptor]: (left: DeploymentDescriptor[K], right: DeploymentDescriptor[K]) => boolean } = {
+  chainId: same,
+  manager: same,
+  methodEcdsa: same,
+  methodPasskey: same,
+  methodAadhaar: same,
+  methodZkpassport: same,
+  action: same,
+  servedImplementation: same,
+  deployedAt: same,
+  digestVersion: same,
+  managerVersion: same,
+  shippedMethods: sameList,
+  auditedActions: sameList,
+};
+
+/** Whether the two descriptors agree on one member. */
+const sameMember = <K extends keyof DeploymentDescriptor>(member: K, left: DeploymentDescriptor, right: DeploymentDescriptor): boolean => {
+  const equal: (left: DeploymentDescriptor[K], right: DeploymentDescriptor[K]) => boolean = DESCRIPTOR_MEMBER_EQUALITY[member];
+
+  return equal(left[member], right[member]);
+};
+
 /**
- * `kit` where the descriptor equals its chain's shipped descriptor in every field, addresses compared checksummed and the
- * audited sets in order; `integrator` otherwise. Throws a `TypeError` or `RangeError` on a malformed descriptor.
+ * The origin of a descriptor already checked by `checkedDescriptor`: `kit` where it equals its chain's shipped descriptor
+ * in every member, `integrator` otherwise. The shipped descriptors are frozen and checksummed where they are defined.
  */
-export function descriptorOriginOf(descriptor: DeploymentDescriptor): DescriptorOrigin {
-  const given = checkedDescriptor(descriptor, 'descriptor');
-  const shipped = shippedDescriptor(given.chainId);
+export function checkedDescriptorOrigin(descriptor: DeploymentDescriptor): DescriptorOrigin {
+  const shipped = shippedDescriptor(descriptor.chainId);
 
   if (shipped === undefined) return 'integrator';
 
-  const kit = checkedDescriptor(shipped, 'shipped descriptor');
-  const same =
-    given.manager === kit.manager &&
-    given.methodEcdsa === kit.methodEcdsa &&
-    given.methodPasskey === kit.methodPasskey &&
-    given.methodAadhaar === kit.methodAadhaar &&
-    given.methodZkpassport === kit.methodZkpassport &&
-    given.action === kit.action &&
-    given.servedImplementation === kit.servedImplementation &&
-    given.deployedAt === kit.deployedAt &&
-    given.digestVersion === kit.digestVersion &&
-    given.managerVersion === kit.managerVersion &&
-    sameList(given.shippedMethods, kit.shippedMethods) &&
-    sameList(given.auditedActions, kit.auditedActions);
+  const members = Object.keys(DESCRIPTOR_MEMBER_EQUALITY) as (keyof DeploymentDescriptor)[];
 
-  return same ? 'kit' : 'integrator';
+  return members.every((member) => sameMember(member, descriptor, shipped)) ? 'kit' : 'integrator';
+}
+
+/**
+ * `kit` where the descriptor equals its chain's shipped descriptor in every member, addresses compared checksummed and the
+ * audited sets in order; `integrator` otherwise. Throws a `TypeError` or `RangeError` on a malformed descriptor.
+ */
+export function descriptorOriginOf(descriptor: DeploymentDescriptor): DescriptorOrigin {
+  return checkedDescriptorOrigin(checkedDescriptor(descriptor, 'descriptor'));
 }

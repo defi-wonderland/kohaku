@@ -37,7 +37,7 @@ import { checkedReading } from './reading';
  * call throws a `TypeError`; a failed build caches nothing and reopens them. A builder given no provider and no account
  * builds the methods orchestrator alone.
  */
-export class SocialRecoveryBuilder<I extends SocialRecoveryInputs = SocialRecoveryInputs> {
+export class SocialRecoveryBuilder<I extends SocialRecoveryInputs = SocialRecoveryHolderInputs> {
   /**
    * The inputs' shape, carried in the type alone: it keeps a builder over an approver's inputs from passing for a holder's,
    * so the client builds stay compile errors there for every consumer, the published declarations included.
@@ -76,22 +76,26 @@ export class SocialRecoveryBuilder<I extends SocialRecoveryInputs = SocialRecove
 
   /** Replaces the shipped policy manager with this instance. */
   withPolicyManager(manager: BuilderPolicyManager): this {
-    return this.#set({ policyManager: checkedPolicyManager(manager) });
+    return this.#set(() => ({ policyManager: checkedPolicyManager(manager) }));
   }
 
   /** Replaces the shipped event manager with this instance, or constructs the shipped one with these arguments. */
   withEventManager(manager: IEventManager | EventManagerOptions): this {
-    return this.#set({ eventManager: checkedEventManager(manager) });
+    return this.#set(() => ({ eventManager: checkedEventManager(manager) }));
   }
 
   /** Binds the clients to this action address, served by the part or factory given, else by the shipped Ambire part. */
   withRecoveryAction(address: Address, implementation?: RecoveryActionPart | RecoveryActionFactory): this {
-    return this.#set({ action: checkedAction(address, implementation) });
+    return this.#set(() => ({ action: checkedAction(address, implementation) }));
   }
 
-  /** Adds an action codec, an instance or the shipped codec's arguments, keyed on every action it serves. */
+  /**
+   * Adds an action codec, an instance or the shipped codec's arguments, keyed on every action it serves; its actions are
+   * refused at the call where empty, repeated or malformed. The same instance added again is keyed once; two different
+   * codecs serving one action are a `TypeError` at the first build.
+   */
   withCodec(codec: IActionCodec | ActionCodecOptions): this {
-    return this.#set({ codecs: [...this.#settings.codecs, checkedCodec(codec)] });
+    return this.#set(() => ({ codecs: [...this.#settings.codecs, checkedCodec(codec)] }));
   }
 
   /**
@@ -100,12 +104,12 @@ export class SocialRecoveryBuilder<I extends SocialRecoveryInputs = SocialRecove
    * added methods claiming one module are a `TypeError` at the first build.
    */
   withMethod(method: IRecoveryMethod): this {
-    return this.#set({ methods: [...this.#settings.methods, checkedMethod(method)] });
+    return this.#set(() => ({ methods: [...this.#settings.methods, checkedMethod(method)] }));
   }
 
   /** Hands both clients the signer recovery their removed-key inference reads. */
   withSignerRecovery(signerRecovery: ISignerRecovery): this {
-    return this.#set({ signerRecovery: checkedSignerRecovery(signerRecovery) });
+    return this.#set(() => ({ signerRecovery: checkedSignerRecovery(signerRecovery) }));
   }
 
   /**
@@ -113,12 +117,12 @@ export class SocialRecoveryBuilder<I extends SocialRecoveryInputs = SocialRecove
    * the reading lists; where any of them failed, both clients and the handed-out action part refuse every prepare.
    */
   withVersionEscape(): this {
-    return this.#set({ versionEscape: true });
+    return this.#set(() => ({ versionEscape: true }));
   }
 
   /** Takes another builder's reading of the same chain and manager in place of reading the manager again. */
   withManagerReading(reading: ManagerReading): this {
-    return this.#set({ reading: checkedReading(reading) });
+    return this.#set(() => ({ reading: checkedReading(reading) }));
   }
 
   /** This builder's reading of the manager, once a build has taken it. */
@@ -154,13 +158,16 @@ export class SocialRecoveryBuilder<I extends SocialRecoveryInputs = SocialRecove
     return this.#memo.orchestrator(this.#inputs, this.#settings);
   }
 
-  /** Applies one setter's checked value, refusing with a `TypeError` once a build has succeeded or while one is still running. */
-  #set(change: Partial<BuilderSettings>): this {
+  /**
+   * Applies one setter's change, refusing with a `TypeError` once a build has succeeded or while one is still running before
+   * `change` checks the setter's argument, so the builder's state answers first.
+   */
+  #set(change: () => Partial<BuilderSettings>): this {
     if (this.#memo.built) throw new TypeError(BUILDER_FROZEN_MESSAGE);
 
     if (this.#memo.frozen) throw new TypeError(BUILDER_PENDING_MESSAGE);
 
-    this.#settings = { ...this.#settings, ...change };
+    this.#settings = { ...this.#settings, ...change() };
 
     return this;
   }

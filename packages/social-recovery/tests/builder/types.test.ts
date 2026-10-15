@@ -47,4 +47,17 @@ describe('the builder types', () => {
     // @ts-expect-error the one-call build is a holder's
     expect(await failureOf(() => SocialRecoveryBuilder.build({ descriptor: DESCRIPTOR }))).toBeInstanceOf(TypeError);
   });
+
+  it('default the generic to the holder shape: an annotated holder builder builds, an annotated approver does not compile', async () => {
+    const holderInputs: SocialRecoveryHolderInputs = { provider: new ChainDouble(), account: ACCOUNT, descriptor: DESCRIPTOR };
+    const holderBuilder: SocialRecoveryBuilder = SocialRecoveryBuilder.from(holderInputs);
+    const kit = await holderBuilder.build();
+
+    expect(kit.setupClient).toBe(await holderBuilder.buildSetupClient());
+
+    // @ts-expect-error the default builder is a holder's, and an approver's inputs are not
+    const approverBuilder: SocialRecoveryBuilder = SocialRecoveryBuilder.from({ chainId: 1 });
+
+    expect(approverBuilder).toBeInstanceOf(SocialRecoveryBuilder);
+  });
 });

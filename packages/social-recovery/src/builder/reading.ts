@@ -13,7 +13,7 @@ import { assertArray, assertBool, assertBytes, assertBytes32, assertObject, asse
 import { isProviderRevert, type Address, type Domain, type Hex, type IProvider, type NamedBlockTag } from '../interfaces';
 import { decodeReturn } from '../policy-manager/chain';
 import { domainFrom } from '../policy-manager/records';
-import type { BuilderEscapedCheck, ManagerAnswers, ManagerReading } from '../types/builder';
+import type { BuilderEscapedCheck, ManagerReading } from '../types/builder';
 
 /** One view call to the manager at the read tag; a revert answers nothing, any other rejection propagates as itself. */
 async function viewCall(provider: IProvider, manager: Address, data: Hex, tag: NamedBlockTag): Promise<unknown> {
@@ -117,6 +117,3 @@ export function checkedReading(value: unknown): ManagerReading {
     versionMismatch: reading.versionMismatch,
   });
 }
-
-/** The answers a reading carries, judged again by the builder that takes it. */
-export const answersOf = (reading: ManagerReading): ManagerAnswers => ({ domain: reading.domain, version: reading.version });

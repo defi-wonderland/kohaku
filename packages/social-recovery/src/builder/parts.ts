@@ -9,12 +9,12 @@ import type {
   BuilderRegistries,
   BuilderSession,
   BuilderSettings,
-  EventManagerOptions,
   ManagerReading,
   RecoveryActionContext,
   RecoveryActionPart,
 } from '../types/builder';
 import { assertActionPart } from './options';
+import { isEventManager } from './shapes';
 import { actionView, moduleReadsView } from './views';
 
 /** The action part the integrator handed over, else the one its factory constructs, else the shipped Ambire part. */
@@ -38,9 +38,9 @@ function actionPart(implementation: BuilderSettings['action'], context: Recovery
 
 /** The event manager handed over, else the shipped one over the method registry, its chunk width from its own arguments or the configuration. */
 function eventManager(holder: BuilderHolder, descriptor: DeploymentDescriptor, registries: BuilderRegistries, given: BuilderSettings['eventManager']): IEventManager {
-  if (given !== undefined && typeof (given as Partial<IEventManager>).fetch === 'function') return given as IEventManager;
+  if (given !== undefined && isEventManager(given)) return given;
 
-  const logChunkSize = (given as EventManagerOptions | undefined)?.logChunkSize ?? holder.configuration.logChunkSize;
+  const logChunkSize = given?.logChunkSize ?? holder.configuration.logChunkSize;
 
   return new EventManager(holder.provider, descriptor, holder.account, registries.action, registries.methods, { logChunkSize });
 }

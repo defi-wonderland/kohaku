@@ -114,8 +114,8 @@ async function attemptBefore<T>(run: () => Promise<T>, bound: ReadBound, life: L
 /**
  * Runs one read against the Read RPC URL inside the concurrency cap, retrying it after each backoff wait while the
  * endpoint answers with its rate limit. Any other error fails at once; `life` ending stops the retries. Nothing is
- * sent, and no answer accepted, once `bound`'s deadline passed: the action then ends with the bound's error. A slot is
- * released only once its attempt settled.
+ * sent, and no answer accepted, once `bound`'s deadline passed, nor after a wait cut short by it: the action then ends
+ * with the bound's error. A slot is released only once its attempt settled.
  */
 export async function throttled<T>(run: () => Promise<T>, life: Lifetime, bound = readBound(UNNAMED_READ)): Promise<T> {
   for (let attempt = 0; ; attempt += 1) {
@@ -142,8 +142,13 @@ export async function throttled<T>(run: () => Promise<T>, life: Lifetime, bound 
 
     if (!isRateLimited(failure) || wait === undefined) throw failure;
 
+    const left = remaining(bound);
+
     note(`read endpoint rate-limited, retrying in ${wait} ms`);
-    await new Promise((resolve) => setTimeout(resolve, Math.min(wait, remaining(bound))));
+    await new Promise((resolve) => setTimeout(resolve, Math.min(wait, left)));
+
+    // A wait cut to the deadline ends the read there, even when its timer woke a moment early.
+    if (left < wait) expire(bound, life);
   }
 }
 

@@ -1,7 +1,18 @@
 import fc from 'fast-check';
-import { beforeAll, describe, expect, it } from 'vitest';
-import { KitRefusalError, SocialRecoveryBuilder, type BuilderEscapedCheck } from '../../src/index';
-import { ChainDouble, FC_PARAMS, OTHER_MANAGER, TIMEOUT, failureOf, goodDomain, goodWorld, holder, type ChainWorld, type DomainAnswer } from './doubles';
+import { describe, expect, it } from 'vitest';
+import {
+  BUILDER_CHAIN_MISMATCH_MESSAGE,
+  BUILDER_DIGEST_VERSION_MESSAGE,
+  BUILDER_DOMAIN_CHAIN_MESSAGE,
+  BUILDER_DOMAIN_FIELDS_MESSAGE,
+  BUILDER_DOMAIN_NAME_MESSAGE,
+  BUILDER_NO_DOMAIN_MESSAGE,
+  BUILDER_VERIFYING_CONTRACT_MESSAGE,
+  KitRefusalError,
+  SocialRecoveryBuilder,
+  type BuilderEscapedCheck,
+} from '../../src/index';
+import { ChainDouble, FC_PARAMS, OTHER_MANAGER, TIMEOUT, goodDomain, goodWorld, holder, type ChainWorld, type DomainAnswer } from './doubles';
 
 type Fault = 'chain' | 'domain-revert' | 'domain-chain' | 'verifying' | 'fields' | 'version' | 'name' | 'release';
 
@@ -47,19 +58,20 @@ async function outcomeOf(faults: ReadonlySet<Fault>, escape: boolean): Promise<O
   return { escaped: reading.escaped, versionMismatch: reading.versionMismatch, reads: provider.reads };
 }
 
-const single = new Map<Fault, string>();
-
-beforeAll(async () => {
-  for (const fault of FAULTS.filter((name) => name !== 'release')) {
-    const thrown = await failureOf(() => SocialRecoveryBuilder.from(holder(new ChainDouble(worldWith(new Set([fault]))))).buildSetupClient());
-
-    single.set(fault, (thrown as Error).message);
-  }
-});
+/** The refusal each check carries, by the check's name: taken from the exported constants, never from a build's own answer. */
+const MESSAGE_OF: Readonly<Record<Exclude<Fault, 'release'>, string>> = {
+  chain: BUILDER_CHAIN_MISMATCH_MESSAGE,
+  'domain-revert': BUILDER_NO_DOMAIN_MESSAGE,
+  'domain-chain': BUILDER_DOMAIN_CHAIN_MESSAGE,
+  verifying: BUILDER_VERIFYING_CONTRACT_MESSAGE,
+  fields: BUILDER_DOMAIN_FIELDS_MESSAGE,
+  version: BUILDER_DIGEST_VERSION_MESSAGE,
+  name: BUILDER_DOMAIN_NAME_MESSAGE,
+};
 
 /** The messages the first failing check may carry, or the reading a passing build records. */
 function expected(faults: ReadonlySet<Fault>, escape: boolean): { readonly messages?: readonly string[]; readonly escaped?: readonly BuilderEscapedCheck[] } {
-  const messagesOf = (...names: Fault[]) => ({ messages: names.filter((name) => faults.has(name)).map((name) => single.get(name)!) });
+  const messagesOf = (...names: Fault[]) => ({ messages: names.filter((name) => faults.has(name)).map((name) => MESSAGE_OF[name as Exclude<Fault, 'release'>]) });
 
   if (faults.has('chain')) return messagesOf('chain');
 
@@ -115,7 +127,7 @@ describe('the construction sequence over arbitrary wrong answers', () => {
         fc.asyncProperty(fc.constantFrom(...FAULTS.filter((name) => name !== 'release')), async (fault) => {
           const outcome = await outcomeOf(new Set([fault]), false);
 
-          expect(outcome.message).toBe(single.get(fault));
+          expect(outcome.message).toBe(MESSAGE_OF[fault as Exclude<Fault, 'release'>]);
         }),
         FC_PARAMS,
       );

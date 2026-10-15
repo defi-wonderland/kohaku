@@ -1,4 +1,4 @@
-import { BUILDER_FROZEN_MESSAGE } from '../constants';
+import { BUILDER_FROZEN_MESSAGE, BUILDER_PENDING_MESSAGE } from '../constants';
 import type {
   Address,
   IActionCodec,
@@ -33,11 +33,16 @@ import { checkedReading } from './reading';
 /**
  * The one class that constructs the kit's classes: it fills every part the integrator did not hand over with the shipped one,
  * constructs each once and hands the same instances to both clients. The first build that reaches the chain runs the
- * construction checks; every build memoizes, and after the first successful one every `with*` call throws a `TypeError`.
- * A builder given no provider and no account builds the methods orchestrator alone.
+ * construction checks; every build memoizes, and once a build has succeeded or while one is still running every `with*`
+ * call throws a `TypeError`; a failed build caches nothing and reopens them. A builder given no provider and no account
+ * builds the methods orchestrator alone.
  */
 export class SocialRecoveryBuilder<I extends SocialRecoveryInputs = SocialRecoveryInputs> {
-  readonly #source: I;
+  /**
+   * The inputs' shape, carried in the type alone: it keeps a builder over an approver's inputs from passing for a holder's,
+   * so the client builds stay compile errors there for every consumer, the published declarations included.
+   */
+  declare protected readonly inputsShape?: I;
 
   readonly #inputs: BuilderInputs;
 
@@ -56,8 +61,7 @@ export class SocialRecoveryBuilder<I extends SocialRecoveryInputs = SocialRecove
 
   /** Throws a `TypeError` or `RangeError` on malformed inputs, before any provider call. */
   private constructor(inputs: I) {
-    this.#source = inputs;
-    this.#inputs = checkedInputs(this.#source);
+    this.#inputs = checkedInputs(inputs);
   }
 
   /** A fresh builder over the inputs, checked before any provider call. */
@@ -90,7 +94,11 @@ export class SocialRecoveryBuilder<I extends SocialRecoveryInputs = SocialRecove
     return this.#set({ codecs: [...this.#settings.codecs, checkedCodec(codec)] });
   }
 
-  /** Adds a method implementation, keyed on the modules it claims under the descriptor; the shipped methods keep the modules no one claims. */
+  /**
+   * Adds a method implementation, keyed on the modules it claims under the descriptor. An added method takes the modules it
+   * claims from the shipped `walletMethod()` and `passkeyMethod()`, which keep only the modules no added method claims; two
+   * added methods claiming one module are a `TypeError` at the first build.
+   */
   withMethod(method: IRecoveryMethod): this {
     return this.#set({ methods: [...this.#settings.methods, checkedMethod(method)] });
   }
@@ -120,9 +128,7 @@ export class SocialRecoveryBuilder<I extends SocialRecoveryInputs = SocialRecove
 
   /** The setup client, the recovery client and the methods orchestrator over one set of shared parts. */
   async build(this: SocialRecoveryBuilder<SocialRecoveryHolderInputs>): Promise<SocialRecoveryKit> {
-    const session = await this.#built();
-
-    return this.#memo.kit(session, this.buildMethodsOrchestrator());
+    return await this.#memo.kit(this.#inputs, this.#settings);
   }
 
   async buildSetupClient(this: SocialRecoveryBuilder<SocialRecoveryHolderInputs>): Promise<ISetupClient> {
@@ -148,9 +154,11 @@ export class SocialRecoveryBuilder<I extends SocialRecoveryInputs = SocialRecove
     return this.#memo.orchestrator(this.#inputs, this.#settings);
   }
 
-  /** Applies one setter's checked value, refusing with a `TypeError` once the builder has built. */
+  /** Applies one setter's checked value, refusing with a `TypeError` once a build has succeeded or while one is still running. */
   #set(change: Partial<BuilderSettings>): this {
-    if (this.#memo.frozen) throw new TypeError(BUILDER_FROZEN_MESSAGE);
+    if (this.#memo.built) throw new TypeError(BUILDER_FROZEN_MESSAGE);
+
+    if (this.#memo.frozen) throw new TypeError(BUILDER_PENDING_MESSAGE);
 
     this.#settings = { ...this.#settings, ...change };
 

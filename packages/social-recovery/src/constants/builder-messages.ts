@@ -34,8 +34,11 @@ export const BUILDER_READING_MISMATCH_MESSAGE = 'the manager reading was taken o
 /** The refusal message of the disarming write on an action part handed out for a deployment version this build does not serve. */
 export const BUILDER_VERSION_ESCAPED_MESSAGE = 'this action part prepares nothing: the deployment answers a version this build does not serve';
 
-/** The misuse message of a `with*` call on a builder that has built or is still building. */
-export const BUILDER_FROZEN_MESSAGE = 'the builder has built or is building; its parts can no longer change';
+/** The misuse message of a `with*` call on a builder that has built. */
+export const BUILDER_FROZEN_MESSAGE = 'the builder has built; its parts can no longer change';
+
+/** The misuse message of a `with*` call while a build is still running; the parts can change again if that build fails. */
+export const BUILDER_PENDING_MESSAGE = 'the builder is still building; its parts can change again only if that build fails';
 
 /** The misuse message of a client build on a builder given no provider and no account. */
 export const BUILDER_APPROVER_MESSAGE = 'this builder has no provider or account; it builds the methods orchestrator alone';

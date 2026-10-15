@@ -313,3 +313,52 @@ export function deepFrozen(value: unknown): boolean {
 
   return Object.values(value).every(deepFrozen);
 }
+
+/** A chain double whose `chainId()` waits until the test opens the gate, so a build can be held pending. */
+export class GatedDouble extends ChainDouble {
+  #open: Promise<void> = Promise.resolve();
+  #release: () => void = () => undefined;
+
+  /** Holds every later `chainId()` until `release()`. */
+  hold(): void {
+    this.#open = new Promise((resolve) => {
+      this.#release = resolve;
+    });
+  }
+
+  /** Lets the held reads answer from the world as it then stands. */
+  release(world?: ChainWorld): void {
+    if (world !== undefined) this.world = world;
+
+    this.#release();
+  }
+
+  override async chainId(): Promise<number> {
+    await this.#open;
+
+    return super.chainId();
+  }
+}
+
+/** A mutable method implementation over the shipped wallet method, claiming the given modules with the given device binding. */
+export function methodClaiming(modules: readonly Address[], deviceBinding: string): IRecoveryMethod & { deviceBinding: string } {
+  const base = walletMethod();
+  const state = { deviceBinding };
+
+  return new Proxy(base, {
+    get: (target, key) => {
+      if (key === 'modules') return () => modules;
+
+      if (key === 'deviceBinding') return state.deviceBinding;
+
+      return Reflect.get(target, key, target);
+    },
+    set: (_target, key, value) => {
+      if (key !== 'deviceBinding') return false;
+
+      state.deviceBinding = value as string;
+
+      return true;
+    },
+  }) as IRecoveryMethod & { deviceBinding: string };
+}

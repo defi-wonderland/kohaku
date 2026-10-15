@@ -4,6 +4,7 @@ import {
   AmbireActionCodec,
   AmbireRecoveryAction,
   BUILDER_DEFAULT_CONFIGURATION,
+  BUILDER_MODULE_CLAIMED_MESSAGE,
   DEVICE_BINDINGS,
   EventManager,
   MethodsOrchestrator,
@@ -11,6 +12,8 @@ import {
   RecoveryClient,
   SetupClient,
   SocialRecoveryBuilder,
+  passkeyMethod,
+  walletMethod,
   type IActionCodec,
   type MethodRegistry,
   type RecoveryActionContext,
@@ -123,6 +126,12 @@ const recoveryArgs = () => {
   return { provider, descriptor, account, action, configuration, policyManager, recoveryAction, events, methods, codec, signerRecovery, versionEscaped };
 };
 
+/** The registry's keys, checksummed and sorted. */
+const keysOf = (methods: MethodRegistry) => [...methods.keys()].map((key) => getAddress(key)).sort();
+
+/** The registry entry for a module, whatever case the key carries. */
+const entryOf = (methods: MethodRegistry, module: string) => [...methods.entries()].find(([key]) => getAddress(key) === getAddress(module))?.[1];
+
 const orchestratorArgs = () => {
   const [methods, codecs, bindings] = only('MethodsOrchestrator');
 
@@ -204,11 +213,74 @@ describe('the parts the builder constructs', () => {
     expect([...orchestratorArgs().methods.keys()].map((key) => getAddress(key)).sort()).toEqual([METHOD_ECDSA, METHOD_PASSKEY, EXTRA_MODULE].sort());
   });
 
-  it('refuses a module two implementations claim with a TypeError at the first build', async () => {
-    const thrown = await failureOf(() => SocialRecoveryBuilder.from(holder()).withMethod(methodServing([METHOD_PASSKEY])).build());
+  it('refuses a module two added implementations claim with a TypeError at the first build', async () => {
+    const thrown = await failureOf(() =>
+      SocialRecoveryBuilder.from(holder()).withMethod(methodServing([EXTRA_MODULE])).withMethod(methodServing([EXTRA_MODULE])).build(),
+    );
 
     expect(thrown).toBeInstanceOf(TypeError);
+    expect((thrown as TypeError).message).toContain(BUILDER_MODULE_CLAIMED_MESSAGE);
     expect(of('SetupClient')).toHaveLength(0);
+  });
+
+  it('refuses two added implementations claiming a default module', async () => {
+    const thrown = await failureOf(() =>
+      SocialRecoveryBuilder.from(holder()).withMethod(methodServing([METHOD_ECDSA])).withMethod(walletMethod()).build(),
+    );
+
+    expect(thrown).toBeInstanceOf(TypeError);
+    expect((thrown as TypeError).message).toContain(BUILDER_MODULE_CLAIMED_MESSAGE);
+  });
+
+  it.each([
+    ['the wallet module', METHOD_ECDSA, METHOD_PASSKEY],
+    ['the passkey module', METHOD_PASSKEY, METHOD_ECDSA],
+  ])('lets an added method claiming %s replace the shipped one there alone', async (_name, claimed, kept) => {
+    const added = methodServing([claimed]);
+
+    await SocialRecoveryBuilder.from(holder()).withMethod(added).build();
+
+    const methods = orchestratorArgs().methods;
+
+    expect(keysOf(methods)).toEqual([METHOD_ECDSA, METHOD_PASSKEY].sort());
+    expect(entryOf(methods, claimed)).toBe(added);
+    expect(entryOf(methods, kept)).not.toBe(added);
+    expect(entryOf(methods, kept)?.deviceBinding).toBe((claimed === METHOD_ECDSA ? passkeyMethod() : walletMethod()).deviceBinding);
+    expect(entryOf(setupArgs().methods as MethodRegistry, claimed)).toBe(added);
+    expect(entryOf(recoveryArgs().methods as MethodRegistry, claimed)).toBe(added);
+  });
+
+  it('lets a shipped implementation registered again replace the default instance', async () => {
+    const [wallet, passkey] = [walletMethod(), passkeyMethod()];
+
+    await SocialRecoveryBuilder.from(holder()).withMethod(wallet).withMethod(passkey).build();
+
+    expect(entryOf(orchestratorArgs().methods, METHOD_ECDSA)).toBe(wallet);
+    expect(entryOf(orchestratorArgs().methods, METHOD_PASSKEY)).toBe(passkey);
+  });
+
+  it('lets one added method take both default modules and a new one', async () => {
+    const added = methodServing([METHOD_ECDSA, METHOD_PASSKEY, EXTRA_MODULE]);
+
+    await SocialRecoveryBuilder.from(holder()).withMethod(added).build();
+
+    const methods = orchestratorArgs().methods;
+
+    expect(keysOf(methods)).toEqual([METHOD_ECDSA, METHOD_PASSKEY, EXTRA_MODULE].sort());
+
+    for (const module of [METHOD_ECDSA, METHOD_PASSKEY, EXTRA_MODULE]) expect(entryOf(methods, module)).toBe(added);
+  });
+
+  it('keeps the shipped method on its module when the added one claims another module', async () => {
+    const added = methodServing([METHOD_ECDSA, EXTRA_MODULE]);
+
+    await SocialRecoveryBuilder.from(holder()).withMethod(added).build();
+
+    const methods = orchestratorArgs().methods;
+
+    expect(keysOf(methods)).toEqual([METHOD_ECDSA, METHOD_PASSKEY, EXTRA_MODULE].sort());
+    expect(entryOf(methods, EXTRA_MODULE)).toBe(added);
+    expect(entryOf(methods, METHOD_PASSKEY)).not.toBe(added);
   });
 
   it('constructs nothing while the setters run', () => {

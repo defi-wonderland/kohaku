@@ -10,15 +10,16 @@ import type { ActionCodecOptions, BuilderRegistries, BuilderSettings } from '../
 const claimedModules = (method: IRecoveryMethod, descriptor: DeploymentDescriptor): Address[] =>
   normalizeAddresses(method.modules(descriptor), 'method.modules(descriptor)').filter((module) => module !== FORMATS_ZERO_ADDRESS);
 
-/**
- * The method registry keyed on each implementation's modules, the shipped wallet and passkey methods registered first and
- * then every added one; a module two implementations claim is a `TypeError`.
- */
-function methodRegistry(descriptor: DeploymentDescriptor, registered: readonly IRecoveryMethod[]): Map<Address, IRecoveryMethod> {
+/** Keys each implementation on the modules it claims outside `taken`, refusing a module another implementation already holds. */
+function claimed(
+  descriptor: DeploymentDescriptor,
+  methods: readonly IRecoveryMethod[],
+  taken: ReadonlyMap<Address, IRecoveryMethod> = new Map(),
+): Map<Address, IRecoveryMethod> {
   const registry = new Map<Address, IRecoveryMethod>();
 
-  for (const method of [walletMethod(), passkeyMethod(), ...registered]) {
-    for (const module of claimedModules(method, descriptor)) {
+  for (const method of methods) {
+    for (const module of claimedModules(method, descriptor).filter((claim) => !taken.has(claim))) {
       const holder = registry.get(module);
 
       if (holder !== undefined && holder !== method) throw new TypeError(`${BUILDER_MODULE_CLAIMED_MESSAGE} ${module}`);
@@ -28,6 +29,17 @@ function methodRegistry(descriptor: DeploymentDescriptor, registered: readonly I
   }
 
   return registry;
+}
+
+/**
+ * The method registry keyed on each implementation's modules: an added method takes the modules it claims from the shipped
+ * wallet and passkey methods, which keep only the modules no added method claims; a module two added methods claim is a
+ * `TypeError`.
+ */
+function methodRegistry(descriptor: DeploymentDescriptor, added: readonly IRecoveryMethod[]): Map<Address, IRecoveryMethod> {
+  const overrides = claimed(descriptor, added);
+
+  return new Map([...claimed(descriptor, [walletMethod(), passkeyMethod()], overrides), ...overrides]);
 }
 
 /** Whether a registered codec entry is an instance rather than the shipped codec's arguments. */

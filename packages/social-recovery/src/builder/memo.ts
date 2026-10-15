@@ -29,9 +29,12 @@ async function constructedSession(
   return assembledSession(holder, descriptor, reading, registries() ?? builtRegistries(descriptor, settings), settings);
 }
 
-/** What one builder has constructed: each entry once, frozen against further settings after the first success. */
+/**
+ * What one builder has constructed: each entry once, committed only when the build asking for it succeeds, and frozen
+ * against further settings after the first success.
+ */
 export class BuilderMemo {
-  #frozen = false;
+  #built = false;
   #pending: Promise<BuilderSession> | undefined;
   #session: BuilderSession | undefined;
   #registries: BuilderRegistries | undefined;
@@ -40,7 +43,12 @@ export class BuilderMemo {
 
   /** Whether a build has succeeded or is still running, either of which bars a setting from changing. */
   get frozen(): boolean {
-    return this.#frozen || this.#pending !== undefined;
+    return this.#built || this.#pending !== undefined;
+  }
+
+  /** Whether a build has succeeded. */
+  get built(): boolean {
+    return this.#built;
   }
 
   /** The reading the session took, once one has. */
@@ -49,23 +57,41 @@ export class BuilderMemo {
   }
 
   /** The session, constructed once; a failed construction caches nothing, so a later build runs the checks again. */
-  session(inputs: BuilderInputs, settings: BuilderSettings): Promise<BuilderSession> {
-    this.#pending ??= constructedSession(inputs, settings, () => this.#registries).then(
-      (session) => {
-        this.#session = session;
-        this.#registries = session.registries;
-        this.#frozen = true;
-
-        return session;
-      },
-      (thrown: unknown) => {
-        this.#pending = undefined;
-
-        throw thrown;
-      },
+  async session(inputs: BuilderInputs, settings: BuilderSettings): Promise<BuilderSession> {
+    return await this.#construction(inputs, settings).then(
+      (session) => this.#committed(session),
+      (thrown: unknown) => this.#abandoned(thrown),
     );
+  }
 
-    return this.#pending;
+  /**
+   * The bundle over the session and the orchestrator, committed only once both are constructed: a failure anywhere leaves
+   * the builder as it stood before, every product an earlier build committed still cached.
+   */
+  async kit(inputs: BuilderInputs, settings: BuilderSettings): Promise<SocialRecoveryKit> {
+    if (this.#kit !== undefined) return this.#kit;
+
+    return await this.#construction(inputs, settings).then(
+      (session) => {
+        let orchestrator: IMethodsOrchestrator;
+
+        try {
+          const { methods, codecs } = session.registries;
+
+          orchestrator = this.#orchestrator ?? new MethodsOrchestrator(methods, codecs, inputs.bindings);
+        } catch (thrown) {
+          return this.#abandoned(thrown);
+        }
+
+        const { setupClient, recoveryClient } = this.#committed(session);
+
+        this.#orchestrator ??= orchestrator;
+        this.#kit ??= Object.freeze({ setupClient, recoveryClient, methodsOrchestrator: this.#orchestrator });
+
+        return this.#kit;
+      },
+      (thrown: unknown) => this.#abandoned(thrown),
+    );
   }
 
   /**
@@ -82,15 +108,34 @@ export class BuilderMemo {
 
     this.#registries = registries;
     this.#orchestrator = orchestrator;
-    this.#frozen = true;
+    this.#built = true;
 
     return orchestrator;
   }
 
-  /** The three entries of one session as one frozen record, the same record on every call. */
-  kit(session: BuilderSession, methodsOrchestrator: IMethodsOrchestrator): SocialRecoveryKit {
-    this.#kit ??= Object.freeze({ setupClient: session.setupClient, recoveryClient: session.recoveryClient, methodsOrchestrator });
+  /** The committed session, else the construction already running, else a new one; nothing is cached until a build commits it. */
+  #construction(inputs: BuilderInputs, settings: BuilderSettings): Promise<BuilderSession> {
+    if (this.#session !== undefined) return Promise.resolve(this.#session);
 
-    return this.#kit;
+    this.#pending ??= constructedSession(inputs, settings, () => this.#registries);
+
+    return this.#pending;
+  }
+
+  /** Caches the session a build succeeded with and freezes the settings. */
+  #committed(session: BuilderSession): BuilderSession {
+    this.#session ??= session;
+    this.#registries ??= session.registries;
+    this.#pending = undefined;
+    this.#built = true;
+
+    return this.#session;
+  }
+
+  /** Drops the construction a build failed with, so the settings reopen and a later build reads again. */
+  #abandoned(thrown: unknown): never {
+    if (this.#session === undefined) this.#pending = undefined;
+
+    throw thrown;
   }
 }

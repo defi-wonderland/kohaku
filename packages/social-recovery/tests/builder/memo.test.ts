@@ -245,8 +245,10 @@ describe('setter repeats before a build', () => {
     expect(callsOf(first, 'actionInfo')).toHaveLength(0);
   });
 
-  it('adds methods, so a second claim on a default module refuses at the first build', async () => {
-    const builder = SocialRecoveryBuilder.from(holder()).withMethod(walletMethod());
+  it('adds methods: a claim on a default module replaces the default, two added claims on one module refuse at the first build', async () => {
+    await expect(SocialRecoveryBuilder.from(holder()).withMethod(walletMethod()).buildSetupClient()).resolves.toBeDefined();
+
+    const builder = SocialRecoveryBuilder.from(holder()).withMethod(walletMethod()).withMethod(walletMethod());
 
     expect(await failureOf(() => builder.buildSetupClient())).toBeInstanceOf(TypeError);
     expect(() => builder.withVersionEscape()).not.toThrow();

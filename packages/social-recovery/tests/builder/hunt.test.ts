@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BUILDER_FROZEN_MESSAGE,
+  BUILDER_MODULE_CLAIMED_MESSAGE,
   BUILDER_NO_PUBLIC_DEPLOYMENT_MESSAGE,
+  BUILDER_PENDING_MESSAGE,
   KitRefusalError,
   SocialRecoveryBuilder,
   isProviderRevert,
@@ -72,8 +75,20 @@ describe('inputs a naive builder lets through', () => {
     expect((await settles({ ...goodWorld(), domain: { ...goodDomain(), version: '1.0' } })).thrown).toBeInstanceOf(KitRefusalError);
   });
 
-  it('refuses a passkey implementation registered over the default one', async () => {
-    expect(await failureOf(() => SocialRecoveryBuilder.from(holder()).withMethod(passkeyMethod()).buildSetupClient())).toBeInstanceOf(TypeError);
+  it('lets a passkey implementation registered over the default one replace it', async () => {
+    const passkey = passkeyMethod();
+    const builder = SocialRecoveryBuilder.from(holder()).withMethod(passkey);
+
+    await builder.buildSetupClient();
+
+    expect(() => builder.buildMethodsOrchestrator()).not.toThrow();
+  });
+
+  it('refuses two added passkey implementations over one module', async () => {
+    const thrown = await failureOf(() => SocialRecoveryBuilder.from(holder()).withMethod(passkeyMethod()).withMethod(passkeyMethod()).buildSetupClient());
+
+    expect(thrown).toBeInstanceOf(TypeError);
+    expect((thrown as TypeError).message).toContain(BUILDER_MODULE_CLAIMED_MESSAGE);
   });
 
   it('never turns a method naming one module twice into a RangeError', async () => {
@@ -154,21 +169,25 @@ describe('inputs a naive builder lets through', () => {
     expect(client.events).toBe(events);
   });
 
-  it('never drops a setter called while the first build is still reading', async () => {
+  it('refuses a setter while the first build is still reading with the pending message, then with the frozen one', async () => {
     const builder = SocialRecoveryBuilder.from(holder());
-    const signerRecovery = signerRecoveryStub();
     const pending = builder.build();
-    let refused = false;
+    const messages: string[] = [];
 
-    try {
-      builder.withSignerRecovery(signerRecovery).withVersionEscape();
-    } catch (thrown) {
-      refused = thrown instanceof TypeError;
+    for (const set of [() => builder.withSignerRecovery(signerRecoveryStub()), () => builder.withVersionEscape()]) {
+      try {
+        set();
+      } catch (thrown) {
+        expect(thrown).toBeInstanceOf(TypeError);
+        messages.push((thrown as TypeError).message);
+      }
     }
 
     await pending;
 
-    expect(refused).toBe(true);
+    expect(messages).toEqual([BUILDER_PENDING_MESSAGE, BUILDER_PENDING_MESSAGE]);
+    expect(() => builder.withVersionEscape()).toThrow(BUILDER_FROZEN_MESSAGE);
+    expect(BUILDER_PENDING_MESSAGE).not.toBe(BUILDER_FROZEN_MESSAGE);
   });
 });
 

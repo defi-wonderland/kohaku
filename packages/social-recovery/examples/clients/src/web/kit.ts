@@ -1,21 +1,7 @@
-import {
-  AmbireActionCodec,
-  AmbireRecoveryAction,
-  type DeploymentDescriptor,
-  EventManager,
-  type Gathering,
-  type IProvider,
-  type IRecoveryClient,
-  type MethodRegistry,
-  PolicyManager,
-  RecoveryClient,
-  SetupClient,
-  walletMethod,
-} from '@kohaku-eth/social-recovery';
+import type { DeploymentDescriptor, Gathering, IProvider } from '@kohaku-eth/social-recovery';
 import { type Address, isAddressEqual, type PublicClient } from 'viem';
 import type { HolderAccount } from '../account';
-import type { Kit } from '../clients';
-import { signerRecovery } from '../signer-recovery';
+import { assembleKit, assembleParts, type Kit } from '../clients';
 import { note, show, step } from '../trace';
 import { BLOCK_TAGS, clientConfiguration, tokenAllowlist, WEB_LOG_CHUNK_SIZE } from './config';
 import { accountLine, button, stateOut } from './page';
@@ -43,7 +29,7 @@ onReset((chainChanged) => {
   accountLine.textContent = 'The chain changed: apply the deployment again.';
 });
 
-/** Builds the parts in the merged constructors' order over the wallet provider, then both clients over the same parts. */
+/** The kit over the wallet provider, with the connected key as the one candidate key unless a configuration is given. */
 export function buildKit(
   provider: IProvider,
   descriptor: DeploymentDescriptor,
@@ -51,23 +37,7 @@ export function buildKit(
   key: Address,
   configuration = clientConfiguration(key, tokenAllowlist(), account.creation),
 ): Kit {
-  const { action } = descriptor;
-  const codec = new AmbireActionCodec([action]);
-  const policyManager = new PolicyManager(provider, descriptor, account.address, action, BLOCK_TAGS);
-  const recoveryAction = new AmbireRecoveryAction(provider, descriptor, account.address, action, codec, BLOCK_TAGS);
-  const method = walletMethod();
-  const methods: MethodRegistry = new Map([[descriptor.methodEcdsa, method]]);
-  const events = new EventManager(provider, descriptor, account.address, action, methods, { logChunkSize: WEB_LOG_CHUNK_SIZE });
-  const setup = new SetupClient(
-    provider, descriptor, account.address, action, configuration, 'integrator',
-    policyManager, recoveryAction, events, methods, codec, signerRecovery,
-  );
-  const recovery: IRecoveryClient = new RecoveryClient(
-    provider, descriptor, account.address, action, configuration,
-    policyManager, recoveryAction, events, methods, codec, signerRecovery,
-  );
-
-  return { descriptor, configuration, policyManager, recoveryAction, codec, events, method, setup, recovery };
+  return assembleKit(assembleParts(provider, descriptor, account.address, BLOCK_TAGS, WEB_LOG_CHUNK_SIZE), configuration);
 }
 
 /** Caches the chosen account and its kit, naming the connected key as the one candidate key. */

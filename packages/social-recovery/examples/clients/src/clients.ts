@@ -1,6 +1,7 @@
 import {
   AmbireActionCodec,
   AmbireRecoveryAction,
+  type BlockTags,
   type ClientConfiguration,
   type CreationRecord,
   type DeploymentDescriptor,
@@ -17,9 +18,12 @@ import {
   walletMethod,
 } from '@kohaku-eth/social-recovery';
 import type { Address } from 'viem';
-import { type Env, SEPOLIA_CHAIN_ID } from './env';
+import type { Env } from './env';
 import { signerRecovery } from './signer-recovery';
 import { note, step } from './trace';
+
+/** Sepolia, the only chain the sample runs against. */
+export const SEPOLIA_CHAIN_ID = 11155111;
 
 /** Both clients and the parts they share, bound to one account and the deployment's action. */
 export type Kit = {
@@ -105,9 +109,52 @@ export async function deploymentDescriptor(env: Env, provider: IProvider): Promi
 /** Which of the two holder keys the account holds now; the other is the one a handover gives it. */
 export type HolderKeys = { readonly current: Address; readonly next: Address };
 
+/** The parts both clients share, with the provider, account, action and method registry they were built over. */
+export type KitParts = Pick<Kit, 'descriptor' | 'policyManager' | 'recoveryAction' | 'codec' | 'events' | 'method'> & {
+  readonly provider: IProvider;
+  readonly account: Address;
+  readonly action: Address;
+  readonly methods: MethodRegistry;
+};
+
+/** Builds the parts in the merged constructors' order, reading and watching at `blockTags`, fetching logs in `logChunkSize` blocks. */
+export function assembleParts(
+  provider: IProvider,
+  descriptor: DeploymentDescriptor,
+  account: Address,
+  blockTags: BlockTags,
+  logChunkSize: number,
+): KitParts {
+  const { action } = descriptor;
+  const codec = new AmbireActionCodec([action]);
+  const policyManager = new PolicyManager(provider, descriptor, account, action, blockTags);
+  const recoveryAction = new AmbireRecoveryAction(provider, descriptor, account, action, codec, blockTags);
+  const method = walletMethod();
+  const methods: MethodRegistry = new Map([[descriptor.methodEcdsa, method]]);
+  const events = new EventManager(provider, descriptor, account, action, methods, { logChunkSize });
+
+  return { provider, descriptor, account, action, policyManager, recoveryAction, codec, events, method, methods };
+}
+
+/** Builds both clients over the same parts and the given configuration. */
+export function assembleKit(parts: KitParts, configuration: ClientConfiguration): Kit {
+  const { provider, descriptor, account, action, policyManager, recoveryAction, codec, events, method, methods } = parts;
+  const setup = new SetupClient(
+    provider, descriptor, account, action, configuration, 'integrator',
+    policyManager, recoveryAction, events, methods, codec, signerRecovery,
+  );
+  // The recovery client over the same parts, typed by its interface: callers use only what `IRecoveryClient` declares.
+  const recovery: IRecoveryClient = new RecoveryClient(
+    provider, descriptor, account, action, configuration,
+    policyManager, recoveryAction, events, methods, codec, signerRecovery,
+  );
+
+  return { descriptor, configuration, policyManager, recoveryAction, codec, events, method, setup, recovery };
+}
+
 /**
- * Builds the parts in the merged constructors' order, names the current holder key from the action's `isAuthority`,
- * then builds both clients over the same parts. `holders` lists the two holder addresses in env order.
+ * Builds the parts, names the current holder key from the action's `isAuthority`, then builds both clients over the
+ * same parts. `holders` lists the two holder addresses in env order.
  */
 export async function buildKit(
   provider: IProvider,
@@ -117,13 +164,8 @@ export async function buildKit(
   holders: HolderKeys,
   creation?: CreationRecord,
 ): Promise<{ kit: Kit; holders: HolderKeys }> {
-  const { action } = descriptor;
-  const codec = new AmbireActionCodec([action]);
-  const policyManager = new PolicyManager(provider, descriptor, account, action, BLOCK_TAGS);
-  const recoveryAction = new AmbireRecoveryAction(provider, descriptor, account, action, codec, BLOCK_TAGS);
-  const method = walletMethod();
-  const methods: MethodRegistry = new Map([[descriptor.methodEcdsa, method]]);
-  const events = new EventManager(provider, descriptor, account, action, methods, { logChunkSize: 10000 });
+  const parts = assembleParts(provider, descriptor, account, BLOCK_TAGS, 10000);
+  const { recoveryAction } = parts;
   const swapped = env.accountMode !== 'eoa' && !(await recoveryAction.isAuthority(holders.current)) && (await recoveryAction.isAuthority(holders.next));
   const named = swapped ? { current: holders.next, next: holders.current } : holders;
   const configuration = clientConfiguration(env, named.current, creation);
@@ -133,15 +175,5 @@ export async function buildKit(
   note('holder key now', named.current);
   note('handover target key', named.next);
 
-  const setup = new SetupClient(
-    provider, descriptor, account, action, configuration, 'integrator',
-    policyManager, recoveryAction, events, methods, codec, signerRecovery,
-  );
-  // The recovery client over the same parts, typed by its interface: the scripts use only what `IRecoveryClient` declares.
-  const recovery: IRecoveryClient = new RecoveryClient(
-    provider, descriptor, account, action, configuration,
-    policyManager, recoveryAction, events, methods, codec, signerRecovery,
-  );
-
-  return { kit: { descriptor, configuration, policyManager, recoveryAction, codec, events, method, setup, recovery }, holders: named };
+  return { kit: assembleKit(parts, configuration), holders: named };
 }

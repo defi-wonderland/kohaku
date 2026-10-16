@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Methods playground</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 860px; padding: 16px; }
+      button { margin: 4px 8px 4px 0; padding: 6px 12px; }
+      pre { background: #f4f4f4; overflow-x: auto; padding: 8px; white-space: pre-wrap; word-break: break-all; }
+      #verdict { font-size: 1.2em; font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <h1>Methods playground: the wallet method</h1>
+    <p>
+      Your injected wallet enrols as the guardian at place 0 of a sample setup, signs that place's approval request
+      with <code>eth_signTypedData_v4</code>, and the SDK builds the reply and verifies it locally. Nothing is sent to
+      any chain.
+    </p>
+    <button id="connect" type="button">1. Connect wallet</button>
+    <button id="sign" type="button" disabled>2. Sign the approval</button>
+    <p id="connection"></p>
+    <p id="verdict"></p>
+    <div id="trace"></div>
+    <script type="module" src="/src/web/main.ts"></script>
+  </body>
+</html>

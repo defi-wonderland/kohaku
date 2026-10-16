@@ -1,0 +1,26 @@
+{
+  "name": "@kohaku-eth/social-recovery-example-clients",
+  "version": "0.0.0",
+  "description": "Sample app: the social-recovery setup, recovery and cancel flows against the Sepolia deployment, as Node scripts and a browser page.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "dev": "vite",
+    "lint": "eslint .",
+    "setup": "tsx src/setup.ts",
+    "recovery": "tsx src/recovery.ts",
+    "cancel": "tsx src/cancel.ts",
+    "e2e": "tsx src/e2e.ts"
+  },
+  "dependencies": {
+    "@kohaku-eth/social-recovery": "workspace:*",
+    "viem": "^2.51.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.2",
+    "vite": "8.3.3"
+  }
+}

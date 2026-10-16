@@ -11,9 +11,12 @@ export const isEventManager = (value: object): value is IEventManager => looksLi
 /** Whether an action codec setting is an instance rather than the shipped codec's arguments. */
 export const isActionCodec = (value: object): value is IActionCodec => looksLikeInstance(value, METHODS_ORCHESTRATOR_ACTION_CODEC_MEMBERS);
 
-/** Refuses a record carrying any own member but the listed ones, with a `TypeError` naming the member. */
+/**
+ * Refuses a record carrying any own member but the listed ones, enumerable or not, a symbol-keyed member always, with a
+ * `TypeError` naming the member; inherited members are not read.
+ */
 export function assertOnly(value: object, members: readonly string[], name: string, role = 'an argument of the shipped part'): void {
-  for (const member of Object.keys(value)) {
-    if (!members.includes(member)) throw new TypeError(`${name}.${member} is not ${role}`);
+  for (const member of Reflect.ownKeys(value)) {
+    if (typeof member === 'symbol' || !members.includes(member)) throw new TypeError(`${name}.${String(member)} is not ${role}`);
   }
 }

@@ -142,6 +142,11 @@ beforeEach(() => {
   made.clear();
 });
 
+type HolderBuilder = ReturnType<typeof SocialRecoveryBuilder.from<ReturnType<typeof holder>>>;
+
+/** The record with one more own member, non-enumerable, so `Object.keys` does not list it. */
+const hidden = (record: object, key: string): object => Object.defineProperty({ ...record }, key, { value: {} });
+
 describe('the parts the builder constructs', () => {
   it('constructs each shared part once and hands the same instances to both clients', async () => {
     await SocialRecoveryBuilder.from(holder()).build();
@@ -471,11 +476,41 @@ describe('the parts the integrator supplies', () => {
     expect(() => builder.withEventManager({ logChunkSize: 5, provider: new ChainDouble() } as never)).toThrow(TypeError);
     expect(() => builder.withCodec({ actions: [ACTION], descriptor: DESCRIPTOR } as never)).toThrow(TypeError);
   });
+
+  it.each([
+    ['withEventManager', 'a hidden string key', (builder: HolderBuilder) => builder.withEventManager(hidden({ logChunkSize: 5 }, 'provider') as never)],
+    ['withEventManager', 'a symbol key', (builder: HolderBuilder) => builder.withEventManager({ logChunkSize: 5, [Symbol('provider')]: 1 } as never)],
+    ['withCodec', 'a hidden string key', (builder: HolderBuilder) => builder.withCodec(hidden({ actions: [ACTION] }, 'provider') as never)],
+    ['withCodec', 'a symbol key', (builder: HolderBuilder) => builder.withCodec({ actions: [ACTION], [Symbol('provider')]: 1 } as never)],
+  ])('%s refuses options carrying %s of its own with a TypeError naming it at the call', (_setter, _kind, set) => {
+    const provider = new ChainDouble();
+    const builder = SocialRecoveryBuilder.from(holder(provider));
+    let thrown: unknown;
+
+    try {
+      set(builder);
+    } catch (caught) {
+      thrown = caught;
+    }
+
+    expect(thrown).toBeInstanceOf(TypeError);
+    expect((thrown as TypeError).message).toContain('provider');
+    expect(provider.reads).toEqual([]);
+    expect([...made.values()].flat()).toEqual([]);
+  });
+
+  it('accepts options inheriting an unknown member', async () => {
+    const events = Object.assign(Object.create({ provider: new ChainDouble() }) as object, { logChunkSize: 5 });
+    const codec = Object.assign(Object.create({ descriptor: DESCRIPTOR }) as object, { actions: [OTHER_ACTION] });
+
+    await SocialRecoveryBuilder.from(holder()).withEventManager(events as never).withCodec(codec as never).build();
+
+    expect(only('EventManager')[5]).toMatchObject({ logChunkSize: 5 });
+  });
 });
 
 describe('a codec instance', () => {
   it.each([
-    ['an empty list', []],
     ['a malformed address', ['0x1234']],
     ['a list with an undefined entry', [ACTION, undefined]],
     ['not a list', ACTION],
@@ -489,11 +524,30 @@ describe('a codec instance', () => {
     expect(builder.withVersionEscape()).toBe(builder);
   });
 
-  it('with an empty list is refused like the options form with an empty list', () => {
+  it('with an empty list is refused with a RangeError at the call, like the options form, before any read', () => {
+    const provider = new ChainDouble();
+    const builder = SocialRecoveryBuilder.from(holder(provider));
+
+    expect(() => builder.withCodec({ actions: [] })).toThrow(RangeError);
+    expect(() => builder.withCodec({ ...codecServing(ACTION), actions: [] })).toThrow(RangeError);
+    expect(provider.reads).toEqual([]);
+    expect([...made.values()].flat()).toEqual([]);
+    expect(builder.withVersionEscape()).toBe(builder);
+  });
+
+  it('with a list naming one address twice is refused with a RangeError at the call, like the options form', () => {
     const builder = SocialRecoveryBuilder.from(holder());
 
-    expect(() => builder.withCodec({ actions: [] })).toThrow(TypeError);
-    expect(() => builder.withCodec({ ...codecServing(ACTION), actions: [] })).toThrow(TypeError);
+    expect(() => builder.withCodec({ actions: [ACTION, ACTION] })).toThrow(RangeError);
+    expect(() => builder.withCodec({ ...codecServing(ACTION), actions: [ACTION, ACTION.toLowerCase()] } as never)).toThrow(RangeError);
+    expect(() => builder.withCodec({ actions: [ACTION, ACTION.toLowerCase()] } as never)).toThrow(RangeError);
+  });
+
+  it.each([
+    ['not a list', ACTION],
+    ['a malformed address', ['0x1234']],
+  ])('whose actions are %s is refused with a TypeError in the options form too', (_name, actions) => {
+    expect(() => SocialRecoveryBuilder.from(holder()).withCodec({ actions } as never)).toThrow(TypeError);
   });
 
   it('registered twice builds and keys one entry per action it serves', async () => {

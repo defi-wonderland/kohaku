@@ -302,6 +302,37 @@ describe('an inputs object carrying a member of its own', () => {
     expect(fromRefusal(inputs)).toContain(member);
   });
 
+  it.each([
+    ['a hidden misspelt configuration on a holder', 'configuraton', (provider: ChainDouble) => Object.defineProperty(holder(provider), 'configuraton', { value: {} })],
+    ['a symbol key on a holder', 'configuraton', (provider: ChainDouble) => ({ ...holder(provider), [Symbol('configuraton')]: {} })],
+    ['a hidden misspelt binding list on a holder', 'deviceBinding', (provider: ChainDouble) => Object.defineProperty(holder(provider), 'deviceBinding', { value: ['none'], enumerable: false })],
+  ])('refuses %s with a TypeError naming it at from, before any read', (_name, member, make) => {
+    const provider = new ChainDouble();
+
+    expect(fromRefusal(make(provider))).toContain(member);
+    expect(provider.reads).toEqual([]);
+  });
+
+  it.each([
+    ['a hidden misspelt configuration over a chain id', 'configuraton', () => Object.defineProperty({ chainId: SEPOLIA }, 'configuraton', { value: {} })],
+    ['a hidden configuration over a chain id', 'configuration', () => Object.defineProperty({ chainId: SEPOLIA }, 'configuration', { value: {} })],
+    ['a hidden configuration over a descriptor', 'configuration', () => Object.defineProperty({ descriptor: DESCRIPTOR }, 'configuration', { value: {} })],
+    ['a symbol key over a chain id', 'configuraton', () => ({ chainId: SEPOLIA, [Symbol('configuraton')]: {} })],
+    ['a symbol key over a descriptor', 'configuraton', () => ({ descriptor: DESCRIPTOR, [Symbol('configuraton')]: {} })],
+  ])('refuses an approver carrying %s with a TypeError naming it at from', (_name, member, make) => {
+    expect(fromRefusal(make())).toContain(member);
+  });
+
+  it('accepts a symbol or a hidden member it inherits', async () => {
+    const proto = Object.defineProperty({ [Symbol('configuraton')]: {} }, 'configuraton', { value: {} });
+    const holderInputs = Object.assign(Object.create(proto) as object, holder());
+    const approverInputs = Object.assign(Object.create(proto) as object, { descriptor: DESCRIPTOR });
+
+    await SocialRecoveryBuilder.from(holderInputs as never).buildSetupClient();
+
+    expect(() => SocialRecoveryBuilder.from(approverInputs as never).buildMethodsOrchestrator()).not.toThrow();
+  });
+
   it('accepts a member it inherits, on a holder and on an approver', async () => {
     const holderInputs = Object.assign(Object.create({ configuraton: { simulate: false }, deviceBinding: ['none'] }) as object, holder());
     const approverInputs = Object.assign(Object.create({ configuration: {}, configuraton: {} }) as object, { descriptor: DESCRIPTOR });

@@ -26,6 +26,13 @@ const VALUES = [
   'BUILDER_RULE_COST_BOUND',
   'BUILDER_BLOCK_TAGS',
   'BUILDER_DOMAIN_FIELDS',
+  'BUILDER_HOLDER_INPUT_MEMBERS',
+  'BUILDER_APPROVER_INPUT_MEMBERS',
+] as const;
+
+const INPUT_MEMBERS = [
+  ['BUILDER_HOLDER_INPUT_MEMBERS', ['provider', 'account', 'chainId', 'descriptor', 'configuration', 'deviceBindings']],
+  ['BUILDER_APPROVER_INPUT_MEMBERS', ['chainId', 'descriptor', 'deviceBindings']],
 ] as const;
 
 describe('the builder surface', () => {
@@ -48,6 +55,27 @@ describe('the builder surface', () => {
 
     expect(Object.keys(builder)).toEqual([]);
     expect(JSON.stringify(builder)).toBe('{}');
+  });
+
+  it.each(INPUT_MEMBERS)('exports %s frozen, naming exactly the members of its shape, from the source and the built entry', async (name, members) => {
+    const built = (await loadBuilt())[name];
+    const declaration = readFileSync(join(PACKAGE_ROOT, 'dist', 'index.d.ts'), 'utf8');
+
+    for (const list of [(source as Record<string, unknown>)[name], built]) {
+      expect(Array.isArray(list)).toBe(true);
+      expect(Object.isFrozen(list)).toBe(true);
+      expect([...(list as readonly string[])].sort()).toEqual([...members].sort());
+    }
+
+    expect(declaration).toMatch(new RegExp(`\\b${name}\\b`));
+  });
+
+  it('keeps checkedDescriptorOrigin out of the source entry, the built entry and the built declaration', async () => {
+    const declaration = readFileSync(join(PACKAGE_ROOT, 'dist', 'index.d.ts'), 'utf8');
+
+    expect('checkedDescriptorOrigin' in source).toBe(false);
+    expect('checkedDescriptorOrigin' in (await loadBuilt())).toBe(false);
+    expect(declaration).not.toMatch(/\bcheckedDescriptorOrigin\b/);
   });
 
   it.each(['answersOf', 'ManagerAnswers'])('no longer exports %s from the source entry, the built entry or the built declaration', async (name) => {

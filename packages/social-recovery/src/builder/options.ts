@@ -22,11 +22,14 @@ import type {
 } from '../types/builder';
 import { assertOnly, isActionCodec, isEventManager } from './shapes';
 
-/** The actions a codec serves, checksummed: an empty list is a `TypeError` and a repeated action a `RangeError`. */
+/**
+ * The actions a codec serves, checksummed: a non-list or a malformed address is a `TypeError`, an empty list or a repeated action
+ * a `RangeError`.
+ */
 function servedActions(value: unknown): Address[] {
   const actions = normalizeAddresses(value, 'codec.actions');
 
-  if (actions.length === 0) throw new TypeError('codec.actions must name at least one action address');
+  if (actions.length === 0) throw new RangeError('codec.actions must name at least one action address');
 
   if (new Set(actions).size !== actions.length) throw new RangeError(`codec.actions ${METHODS_ORCHESTRATOR_REPEAT_MESSAGE}`);
 

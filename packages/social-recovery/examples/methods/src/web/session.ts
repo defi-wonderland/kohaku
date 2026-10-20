@@ -1,4 +1,4 @@
-import type { Address, Ctx, Gathering, Hex } from '@kohaku-eth/social-recovery';
+import type { Address, Hex } from '@kohaku-eth/social-recovery';
 import { getAddress, hexToNumber } from 'viem';
 import { connectionLine, signButton, traceBox, verdictLine } from './page';
 
@@ -15,7 +15,7 @@ export type InjectedWallet = {
  */
 export const state: {
   session: number; busy: boolean; listening: boolean;
-  wallet?: InjectedWallet; guardian?: Address; chainId?: number; ctx?: Ctx; record?: Gathering;
+  wallet?: InjectedWallet; guardian?: Address; chainId?: number;
   observedAccounts: (Address | undefined)[]; observedChainIds: number[];
 } = { session: 0, busy: false, listening: false, observedAccounts: [], observedChainIds: [] };
 
@@ -24,7 +24,7 @@ export const injectedWallet = (): InjectedWallet | undefined =>
 
 /** Drops the cached connection, request and verdict; Connect must run again. */
 export function reset(reason?: string): void {
-  Object.assign(state, { session: state.session + 1, guardian: undefined, chainId: undefined, ctx: undefined, record: undefined });
+  Object.assign(state, { session: state.session + 1, guardian: undefined, chainId: undefined });
   signButton.disabled = true;
   connectionLine.textContent = '';
   verdictLine.textContent = reason === undefined ? '' : `${reason}: connect again`;

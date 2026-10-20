@@ -57,10 +57,13 @@ export type SetupOptions = {
   readonly wait?: number;
 };
 
-/** One clause over the credentials, any mix of methods, each on the default salt of its place. */
+/**
+ * One clause over the credentials, any mix of methods, each on the default salt of its place. A given threshold is kept as
+ * given; only the sample default is lowered to the credential count.
+ */
 export function sampleSetup(credentials: readonly Credential[], trace: Trace, options: SetupOptions = {}): SampleSetup {
   const configuration: Configuration = {
-    clauses: [{ threshold: Math.min(options.threshold ?? SAMPLE_THRESHOLD, credentials.length), credentials }],
+    clauses: [{ threshold: options.threshold ?? Math.min(SAMPLE_THRESHOLD, credentials.length), credentials }],
     wait: options.wait ?? SAMPLE_WAIT,
     ignoresPause: false,
   };

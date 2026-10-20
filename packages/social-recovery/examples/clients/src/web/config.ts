@@ -34,7 +34,11 @@ export type DeploymentInputs = {
   readonly account?: Address;
 };
 
-/** Fills each deployment field this page has from its `VITE_` variable of the package's `.env`; a field already typed is kept. */
+/**
+ * Fills each deployment field this page has from its `VITE_` variable of the package's `.env`; a field already typed is
+ * kept. Every `VITE_` value is visible in the served page: no private key may carry the prefix, and a `VITE_` endpoint
+ * such as `VITE_READ_RPC_URL` is visible to the browser like the rest.
+ */
 export function prefillDeployment(): void {
   const env = import.meta.env;
   const prefill: Record<string, string | undefined> = {

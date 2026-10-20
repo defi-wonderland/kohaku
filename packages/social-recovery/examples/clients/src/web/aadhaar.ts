@@ -1,7 +1,8 @@
 import type { Material, Params } from '@kohaku-eth/social-recovery';
 import { anonAadhaarMethod } from '@kohaku-eth/social-recovery/recovery-methods';
 import { note } from '../trace';
-import { deviceSignal } from './devices';
+import { deviceStep } from './devices';
+import { currentLifetime, ensureLive } from './lifetime';
 import { field, statusLine, valueOf } from './page';
 
 /** The seed field as a whole number; blank draws a fresh 31-byte seed into the field, which the approver keeps. */
@@ -47,7 +48,8 @@ export function prefillAadhaarSeed(config: `0x${string}`): void {
 
 /**
  * The material a proving ceremony takes: the pasted QR code's data, the prover's progress written to the page and the
- * Abort button's signal. The proving files are downloaded by the stack on its first proof.
+ * signal that ends once the Abort button ends the step or its action ends. The progress callback is bound to that step:
+ * once it ended, a late progress update writes nothing. The proving files are downloaded by the stack on its first proof.
  */
 export function aadhaarMaterial(): Material {
   const qrData = valueOf('aadhaar-qr');
@@ -55,23 +57,31 @@ export function aadhaarMaterial(): Material {
 
   if (qrData === '') throw new Error('paste the data of a real Aadhaar secure QR code');
 
+  const { ended } = deviceStep();
+
   return {
     qrData,
     onProgress: (state: string) => {
+      if (ended.aborted) return;
+
       progress.value = state;
       statusLine.textContent = `Aadhaar prover: ${state}`;
       note('Aadhaar prover', state);
     },
-    signal: deviceSignal(),
+    signal: ended,
   };
 }
 
-/** Reads a certificate file chosen in the file field into the certificate text area. */
+/** Reads a certificate file chosen in the file field into the certificate text area, while its action still lives. */
 export async function loadCertificateFile(): Promise<void> {
+  const life = currentLifetime();
   const chosen = (field('aadhaar-certificate-file') as HTMLInputElement).files?.[0];
 
   if (chosen === undefined) throw new Error('choose the certificate file first');
 
-  field('aadhaar-certificate').value = await chosen.text();
+  const text = await chosen.text();
+
+  ensureLive(life);
+  field('aadhaar-certificate').value = text;
   note('certificate loaded', chosen.name);
 }

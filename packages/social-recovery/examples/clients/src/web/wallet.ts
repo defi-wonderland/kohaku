@@ -3,7 +3,7 @@ import { getAddress, hexToNumber } from 'viem';
 import { abortAction, currentLifetime, ensureLive, lifetimeWallet } from './lifetime';
 import { note } from '../trace';
 import { connectionLine, statusLine } from './page';
-import { SESSION_CHANGED_MESSAGE } from './provider';
+import { SESSION_CHANGED_MESSAGE } from './chain';
 
 export { SEPOLIA_CHAIN_ID } from './chain';
 

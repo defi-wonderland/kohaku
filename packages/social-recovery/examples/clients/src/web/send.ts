@@ -84,7 +84,7 @@ export async function sendFromConnected(conn: Connection, call: PreparedCall): P
  * of the account. The EOA stand-in refuses: its flows stop before any account self-call.
  */
 export async function sendAsAccount(conn: Connection, prepared: PreparedCall | PreparedBatch): Promise<MinedReceipt> {
-  const { kit, account } = requireKit();
+  const { kit, account } = await requireKit();
   const calls = prepared.kind === 'batch' ? prepared.calls : [prepared];
 
   if (!account.sendsSelfCalls) throw new Error('the EOA stand-in sends no account self-call');

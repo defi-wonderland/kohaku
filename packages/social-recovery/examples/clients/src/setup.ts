@@ -33,7 +33,7 @@ function printPrepared(prepared: PreparedCall | PreparedBatch): void {
 export async function runSetup(given?: Env): Promise<SetupOutcome> {
   const session = await openSession(given);
   const { setup } = session.kit;
-  const draft = setupDraft(session);
+  const draft = await setupDraft(session);
   const sends = session.account.sendsSelfCalls;
   const shape = { account: session.account.address, manager: session.kit.descriptor.manager };
 

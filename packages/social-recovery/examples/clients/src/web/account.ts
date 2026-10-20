@@ -40,7 +40,7 @@ export async function applyDeployment(conn: Connection): Promise<void> {
   Object.assign(holder, { descriptor, provider: base, readClient: reads?.client, account: undefined, kit: undefined, gathering: undefined, ripe: false });
 
   if (inputs.account === undefined) {
-    standIn(conn);
+    await standIn(conn);
 
     return;
   }
@@ -71,7 +71,7 @@ export async function selectAccount(conn: Connection): Promise<void> {
   if (code === '0x') throw new Error(`the account ${address} holds no code`);
 
   const account: HolderAccount = { address, sendsSelfCalls: true };
-  const kit = useAccount(conn, account);
+  const kit = await useAccount(conn, account);
   const authority = await kit.recoveryAction.isAuthority(conn.account);
 
   ensureSession(conn.session);
@@ -81,10 +81,10 @@ export async function selectAccount(conn: Connection): Promise<void> {
 }
 
 /** The connected address stands in for the account: reads and prepares only, no account self-call is sent. */
-export function standIn(conn: Connection): void {
+export async function standIn(conn: Connection): Promise<void> {
   step('EOA stand-in');
   note('reads and prepares only; no account self-call is sent');
-  useAccount(conn, { address: conn.account, sendsSelfCalls: false });
+  await useAccount(conn, { address: conn.account, sendsSelfCalls: false });
 }
 
 /**
@@ -116,7 +116,7 @@ export async function createAccount(conn: Connection): Promise<void> {
 
   if (existing !== '0x') {
     note('the account already exists; its creation block is unknown here, so no creation record is kept');
-    useAccount(conn, { address: account, sendsSelfCalls: true });
+    await useAccount(conn, { address: account, sendsSelfCalls: true });
 
     return;
   }
@@ -133,5 +133,5 @@ export async function createAccount(conn: Connection): Promise<void> {
   const creation = { factory, bytecode: code, salt, block: receipt.blockNumber };
 
   note('creation record', creation);
-  useAccount(conn, { address: account, sendsSelfCalls: true, creation });
+  await useAccount(conn, { address: account, sendsSelfCalls: true, creation });
 }

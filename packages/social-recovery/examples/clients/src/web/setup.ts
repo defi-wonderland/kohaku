@@ -1,24 +1,13 @@
-import { METHOD_ECDSA_CONFIG_FIELD, type PreparedBatch, type PreparedCall, type SetupDraft } from '@kohaku-eth/social-recovery';
-import { type Address, getAddress, isAddress } from 'viem';
+import type { PreparedBatch, PreparedCall, SetupDraft } from '@kohaku-eth/social-recovery';
 import type { Kit } from '../clients';
 import { printDescription } from '../describe';
 import { check, findings, note, show, step } from '../trace';
 import { wholeField } from './config';
+import { setupCredentials } from './credentials';
 import { noteStandIn, requireKit } from './kit';
 import { field, valueOf } from './page';
 import { sendAsAccount } from './send';
 import { type Connection, ensureSession } from './wallet';
-
-/** The guardian addresses typed in the setup form, one per line or comma-separated. */
-function guardianAddresses(): readonly Address[] {
-  const entries = valueOf('guardians').split(/[\s,]+/).filter((entry) => entry !== '');
-
-  if (entries.length === 0) throw new Error('name at least one guardian address');
-
-  if (entries.some((entry) => !isAddress(entry, { strict: false }))) throw new Error('every guardian must be an address');
-
-  return entries.map((entry) => getAddress(entry));
-}
 
 /** The backup password of the setup form, untrimmed; the recovery restores the committed setup with it. */
 export function backupPassword(): string {
@@ -30,15 +19,11 @@ export function backupPassword(): string {
 }
 
 /**
- * The draft the form describes: one clause of wallet guardians, the threshold, the wait, attempts a method's stop
- * reaches, no public metadata and an encrypted backup.
+ * The draft the form describes: one clause of the guardians' credentials, the threshold, the wait, attempts a method's
+ * stop reaches, no public metadata and an encrypted backup.
  */
-export function setupDraft(kit: Kit): SetupDraft {
-  const credentials = guardianAddresses().map((address, index) => ({
-    method: kit.descriptor.methodEcdsa,
-    config: kit.method.codec.encodeConfig({ [METHOD_ECDSA_CONFIG_FIELD]: address }),
-    label: `guardian-${index + 1}`,
-  }));
+export async function setupDraft(kit: Kit): Promise<SetupDraft> {
+  const credentials = await setupCredentials(kit, valueOf('guardians'));
 
   return {
     wait: wholeField('wait'),
@@ -64,9 +49,9 @@ function printPrepared(prepared: PreparedCall | PreparedBatch): void {
 export async function runSetup(conn: Connection): Promise<void> {
   noteStandIn();
 
-  const { kit, account } = requireKit();
+  const { kit, account } = await requireKit();
   const { setup } = kit;
-  const draft = setupDraft(kit);
+  const draft = await setupDraft(kit);
   const password = backupPassword();
   const sends = account.sendsSelfCalls;
 

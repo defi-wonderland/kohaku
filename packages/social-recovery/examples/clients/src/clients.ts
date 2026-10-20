@@ -1,23 +1,23 @@
 import {
   AmbireActionCodec,
-  AmbireRecoveryAction,
-  type BlockTags,
   type ClientConfiguration,
   type CreationRecord,
   type DeploymentDescriptor,
   DIGEST_VERSION,
   EventManager,
+  type IMethodModuleReads,
+  type IMethodsOrchestrator,
   type IProvider,
+  type IRecoveryActionInteractor,
   type IRecoveryClient,
-  type IRecoveryMethod,
   type ISetupClient,
-  type MethodRegistry,
+  type ManagerReading,
+  passkeyMethod,
   PolicyManager,
-  RecoveryClient,
-  SetupClient,
+  SocialRecoveryBuilder,
   walletMethod,
 } from '@kohaku-eth/social-recovery';
-import type { Address } from 'viem';
+import { type Address, isAddressEqual, zeroAddress } from 'viem';
 import type { Env } from './env';
 import { signerRecovery } from './signer-recovery';
 import { note, step } from './trace';
@@ -25,17 +25,24 @@ import { note, step } from './trace';
 /** Sepolia, the only chain the sample runs against. */
 export const SEPOLIA_CHAIN_ID = 11155111;
 
-/** Both clients and the parts they share, bound to one account and the deployment's action. */
+/**
+ * The builder's kit for one account, beside the reads the sample's own checks make: the action state at a pinned block,
+ * the account's notifications and the handover payload's decoding. Those three are the sample's, not the clients'.
+ */
 export type Kit = {
   readonly descriptor: DeploymentDescriptor;
   readonly configuration: ClientConfiguration;
-  readonly policyManager: PolicyManager;
-  readonly recoveryAction: AmbireRecoveryAction;
-  readonly codec: AmbireActionCodec;
-  readonly events: EventManager;
-  readonly method: IRecoveryMethod;
+  readonly reading: ManagerReading;
   readonly setup: ISetupClient;
   readonly recovery: IRecoveryClient;
+  readonly orchestrator: IMethodsOrchestrator;
+  readonly recoveryAction: IRecoveryActionInteractor;
+  readonly moduleReads: IMethodModuleReads;
+  /** The modules the builder's shipped wallet and passkey methods serve under the descriptor. */
+  readonly implementedMethods: readonly Address[];
+  readonly policyManager: PolicyManager;
+  readonly events: EventManager;
+  readonly codec: AmbireActionCodec;
 };
 
 const BLOCK_TAGS = { read: 'latest', watch: 'latest' } as const;
@@ -109,52 +116,52 @@ export async function deploymentDescriptor(env: Env, provider: IProvider): Promi
 /** Which of the two holder keys the account holds now; the other is the one a handover gives it. */
 export type HolderKeys = { readonly current: Address; readonly next: Address };
 
-/** The parts both clients share, with the provider, account, action and method registry they were built over. */
-export type KitParts = Pick<Kit, 'descriptor' | 'policyManager' | 'recoveryAction' | 'codec' | 'events' | 'method'> & {
-  readonly provider: IProvider;
-  readonly account: Address;
-  readonly action: Address;
-  readonly methods: MethodRegistry;
-};
+/** The modules the builder's shipped methods claim under the descriptor, the zero address left out. */
+const shippedModules = (descriptor: DeploymentDescriptor): Address[] =>
+  [walletMethod(), passkeyMethod()]
+    .flatMap((method) => [...method.modules(descriptor)])
+    .filter((module) => !isAddressEqual(module, zeroAddress));
 
-/** Builds the parts in the merged constructors' order, reading and watching at `blockTags`, fetching logs in `logChunkSize` blocks. */
-export function assembleParts(
+/**
+ * The holder's kit through `SocialRecoveryBuilder`: the builder runs its construction checks (the chain id, the manager's
+ * EIP-712 domain and `version()`) unless `reading` hands it an earlier build's reading of the same manager, which leaves
+ * only the chain id to read. The signer recovery is handed over so both clients name the removed key as before.
+ */
+export async function kitOver(
   provider: IProvider,
   descriptor: DeploymentDescriptor,
   account: Address,
-  blockTags: BlockTags,
-  logChunkSize: number,
-): KitParts {
+  configuration: ClientConfiguration,
+  reading?: ManagerReading,
+): Promise<Kit> {
+  const builder = SocialRecoveryBuilder.from({ provider, account, descriptor, configuration }).withSignerRecovery(signerRecovery);
+
+  if (reading !== undefined) builder.withManagerReading(reading);
+
+  const built = await builder.build();
+  const recoveryAction = await builder.recoveryAction();
+  const moduleReads = await builder.methodModuleReads();
   const { action } = descriptor;
-  const codec = new AmbireActionCodec([action]);
-  const policyManager = new PolicyManager(provider, descriptor, account, action, blockTags);
-  const recoveryAction = new AmbireRecoveryAction(provider, descriptor, account, action, codec, blockTags);
-  const method = walletMethod();
-  const methods: MethodRegistry = new Map([[descriptor.methodEcdsa, method]]);
-  const events = new EventManager(provider, descriptor, account, action, methods, { logChunkSize });
 
-  return { provider, descriptor, account, action, policyManager, recoveryAction, codec, events, method, methods };
-}
-
-/** Builds both clients over the same parts and the given configuration. */
-export function assembleKit(parts: KitParts, configuration: ClientConfiguration): Kit {
-  const { provider, descriptor, account, action, policyManager, recoveryAction, codec, events, method, methods } = parts;
-  const setup = new SetupClient(
-    provider, descriptor, account, action, configuration,
-    policyManager, recoveryAction, events, methods, codec, signerRecovery,
-  );
-  // The recovery client over the same parts, typed by its interface: callers use only what `IRecoveryClient` declares.
-  const recovery: IRecoveryClient = new RecoveryClient(
-    provider, descriptor, account, action, configuration,
-    policyManager, recoveryAction, events, methods, codec, signerRecovery,
-  );
-
-  return { descriptor, configuration, policyManager, recoveryAction, codec, events, method, setup, recovery };
+  return {
+    descriptor,
+    configuration,
+    reading: builder.managerReading() as ManagerReading,
+    setup: built.setupClient,
+    recovery: built.recoveryClient,
+    orchestrator: built.methodsOrchestrator,
+    recoveryAction,
+    moduleReads,
+    implementedMethods: shippedModules(descriptor),
+    policyManager: new PolicyManager(provider, descriptor, account, action, configuration.blockTags),
+    events: new EventManager(provider, descriptor, account, action, new Map(), configuration),
+    codec: new AmbireActionCodec([action]),
+  };
 }
 
 /**
- * Builds the parts, names the current holder key from the action's `isAuthority`, then builds both clients over the
- * same parts. `holders` lists the two holder addresses in env order.
+ * Builds the kit with the first holder key as the candidate, names the current holder key from the action's
+ * `isAuthority`, and builds again over the same reading where the keys swapped. `holders` lists them in env order.
  */
 export async function buildKit(
   provider: IProvider,
@@ -164,16 +171,16 @@ export async function buildKit(
   holders: HolderKeys,
   creation?: CreationRecord,
 ): Promise<{ kit: Kit; holders: HolderKeys }> {
-  const parts = assembleParts(provider, descriptor, account, BLOCK_TAGS, 10000);
-  const { recoveryAction } = parts;
-  const swapped = env.accountMode !== 'eoa' && !(await recoveryAction.isAuthority(holders.current)) && (await recoveryAction.isAuthority(holders.next));
+  const first = await kitOver(provider, descriptor, account, clientConfiguration(env, holders.current, creation));
+  const swapped = env.accountMode !== 'eoa' && !(await first.recoveryAction.isAuthority(holders.current))
+    && (await first.recoveryAction.isAuthority(holders.next));
   const named = swapped ? { current: holders.next, next: holders.current } : holders;
-  const configuration = clientConfiguration(env, named.current, creation);
+  const kit = swapped ? await kitOver(provider, descriptor, account, clientConfiguration(env, named.current, creation), first.reading) : first;
 
-  step('clients');
+  step('clients (SocialRecoveryBuilder)');
   note('account', account);
   note('holder key now', named.current);
   note('handover target key', named.next);
 
-  return { kit: assembleKit(parts, configuration), holders: named };
+  return { kit, holders: named };
 }

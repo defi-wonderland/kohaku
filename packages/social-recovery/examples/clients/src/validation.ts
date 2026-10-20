@@ -98,7 +98,7 @@ export async function checkRequest(
 
   settle();
 
-  const paused = await Promise.all(methods.map(async (method) => ({ method, paused: await kit.policyManager.paused(method, block) })));
+  const paused = await Promise.all(methods.map(async (method) => ({ method, paused: await kit.moduleReads.paused(method, block) })));
 
   settle();
 
@@ -114,7 +114,7 @@ export async function checkRequest(
     moment,
     configuration: kit.configuration,
     paused,
-    implementedMethods: kit.method.modules(kit.descriptor),
+    implementedMethods: kit.implementedMethods,
     ...opening,
   };
 

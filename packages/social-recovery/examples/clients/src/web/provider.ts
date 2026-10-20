@@ -13,10 +13,10 @@ import type {
 import { hexToBigInt, hexToNumber, toHex } from 'viem';
 import type { NativeBalance } from '../validation';
 import { revertData } from './revert';
+import { SESSION_CHANGED_MESSAGE } from './chain';
 import type { InjectedWallet } from './wallet';
 
-/** The refusal of a step the wallet switched account or chain under. */
-export const SESSION_CHANGED_MESSAGE = 'the wallet changed while this step ran; connect again';
+export { SESSION_CHANGED_MESSAGE } from './chain';
 
 /** The JSON-RPC block parameter of one SDK block tag: a number as a hex quantity, a named tag as itself. */
 export const blockParam = (block: BlockTag): string => (typeof block === 'number' ? toHex(block) : block);

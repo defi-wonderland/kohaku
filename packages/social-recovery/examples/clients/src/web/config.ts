@@ -8,7 +8,7 @@ import {
 } from '@kohaku-eth/social-recovery';
 import { type Address, getAddress, isAddress, zeroAddress } from 'viem';
 import { note, step } from '../trace';
-import { field, valueOf } from './page';
+import { valueOf } from './page';
 import { ensureSession, SEPOLIA_CHAIN_ID } from './wallet';
 
 /** The factory's deploy function when `VITE_AMBIRE_FACTORY_DEPLOY_FUNCTION` names none. */
@@ -34,7 +34,7 @@ export type DeploymentInputs = {
   readonly account?: Address;
 };
 
-/** Fills each deployment field from its `VITE_` variable of the package's `.env`; a field already typed is kept. */
+/** Fills each deployment field this page has from its `VITE_` variable of the package's `.env`; a field already typed is kept. */
 export function prefillDeployment(): void {
   const env = import.meta.env;
   const prefill: Record<string, string | undefined> = {
@@ -54,7 +54,9 @@ export function prefillDeployment(): void {
   };
 
   for (const [name, value] of Object.entries(prefill)) {
-    if (value !== undefined && valueOf(name) === '') field(name).value = value.trim();
+    const input = document.querySelector<HTMLInputElement>(`#${name}`);
+
+    if (input !== null && value !== undefined && input.value.trim() === '') input.value = value.trim();
   }
 }
 

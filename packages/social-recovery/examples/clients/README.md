@@ -1,7 +1,8 @@
 # Social recovery: the client flows (sample app)
 
-Node scripts and a browser page that drive `@kohaku-eth/social-recovery`'s setup and recovery clients against the
-contracts deployed on Sepolia. The package is private and never published; it consumes the SDK's built `dist`.
+Node scripts and two browser pages that drive `@kohaku-eth/social-recovery` against the contracts deployed on Sepolia:
+the holder's setup and recovery clients, built by `SocialRecoveryBuilder`, and the approver's methods orchestrator. The
+package is private and never published; it consumes the SDK's built `dist`.
 
 | Script | What it walks through |
 | --- | --- |
@@ -11,7 +12,8 @@ contracts deployed on Sepolia. The package is private and never published; it co
 | `e2e` | `setup`, `recovery` and `cancel` in one run, asserting on the chain's answers; exits 1 on any failure |
 
 Every script prints each SDK call, the findings, the prepared records and the transaction hashes. The SDK never signs
-or sends: the scripts do, from the keys in the environment.
+or sends: the scripts do, from the keys in the environment. The scripts' guardians are wallet guardians: each signs its
+request through the kit's methods orchestrator (`signingInput` → the key signs the typed data → `replyFrom` → `verify`).
 
 ## Run
 
@@ -23,8 +25,8 @@ pnpm run setup                                        # `pnpm setup` is pnpm's o
 pnpm run recovery                                     # or: pnpm run recovery --two-step
 pnpm run cancel
 pnpm run e2e
-pnpm run dev                                          # the page (below)
-pnpm build                                            # tsc --noEmit, then vite build
+pnpm run dev                                          # the pages (below): / is the holder, /approver.html the approver
+pnpm build                                            # tsc --noEmit, then vite build of both pages
 ```
 
 ## The holder's account: three modes (`ACCOUNT_MODE`)
@@ -71,7 +73,10 @@ See `.env.example`; every variable carries a comment. In short:
 | `ORDER_TOKEN`, `ORDER_AMOUNT`, `ORDER_PAYEE` | the payment order; the payee defaults to the sponsor | all |
 
 The deployment descriptor is built from these with digest version `1`; the run reads the manager's `version()` and
-EIP-712 domain at start and stops on a mismatch. The client configuration is fixed in `src/clients.ts`: default and
+EIP-712 domain at start and stops on a mismatch. The kit is then built by
+`SocialRecoveryBuilder.from({ provider, account, descriptor, configuration }).withSignerRecovery(…).build()`, whose own
+construction checks read the chain id, the manager's EIP-712 domain and `version()` once more; where the holder keys
+swapped after a handover the kit is built again over the first build's manager reading. The client configuration is fixed in `src/clients.ts`: default and
 short wait 48 hours, largest wait 30 days, a request window of 24 hours (floor 1 hour), a cancel window of 12 hours, a
 rule cost bound of 10,000,000 gas, reads and watches at `latest`, log reads in chunks of 10,000 blocks, simulation on,
 the holder key as the one candidate key and the order's token as the token allowlist.
@@ -84,11 +89,21 @@ the holder key as the one candidate key and the order's token as the token allow
 - The account: the order's amount of `ORDER_TOKEN` when `ORDER_AMOUNT` is nonzero.
 - The guardians only sign and need nothing.
 
-## The page
+## The pages
 
-`pnpm run dev` serves `index.html` with Vite. It drives the same clients through the connected browser wallet: the
-wallet answers every read (an `IProvider` over its EIP-1193 `request`) and sends every transaction. The page holds no
-key and no RPC URL of its own; the wallet must end up on Sepolia (chain id 11155111), or Connect refuses.
+`pnpm run dev` serves both pages with Vite: `index.html`, the **holder** page, and `approver.html`, the **approver**
+page, one app with two entries (`pnpm build` builds both). Each names its role and links the other. Open them in two
+tabs of the same browser: the holder tab keeps its open gathering while you answer its requests in the approver tab.
+Neither page holds a key or an RPC URL of its own; the `VITE_` variables only prefill their forms.
+
+Shared by both pages (`src/web/`): `wallet.ts` (the connection and its session checks), `connect.ts` and `chain.ts`
+(Connect, the Sepolia switch, the wallet request timeouts), `lifetime.ts` (each action's lifetime), `actions.ts` (the
+one-action-at-a-time runner each page wires its buttons to), `page.ts` (the page lookups, tolerant of the other page's
+missing areas), `config.ts` (the form prefill and the field readers) and `src/trace.ts` (the trace).
+
+### The holder page
+
+The wallet must end up on Sepolia (chain id 11155111), or Connect refuses.
 When the wallet is on another chain, Connect asks it to switch to Sepolia (`wallet_switchEthereumChain`), first adding
 the chain (`wallet_addEthereumChain`, with a public Sepolia RPC and Etherscan) when the wallet does not know it; Connect
 refuses only when you reject the switch or the wallet stays elsewhere.
@@ -101,37 +116,72 @@ wider `eth_getLogs` ranges on their free plans.
 The Read RPC URL (optional, prefilled from `VITE_READ_RPC_URL`): some wallets' nodes refuse `eth_getLogs` with a topic
 filter, or over more than about a hundred blocks, so the SDK's event scan from the deploy block fails through the
 wallet. With the field set, Apply checks that the URL answers Sepolia's chain id and the page sends every chain read
-(calls, logs, blocks, code, transactions, chain id, the order's native balance) to it through viem, while the wallet
-still connects, switches chain, signs, sends and polls receipts; empty, the wallet answers everything as before. Use a
-public Sepolia endpoint or one with your own key; it lives only in your gitignored `.env` or the form, never in a commit,
-and like every `VITE_` variable it is visible in the served page.
+(calls, logs, blocks, code, transactions, chain id, the order's native balance) to it through viem, at most two at a
+time with a backoff on rate limits, while the wallet still connects, switches chain, signs, sends and polls receipts;
+empty, the wallet answers everything as before. Use a public Sepolia endpoint or one with your own key; it lives only in
+your gitignored `.env` or the form, never in a commit, and like every `VITE_` variable it is visible in the served page.
 
 - **Deployment**: the manager, the methods, the action, the Ambire implementation, the deploy block, the factory and its
   deploy function, the optional manager version and the optional existing account. Each field is prefilled from the
   package's `.env` (the `VITE_` block of `.env.example`) and can be typed. **Apply** checks the descriptor against the
-  chain as the scripts do (chain id, `version()`, the EIP-712 domain) and builds the parts and both clients.
+  chain as the scripts do (chain id, `version()`, the EIP-712 domain).
 - **Holder**: the connected account is the account's signer and the sponsor; it sends every transaction.
   - Account: **Create** builds the account's creation code for the connected address (below), shows the predicted
     `CREATE2` address and the salt, and sends the factory's deploy when that address holds no code; **Select** takes the
     form's existing account (it must hold code; the account's own calls are refused unless the connected account is its
-    authority); **EOA stand-in** uses the connected address for reads and prepares only.
+    authority); **EOA stand-in** uses the connected address for reads and prepares only. Choosing the account builds
+    the kit through `SocialRecoveryBuilder.from({ provider, account, descriptor, configuration })` (the signer recovery
+    handed over, then `.build()`), the configuration carrying the 2,000-block log chunks: the builder reads the chain id, the manager's EIP-712 domain and
+    `version()`, through the Read RPC URL's cap and backoff when one is set. Every later action builds the kit again over
+    its own lifetime with that first reading handed back, so it reads only the chain id, once per action.
   - State: `setupState()` and `recoveryState()`, read on demand.
-  - Setup: guardian addresses, one clause, the threshold, the wait (default 120 s) and the backup password →
+  - Setup: one credential line per guardian, in any mix of the four methods: a credential line copied from the approver
+    page's enrollment (the SDK's `Credential` record as JSON, `{ "method": …, "config": … }`, optional `label` and
+    `salt`), or a bare address for a wallet guardian (its config built through the orchestrator's `configFrom` for the
+    deployment's wallet method). Then one clause, the threshold, the wait (default 120 s) and the backup password →
     `validateSetup` → `describeSetup` → `prepareCommitSetup` → one `executeBySender` to the account → `confirmSetup`.
+    The setup registers each guardian's real module and config on chain.
   - Attempt: the new authority (another of the wallet's accounts) and the payment order → `initRecoveryGathering` →
-    each approver request as JSON with a Copy button → paste one reply at a time (`addApproverReply`) → `assess` →
-    `complete` → `validateRequest` → `prepareStartAttempt` → the wallet sends.
+    each approver request as a JSON line with a Copy button → paste one reply line at a time (`addApproverReply`) →
+    `assess` → `complete` → `validateRequest` → `prepareStartAttempt` → the wallet sends.
   - Execute: **Refresh** compares `consumableAfter` with the latest block's timestamp; **Execute** is enabled once the
     attempt is ripe and runs `prepareExecuteHandover`, then shows a check line for the consumed attempt, the moved keys,
     the action still authorized and, for a nonzero order, the payee's payment. Cancels stay in the `cancel` script.
-- **Guardian**: paste an approver request, sign it with the connected account (`eth_signTypedData_v4`), copy the reply
-  into the holder panel. The local `verify` verdict is shown.
+
+### The approver page
+
+It reads no chain and sends no transaction, and it carries **no testing material**: every answer and every enrollment
+is made with real material, and the on-chain verifiers judge it.
+
+- **Deployment**: a reduced block (the manager, the four methods, the action, the Ambire implementation, the deploy
+  block, the optional manager version), prefilled from the same `VITE_` variables. The descriptor is built from it
+  without a read (Sepolia's chain id, the SDK's digest version, the wallet and passkey methods as the shipped ones, the
+  action as the audited one), and the orchestrator is
+  `SocialRecoveryBuilder.from({ descriptor, deviceBindings }).withMethod(zkPassportMethod()).withMethod(anonAadhaarMethod({ artifacts })).buildMethodsOrchestrator()`.
+- **Answer a request**: paste a request line, **Describe** shows `describeRequest` (the account, the new and the removed
+  key, the order, the deadline); a request naming a module the form does not name is the orchestrator's refusal. The
+  method is read from `request.method`, and **Answer** runs `signingInput` → the material → `replyFrom` and shows the
+  reply line with a Copy button and the local `verify` verdict (`not-judged` for zkPassport, whose proof only the chain
+  checks):
+  - wallet: the connected account signs with `eth_signTypedData_v4`; a request naming another guardian is noted
+    ("names guardian …, not the connected …"), and a wallet switch during the signature shows nothing;
+  - passkey: `navigator.credentials.get` with this page's host as the relying-party id (so serve the page on the host
+    the passkey was created on), optionally limited to one credential id;
+  - zkPassport: the installed `@zkpassport/sdk` opens the request and the page shows its URL as a link to open on the
+    phone holding the zkPassport app (no QR code: no QR package is installed); the six callbacks are traced; a real
+    passport or identity card proves in the app, scoped to the domain and scope the request's config fixes;
+  - Aadhaar: paste the data of a real secure QR code and UIDAI's production certificate (PEM, pasted or loaded from its
+    file); the prover downloads anon-aadhaar's published v2 proving files at run time (the whole zkey from the server,
+    or the chunked zkey as the fallback), shows its progress, and **Abort** stops it.
+- **Enroll as a guardian**: the chosen method's `enrollInput` → real material (the connected account, a new passkey
+  through `navigator.credentials.create`, a zkPassport proof verified by the installed SDK, an Aadhaar proof over the
+  QR code) → `configFrom` → the credential line with a Copy button, to paste into the holder page's setup form.
 
 Roles: switch accounts in the wallet between the guardian and the holder. Each action reads the connected account when
 it starts and names it in its output. Any switch drops the connection (connect again). A chain switch also drops the
-applied deployment, the chosen account and the open gathering, while an account switch keeps them, so the holder can
-sign as a guardian and come back to the same gathering. A step the wallet switched under stops before anything is
-shown, filed or sent. The forms and pasted texts always stay.
+holder's applied deployment, the chosen account and the open gathering, while an account switch keeps them, so the
+holder can sign as a wallet guardian in the approver tab and come back to the same gathering. A step the wallet switched
+under stops before anything is shown, filed or sent. The forms and pasted texts always stay.
 
 The creation code: one privilege entry (`PUSH1 0x01`, `PUSH32 slot`, `SSTORE`, with
 `slot = keccak256(abi.encode(signer, uint256(0)))` for the connected address), then the minimal proxy's deploy code and
@@ -141,19 +191,26 @@ at random (`crypto.getRandomValues`); type one to re-use it. **Create** on an ad
 but keeps no creation record, since the page does not know the block it was created in.
 
 Never in the bundle: Vite exposes every `VITE_` variable to the browser, so no private key and no RPC URL may carry that
-prefix. `src/env.ts` (the scripts' keys and RPC URL) is not imported by the page.
+prefix. `src/env.ts` (the scripts' keys and RPC URL) is not imported by either page. No proving file is bundled: the
+Aadhaar files are downloaded by the prover when it first runs.
 
 ## Files
 
 - `src/env.ts` loads and checks the environment; `src/provider.ts` is the viem-backed `IProvider`;
   `src/signer-recovery.ts` names the holder as the sender of a transaction to the account.
-- `src/clients.ts` builds the descriptor, the configuration, the parts and both clients; `src/session.ts` opens a run.
+- `src/clients.ts` builds the descriptor, the configuration and the kit through `SocialRecoveryBuilder`, beside the
+  sample's own check reads (the action state, the notifications, the payload decoding); `src/session.ts` opens a run.
 - `src/account.ts` provides the account in its mode; `src/send.ts` sends prepared calls from the sponsor or the account.
-- `src/guardians.ts` builds each guardian's ctx and reply; the SDK's methods orchestrator replaces it later.
+- `src/guardians.ts` lets the wallet guardians answer through the kit's methods orchestrator; `src/draft.ts` builds
+  their credentials through it.
 - `src/validation.ts` assembles the request validation context and runs `validateRequest` before every submission.
 - `src/setup.ts`, `src/recovery.ts` (`src/attempt.ts`, `src/handover.ts`), `src/cancel.ts`, `src/e2e.ts`: the flows.
 - `src/trace.ts` prints the trace, to the console or, on the page, to its trace area; `src/run.ts` runs a script's entry.
-- `index.html` and `src/web/`: the page. `wallet.ts` is the connection and its session checks, `provider.ts` and
-  `revert.ts` the wallet's `IProvider`, `config.ts` the deployment form, `kit.ts` the parts and clients, `creation.ts`
-  the account's creation code, `send.ts` the transactions, and `account.ts`, `setup.ts`, `attempt.ts`, `execute.ts`,
-  `guardian.ts` the panels; `main.ts` wires the buttons.
+- `index.html` and `src/web/main.ts`: the holder page. `provider.ts` and `revert.ts` are the wallet's `IProvider`,
+  `reads.ts`, `endpoint.ts` and `throttle.ts` the Read RPC URL, `kit.ts` the kit, `creation.ts` the account's creation
+  code, `send.ts` the transactions, `credentials.ts` the setup form's credential lines, and `account.ts`, `setup.ts`,
+  `attempt.ts`, `execute.ts` the panels.
+- `approver.html` and `src/web/approver.ts`: the approver page. `approver-deployment.ts` is the descriptor and the
+  orchestrator, `describe-request.ts` the description, `guardian.ts` the answer per method, `enroll.ts` the
+  enrollment, `devices.ts` the passkey and zkPassport ceremonies and the Abort, `aadhaar.ts` and `zkpassport.ts` the
+  two identity methods' fields.

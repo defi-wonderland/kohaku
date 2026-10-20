@@ -1,6 +1,6 @@
 import { messageOf } from '../shared/dom';
 import { file } from './file';
-import { gather, readCredentials } from './gather';
+import { credentialsEdited, gather, readCredentials } from './gather';
 import { ui } from './page';
 
 let busy = false;
@@ -20,6 +20,7 @@ const guarded = (step: () => Promise<void> | void) => async (): Promise<void> =>
   }
 };
 
+ui.credentials.addEventListener('input', credentialsEdited);
 ui.readButton.addEventListener('click', guarded(readCredentials));
 ui.gatherButton.addEventListener('click', guarded(gather));
 ui.fileButton.addEventListener('click', guarded(file));

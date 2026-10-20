@@ -1,5 +1,6 @@
-import { type Hex, METHOD_ECDSA_CONFIG_FIELD, type Reply } from '@kohaku-eth/social-recovery';
+import type { Reply } from '@kohaku-eth/social-recovery';
 import { zeroAddress } from 'viem';
+import { namedGuardian } from '../guardians';
 import { check, note, step } from '../trace';
 import { checkRequest } from '../validation';
 import { addressField } from './config';
@@ -30,7 +31,7 @@ export async function startGathering(conn: Connection): Promise<void> {
 
   const handover = { newAuthority: addressField('new-authority'), removedAuthority: conn.account };
   const order = { token: addressField('order-token', zeroAddress), amount: orderAmount(), payee: addressField('order-payee', conn.account) };
-  const kit = kitForOrder(order.token);
+  const kit = await kitForOrder(order.token);
 
   step(`initRecoveryGathering (as ${conn.account})`);
   note('handover', handover);
@@ -52,17 +53,18 @@ export async function startGathering(conn: Connection): Promise<void> {
   requestsBox.replaceChildren();
 
   for (const request of requests) {
-    const guardian = kit.method.codec.decodeConfig(request.config)[METHOD_ECDSA_CONFIG_FIELD] as Hex;
+    const guardian = namedGuardian(kit.orchestrator, request);
+    const who = guardian === undefined ? `the guardian of method ${request.method}` : `wallet guardian ${guardian}`;
 
-    copyableBlock(requestsBox, `Place ${request.place}: the request for guardian ${guardian}`, request);
+    copyableBlock(requestsBox, `Place ${request.place}: the request for ${who}; open it on the approver page`, request);
   }
 
   note('approver requests', requests.length);
 }
 
 /** Files one pasted reply into the cached gathering with `addApproverReply`, showing the outcome. */
-export function fileReply(conn: Connection): void {
-  const { kit } = requireKit();
+export async function fileReply(conn: Connection): Promise<void> {
+  const { kit } = await requireKit();
   const { gathering } = holder;
 
   if (gathering === undefined) throw new Error('start a gathering first');
@@ -91,7 +93,7 @@ export function fileReply(conn: Connection): void {
 export async function submitAttempt(conn: Connection): Promise<void> {
   noteStandIn();
 
-  const { kit, provider } = requireKit();
+  const { kit, provider } = await requireKit();
   const { gathering } = holder;
 
   if (gathering === undefined) throw new Error('start a gathering first');

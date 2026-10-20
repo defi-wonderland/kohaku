@@ -15,7 +15,7 @@ export const chainNow = async (session: Session): Promise<Moment> => (await sess
 /** The guardians answer, then `assess` and `complete` turn the gathering into the request to submit. */
 export async function assembled(session: Session, start: Gathering): Promise<{ request: AttemptRequest | CancelRequest; now: Moment }> {
   const { env, kit } = session;
-  const gathering = await gatherReplies(kit.recovery, kit.method, start, env.guardianKeys, env.threshold);
+  const gathering = await gatherReplies(kit.recovery, kit.orchestrator, start, env.guardianKeys, env.threshold);
   const now = await chainNow(session);
 
   step('assess');

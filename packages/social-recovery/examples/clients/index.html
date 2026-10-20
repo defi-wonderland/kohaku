@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Client flows</title>
+    <title>Client flows: holder</title>
     <style>
       body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 960px; padding: 16px; }
       fieldset { margin: 12px 0; }
@@ -17,11 +17,12 @@
     </style>
   </head>
   <body>
-    <h1>Social recovery: the client flows</h1>
+    <h1>Social recovery: the holder</h1>
     <p>
-      The setup and recovery clients against the Sepolia deployment, through your browser wallet. The connected account
-      sends every transaction; switch accounts in the wallet to act as a guardian, then connect again. No key and no RPC
-      URL is in this page: every read and every transaction goes through the wallet.
+      The holder's page: the setup and recovery clients against the Sepolia deployment, through your browser wallet. The
+      connected account sends every transaction. Guardians answer on the <a href="approver.html">approver page</a>, opened
+      in another tab of this browser: copy each request there, copy the reply back here. No key and no RPC URL is in
+      this page: every read and every transaction goes through the wallet, or the optional Read RPC URL.
     </p>
     <button id="connect" type="button">Connect wallet</button>
     <p id="connection">Not connected.</p>
@@ -62,7 +63,7 @@
     </fieldset>
     <fieldset>
       <legend>Setup</legend>
-      <label>Guardian addresses (one per line or comma-separated) <textarea id="guardians"></textarea></label>
+      <label>Guardians: one credential line per guardian, any mix of methods (a credential line from the approver page, or a bare address for a wallet guardian) <textarea id="guardians"></textarea></label>
       <label>Threshold <input id="threshold" value="2" /></label>
       <label>Wait in seconds <input id="wait" value="120" /></label>
       <label>Backup password <input id="password" type="password" /></label>
@@ -85,14 +86,6 @@
       <button id="refresh-attempt" type="button">Refresh</button>
       <button id="execute" type="button" disabled>Execute the handover</button>
       <pre id="execute-out"></pre>
-    </fieldset>
-
-    <h2>3. Guardian</h2>
-    <fieldset>
-      <label>Approver request (JSON) <textarea id="request-in"></textarea></label>
-      <button id="sign" type="button">Sign with the connected account</button>
-      <pre id="reply-out"></pre>
-      <button id="copy-reply" type="button">Copy the reply</button>
     </fieldset>
 
     <h2>Trace</h2>

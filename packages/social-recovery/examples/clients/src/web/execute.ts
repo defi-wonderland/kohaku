@@ -9,7 +9,7 @@ import { type Connection, ensureSession } from './wallet';
 
 /** The waiting attempt and the chain's clock, the latest block's timestamp; `ripe` once the clock reached `consumableAfter`. */
 async function waitingAttempt(conn: Connection): Promise<{ attempt: Attempt; now: number; ripe: boolean } | undefined> {
-  const { kit, provider } = requireKit();
+  const { kit, provider } = await requireKit();
   const state = await kit.recovery.recoveryState();
 
   ensureSession(conn.session);
@@ -47,7 +47,7 @@ export async function refreshAttempt(conn: Connection): Promise<void> {
 
 /** The opening notification's payload for the attempt, fetched through the event manager from the setup's block on. */
 async function openingPayload(conn: Connection, attempt: Attempt): Promise<Hex> {
-  const { kit, provider } = requireKit();
+  const { kit, provider } = await requireKit();
   const state = await kit.policyManager.stateOf();
 
   ensureSession(conn.session);
@@ -76,7 +76,7 @@ async function openingPayload(conn: Connection, attempt: Attempt): Promise<Hex> 
 
 /** The payee's balance in the order's asset at one block. */
 async function balanceAt(conn: Connection, attempt: Attempt, payee: Address, block: number): Promise<bigint> {
-  const { provider } = requireKit();
+  const { provider } = await requireKit();
   const { token } = attempt.order;
 
   if (isAddressEqual(token, zeroAddress)) {
@@ -125,7 +125,7 @@ async function paymentLine(conn: Connection, attempt: Attempt, receipt: MinedRec
 export async function executeHandover(conn: Connection): Promise<void> {
   noteStandIn();
 
-  const { kit } = requireKit();
+  const { kit } = await requireKit();
   const waiting = await waitingAttempt(conn);
 
   ensureSession(conn.session);

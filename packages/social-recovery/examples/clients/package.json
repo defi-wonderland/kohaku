@@ -14,7 +14,9 @@
     "e2e": "tsx src/e2e.ts"
   },
   "dependencies": {
+    "@anon-aadhaar/core": "2.4.3",
     "@kohaku-eth/social-recovery": "workspace:*",
+    "@zkpassport/sdk": "0.17.1",
     "viem": "^2.51.3"
   },
   "devDependencies": {

@@ -15,6 +15,9 @@ export const SEPOLIA_CHAIN_PARAMS = {
   blockExplorerUrls: ['https://sepolia.etherscan.io'],
 } as const;
 
+/** The refusal of a step the wallet switched account or chain under. */
+export const SESSION_CHANGED_MESSAGE = 'the wallet changed while this step ran; connect again';
+
 /** How long the page waits for the wallet to answer a read before saying so. */
 export const WALLET_ANSWER_MS = 60_000;
 

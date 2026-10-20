@@ -1,21 +1,21 @@
 import {
   AmbireActionCodec,
   configurationBody,
-  DIGEST_VERSION,
   encodeSetupBody,
   placeMap,
   seed,
+  DIGEST_VERSION,
   type Address,
   type Configuration,
+  type Credential,
   type Gathering,
   type GatheringMembers,
-  type Hex,
-  type IRecoveryMethod,
+  type IMethodsOrchestrator,
   type PlaceStanding,
   type Purpose,
   type SetupBody,
 } from '@kohaku-eth/social-recovery';
-import { getAddress, keccak256, slice, toHex } from 'viem';
+import { keccak256, toHex } from 'viem';
 import {
   SAMPLE_ATTEMPT_ID,
   SAMPLE_BLOCK_NUMBER,
@@ -29,17 +29,7 @@ import {
   SAMPLE_ZERO_ADDRESS,
 } from './constants';
 import { isFailure, type Trace } from './format';
-
-/** A local address derived from a label, so the sample needs no deployment. */
-export const localAddress = (label: string): Address => getAddress(slice(keccak256(toHex(label)), 12));
-
-/** The sample's fixed addresses. */
-export const SAMPLE = {
-  account: localAddress(SAMPLE_LABELS.account),
-  manager: localAddress(SAMPLE_LABELS.manager),
-  action: localAddress(SAMPLE_LABELS.action),
-  method: localAddress(SAMPLE_LABELS.method),
-};
+import { localAddress, SAMPLE } from './sample';
 
 /** A setup and the body it commits to. */
 export type SampleSetup = {
@@ -47,29 +37,31 @@ export type SampleSetup = {
   readonly body: SetupBody;
 };
 
-/** Enrols one wallet guardian by address: `enrollInput` then `configFrom`, which needs no material. */
-export async function enrollWallet(method: IRecoveryMethod, address: Address, trace: Trace): Promise<Hex> {
-  const input = method.enrollInput({ address });
-  const config = await method.configFrom(input, undefined);
+/** Enrols one wallet guardian by address through the orchestrator: `enrollInput`, then `configFrom` with no material. */
+export async function enrollWallet(orchestrator: IMethodsOrchestrator, address: Address, trace: Trace): Promise<Credential> {
+  const module = SAMPLE.methods.wallet;
+  const input = orchestrator.enrollInput(module, { address });
+  const config = await orchestrator.configFrom(module, input, undefined);
 
-  trace(`method.configFrom(method.enrollInput({ address: ${address} }), undefined)`, config);
+  trace(`orchestrator.configFrom(walletModule, orchestrator.enrollInput(walletModule, { address: ${address} }), undefined)`, config);
 
   if (isFailure(config)) throw new Error(`enrolment refused: ${config.cause}`);
 
-  return config;
+  return { method: module, config };
 }
 
-/** One clause of wallet guardians, each credential on the default salt of its place. */
-export async function sampleSetup(method: IRecoveryMethod, guardians: readonly Address[], trace: Trace): Promise<SampleSetup> {
-  const credentials = [];
+/** The rule of a sample setup: how many approvals it needs and its wait. */
+export type SetupOptions = {
+  readonly threshold?: number;
+  /** In seconds. */
+  readonly wait?: number;
+};
 
-  for (const guardian of guardians) {
-    credentials.push({ method: SAMPLE.method, config: await enrollWallet(method, guardian, trace) });
-  }
-
+/** One clause over the credentials, any mix of methods, each on the default salt of its place. */
+export function sampleSetup(credentials: readonly Credential[], trace: Trace, options: SetupOptions = {}): SampleSetup {
   const configuration: Configuration = {
-    clauses: [{ threshold: Math.min(SAMPLE_THRESHOLD, guardians.length), credentials }],
-    wait: SAMPLE_WAIT,
+    clauses: [{ threshold: Math.min(options.threshold ?? SAMPLE_THRESHOLD, credentials.length), credentials }],
+    wait: options.wait ?? SAMPLE_WAIT,
     ignoresPause: false,
   };
   const body = configurationBody(configuration, SAMPLE.account);
@@ -80,7 +72,7 @@ export async function sampleSetup(method: IRecoveryMethod, guardians: readonly A
 }
 
 /** The members a gathering of the given purpose starts from, its block pinned at `now`. */
-function sampleMembers(body: SetupBody, purpose: Purpose, chainId: number, now: number): GatheringMembers {
+function sampleMembers(setup: SampleSetup, purpose: Purpose, chainId: number, now: number): GatheringMembers {
   const shared = {
     chainId: String(chainId),
     manager: SAMPLE.manager,
@@ -89,13 +81,13 @@ function sampleMembers(body: SetupBody, purpose: Purpose, chainId: number, now: 
     action: SAMPLE.action,
     attemptId: SAMPLE_ATTEMPT_ID,
     setupNonce: SAMPLE_SETUP_NONCE,
-    setupBody: encodeSetupBody(body),
+    setupBody: encodeSetupBody(setup.body),
     validUntil: String(now + SAMPLE_WINDOW),
     block: { number: SAMPLE_BLOCK_NUMBER, timestamp: String(now), hash: keccak256(toHex(SAMPLE_LABELS.blockHash)) },
   };
 
   if (purpose === 'cancellation') {
-    return { purpose, request: { ...shared, consumableAfter: String(now + SAMPLE_WAIT) } };
+    return { purpose, request: { ...shared, consumableAfter: String(now + setup.configuration.wait) } };
   }
 
   const payload = new AmbireActionCodec([SAMPLE.action]).encode({
@@ -128,7 +120,7 @@ export function sampleGathering(setup: SampleSetup, options: GatheringOptions, t
 
   trace('placeMap(body, configuration, standings, account)', places);
 
-  const members = sampleMembers(setup.body, options.purpose, options.chainId ?? SAMPLE_CHAIN_ID, now);
+  const members = sampleMembers(setup, options.purpose, options.chainId ?? SAMPLE_CHAIN_ID, now);
   const record = seed(members, places);
 
   trace(`seed(members, places): the ${record.purpose} gathering, with ${record.places.length} places, no replies yet`);

@@ -1,6 +1,6 @@
 import type { RequestWindowBounds } from '@kohaku-eth/social-recovery';
 
-/** The chain id the Node scripts put in the sample request; the page uses the wallet's own instead. */
+/** The chain id a sample request carries when no wallet names another. */
 export const SAMPLE_CHAIN_ID = 31337;
 
 /** Labels the sample's local addresses are derived from; none of them is deployed anywhere. */
@@ -8,11 +8,18 @@ export const SAMPLE_LABELS = {
   account: 'playground account',
   manager: 'playground policy manager',
   action: 'playground recovery action',
+  servedImplementation: 'playground served implementation',
   method: 'playground wallet method',
+  methodPasskey: 'playground passkey method',
+  methodZkpassport: 'playground zkpassport method',
+  methodAadhaar: 'playground aadhaar method',
   newAuthority: 'playground new key',
   removedAuthority: 'playground lost key',
   blockHash: 'playground pinned block',
 } as const;
+
+/** The release string the sample descriptor names for its manager. */
+export const SAMPLE_MANAGER_VERSION = 'playground';
 
 /** The setup's wait before a recovery can be consumed, in seconds. */
 export const SAMPLE_WAIT = 3 * 24 * 60 * 60;

@@ -1,38 +1,43 @@
-import { requests, walletMethod, type ApproverRequest, type Ctx, type Hex } from '@kohaku-eth/social-recovery';
+import { requests, type ApproverRequest, type Credential, type Hex } from '@kohaku-eth/social-recovery';
 import type { TypedDataDefinition } from 'viem';
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
-import { ctxFor } from './approver';
+import { SAMPLE_CHAIN_ID } from './constants';
 import { consoleTrace as trace, isFailure } from './format';
-import { sampleGathering, sampleSetup } from './setup';
+import { buildOrchestrator } from './orchestrator';
+import { enrollWallet, sampleGathering, sampleSetup } from './setup';
 
-// The method's local check over a proof: satisfied, rejected or not judged, with no chain read.
-const method = walletMethod();
+// The method's local check over a proof, through the orchestrator: satisfied, rejected or not judged, with no chain read.
+const orchestrator = buildOrchestrator(SAMPLE_CHAIN_ID);
 const guardians = [0, 1, 2].map(() => privateKeyToAccount(generatePrivateKey()));
 const outsider = privateKeyToAccount(generatePrivateKey());
 
 trace('guardians (viem local accounts, keys generated for this run)', guardians.map((guardian) => guardian.address));
 trace('an outsider, enrolled nowhere', outsider.address);
 
-const setup = await sampleSetup(method, guardians.map((guardian) => guardian.address), trace);
+const credentials: Credential[] = [];
 
-/** The ctx for one place of a fresh gathering. */
-function ctxAt(place: number, purpose: 'approval' | 'cancellation', holdingCode: readonly number[] = []): Ctx {
-  const request: ApproverRequest | undefined = requests(sampleGathering(setup, { purpose, holdingCode }, () => undefined))[place];
+for (const guardian of guardians) credentials.push(await enrollWallet(orchestrator, guardian.address, () => undefined));
+
+const setup = sampleSetup(credentials, trace);
+
+/** The request for one place of a fresh gathering. */
+function requestAt(place: number, purpose: 'approval' | 'cancellation', holdingCode: readonly number[] = []): ApproverRequest {
+  const request = requests(sampleGathering(setup, { purpose, holdingCode }, () => undefined))[place];
 
   if (request === undefined) throw new Error(`no request for place ${place}`);
 
-  return ctxFor(request);
+  return request;
 }
 
-/** The proof a key's signature over the ctx's typed data becomes. */
-async function proofBy(ctx: Ctx, signer: PrivateKeyAccount): Promise<Hex> {
-  const input = method.signingInput(ctx);
+/** The proof a key's signature over the request's typed data becomes, through `replyFrom`. */
+async function proofBy(request: ApproverRequest, signer: PrivateKeyAccount): Promise<Hex> {
+  const input = orchestrator.signingInput(request);
   const signature = await signer.signTypedData(input as unknown as TypedDataDefinition);
-  const proof = await method.replyFrom(ctx, input, { signature });
+  const reply = await orchestrator.replyFrom(request, input, { signature });
 
-  if (isFailure(proof)) throw new Error(`reply refused: ${proof.cause}`);
+  if (isFailure(reply)) throw new Error(`reply refused: ${reply.cause}`);
 
-  return proof;
+  return reply.proof;
 }
 
 /** One bit of the signature's `r` flipped. */
@@ -43,30 +48,30 @@ const tampered = (proof: Hex): Hex => {
   return `${proof.slice(0, at)}${flipped}${proof.slice(at + 1)}` as Hex;
 };
 
-const ctx = ctxAt(0, 'approval');
-const proof = await proofBy(ctx, guardians[0] as PrivateKeyAccount);
+const request = requestAt(0, 'approval');
+const proof = await proofBy(request, guardians[0] as PrivateKeyAccount);
+const check = (proofBytes: Hex) => orchestrator.verify(request, request.place, proofBytes);
 
-trace('method.describe(ctx) for place 0', method.describe(ctx));
-trace('the place-0 guardian signs; method.verify(ctx, proof)', await method.verify(ctx, proof));
-
-const outsiderProof = await proofBy(ctx, outsider);
-
-trace('the outsider signs the same typed data; method.verify(ctx, proof)', await method.verify(ctx, outsiderProof));
-trace('another guardian signs place 0; method.verify(ctx, proof)', await method.verify(ctx, await proofBy(ctx, guardians[1] as PrivateKeyAccount)));
+trace('orchestrator.describeRequest(request).device for place 0', orchestrator.describeRequest(request).device);
+trace('the place-0 guardian signs; orchestrator.verify(request, place, proof)', await check(proof));
+trace('the outsider signs the same typed data; orchestrator.verify(request, place, proof)', await check(await proofBy(request, outsider)));
+trace('another guardian signs place 0; orchestrator.verify(request, place, proof)', await check(await proofBy(request, guardians[1] as PrivateKeyAccount)));
 trace('tampered signature (one bit of r flipped)', tampered(proof));
-trace('method.verify(ctx, tampered)', await method.verify(ctx, tampered(proof)));
+trace('orchestrator.verify(request, place, tampered)', await check(tampered(proof)));
 
-const input = method.signingInput(ctx);
+const input = orchestrator.signingInput(request);
 
-trace("method.replyFrom(ctx, input, { signature: '0x' })", await method.replyFrom(ctx, input, { signature: '0x' }));
-trace('method.replyFrom(ctx, input, undefined)', await method.replyFrom(ctx, input, undefined));
+trace("orchestrator.replyFrom(request, input, { signature: '0x' })", await orchestrator.replyFrom(request, input, { signature: '0x' }));
+trace('orchestrator.replyFrom(request, input, undefined)', await orchestrator.replyFrom(request, input, undefined));
 
-const holdsCode = ctxAt(0, 'approval', [0]);
+const holdsCode = requestAt(0, 'approval', [0]);
+const codeProof = await proofBy(holdsCode, guardians[0] as PrivateKeyAccount);
 
-trace('a request saying the place-0 address holds code: method.describe(ctx)', method.describe(holdsCode));
-trace('method.verify(ctx, proof) where the address holds code', await method.verify(holdsCode, await proofBy(holdsCode, guardians[0] as PrivateKeyAccount)));
+trace('a request saying the place-0 address holds code: orchestrator.describeRequest(request).device', orchestrator.describeRequest(holdsCode).device);
+trace('orchestrator.verify(request, place, proof) where the address holds code', await orchestrator.verify(holdsCode, 0, codeProof));
 
-const cancel = ctxAt(1, 'cancellation');
+const cancel = requestAt(1, 'cancellation');
+const cancelProof = await proofBy(cancel, guardians[1] as PrivateKeyAccount);
 
-trace('a cancellation request, place 1: ctx.typedData.primaryType', cancel.typedData.primaryType);
-trace('method.verify(ctx, proof) for the cancellation', await method.verify(cancel, await proofBy(cancel, guardians[1] as PrivateKeyAccount)));
+trace('a cancellation request, place 1: its purpose', cancel.purpose);
+trace('orchestrator.verify(request, place, proof) for the cancellation', await orchestrator.verify(cancel, 1, cancelProof));

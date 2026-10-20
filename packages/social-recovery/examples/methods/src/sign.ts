@@ -1,20 +1,24 @@
-import { count, fileReply, requests, walletMethod, type Gathering } from '@kohaku-eth/social-recovery';
+import { count, fileReply, requests, type Credential, type Gathering } from '@kohaku-eth/social-recovery';
 import { hashTypedData, type TypedDataDefinition } from 'viem';
 import { generatePrivateKey, privateKeyToAccount, type PrivateKeyAccount } from 'viem/accounts';
-import { ctxFor, replyFor } from './approver';
-import { SAMPLE_WINDOW_BOUNDS } from './constants';
+import { SAMPLE_CHAIN_ID, SAMPLE_WINDOW_BOUNDS } from './constants';
 import { consoleTrace as trace, isFailure } from './format';
-import { sampleGathering, sampleSetup } from './setup';
+import { buildOrchestrator } from './orchestrator';
+import { enrollWallet, sampleGathering, sampleSetup } from './setup';
 
 // Three wallet guardians, two of three needed; each approver signs its own place's request with no chain.
-const method = walletMethod();
+const orchestrator = buildOrchestrator(SAMPLE_CHAIN_ID);
 const guardians = [0, 1, 2].map(() => privateKeyToAccount(generatePrivateKey()));
 
 trace('guardians (viem local accounts, keys generated for this run)', guardians.map((guardian) => guardian.address));
 
-const setup = await sampleSetup(method, guardians.map((guardian) => guardian.address), trace);
+const credentials: Credential[] = [];
 
-/** One approver's side: ctx, signing input, the wallet's signature, the proof and the reply, filed into the record. */
+for (const guardian of guardians) credentials.push(await enrollWallet(orchestrator, guardian.address, trace));
+
+const setup = sampleSetup(credentials, trace);
+
+/** One approver's side through the orchestrator: signing input, the wallet's signature and the reply, filed into the record. */
 async function approve(record: Gathering, guardian: PrivateKeyAccount, place: number): Promise<Gathering> {
   const request = requests(record)[place];
 
@@ -22,29 +26,22 @@ async function approve(record: Gathering, guardian: PrivateKeyAccount, place: nu
 
   trace(`requests(record)[${place}]: what the approver at place ${place} receives`, request);
 
-  const ctx = ctxFor(request);
-  const input = method.signingInput(ctx);
+  const input = orchestrator.signingInput(request);
 
-  trace('ctxFor(request).digest', ctx.digest);
-  trace('method.signingInput(ctx): the typed data the wallet signs', input);
+  trace('orchestrator.signingInput(request): the typed data the wallet signs', input);
 
   const typedData = input as unknown as TypedDataDefinition;
-
-  trace('hashTypedData(input) equals ctx.digest', hashTypedData(typedData) === ctx.digest);
-
   const signature = await guardian.signTypedData(typedData);
 
   trace('guardian.signTypedData(input)', signature);
 
-  const proof = await method.replyFrom(ctx, input, { signature });
+  const reply = await orchestrator.replyFrom(request, input, { signature });
 
-  trace('method.replyFrom(ctx, input, { signature }): the proof bytes', proof);
+  trace('orchestrator.replyFrom(request, input, { signature }): the reply sent back', reply);
 
-  if (isFailure(proof)) throw new Error(`reply refused: ${proof.cause}`);
+  if (isFailure(reply)) throw new Error(`reply refused: ${reply.cause}`);
 
-  const reply = replyFor(ctx, proof);
-
-  trace('replyFor(ctx, proof): the reply sent back', reply);
+  trace('hashTypedData(input) equals reply.digest', hashTypedData(typedData) === reply.digest);
 
   const filed = fileReply(record, reply);
 

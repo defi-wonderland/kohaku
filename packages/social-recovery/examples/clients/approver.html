@@ -21,7 +21,8 @@
     <p>
       The guardian's page: answer a request the <a href="index.html">holder page</a> gathered, with real material for
       its method, and copy the reply back there; or enroll as a guardian and copy the credential line into the holder's
-      setup form. This page reads no chain and sends no transaction. There is no testing material here: a wallet signs
+      setup form. The Deployment block and the holder's descriptor need no chain read on this page (the zkPassport SDK's
+      own verifier may query a chain or its API), and it sends no transaction. There is no testing material here: a wallet signs
       through the connected account, a passkey through this browser, zkPassport through the phone app and a real
       document, Aadhaar through a real secure QR code and UIDAI's production certificate.
     </p>

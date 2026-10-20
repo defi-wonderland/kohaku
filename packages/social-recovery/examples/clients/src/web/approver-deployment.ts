@@ -67,7 +67,8 @@ let built: { key: string; orchestrator: IMethodsOrchestrator } | undefined;
 
 /**
  * The methods orchestrator over the form's descriptor, every device binding met, the zkPassport and Aadhaar methods
- * added beside the shipped wallet and passkey methods; it holds no provider and reads no chain.
+ * added beside the shipped wallet and passkey methods; it holds no provider, so the descriptor and the orchestrator need
+ * no chain read (the zkPassport SDK's own verifier may still query a chain or its API).
  */
 export function approverOrchestrator(): { descriptor: DeploymentDescriptor; orchestrator: IMethodsOrchestrator } {
   const descriptor = approverDescriptor();

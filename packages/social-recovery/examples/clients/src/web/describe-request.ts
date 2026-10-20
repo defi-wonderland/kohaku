@@ -1,4 +1,5 @@
 import type { ApproverRequest, DeploymentDescriptor, IMethodsOrchestrator, RequestDescription } from '@kohaku-eth/social-recovery';
+import { type Address, isAddressEqual } from 'viem';
 import { note, show, step } from '../trace';
 import { prefillAadhaarSeed } from './aadhaar';
 import { approverOrchestrator, type MethodKind, methodKind } from './approver-deployment';
@@ -25,13 +26,34 @@ function summary(description: RequestDescription): string {
   const paid = order === undefined ? 'no payment order' : `order ${order.amount} of ${order.token} to ${order.payee}`;
 
   return [
-    `account ${description.account} (chain ${description.chainId})`,
+    `account ${description.account} (chain ${description.chainId}, manager ${description.manager})`,
     `${description.purpose} of attempt ${description.attemptId}, place ${description.place}`,
     ...keys,
     paid,
     `deadline ${new Date(description.validUntil * 1000).toISOString()} (validUntil ${description.validUntil})`,
     `method ${description.identityPublic.method}`,
   ].join('\n');
+}
+
+/**
+ * Refuses a request made for another deployment than the approver's Deployment block: its chain id, its manager and
+ * its action must be the form's, or the throw names the field, the request's value and the deployment's.
+ */
+function ensureSameDeployment(description: RequestDescription, descriptor: DeploymentDescriptor): void {
+  if (Number(description.chainId) !== Number(descriptor.chainId)) {
+    throw new Error(`the request is for chain ${description.chainId}, the deployment form is for chain ${descriptor.chainId}; not answered`);
+  }
+
+  const addresses: readonly [string, Address, Address][] = [
+    ['manager', description.manager, descriptor.manager],
+    ['action', description.action, descriptor.action],
+  ];
+
+  for (const [name, requested, deployed] of addresses) {
+    if (!isAddressEqual(requested, deployed)) {
+      throw new Error(`the request names ${name} ${requested}, the deployment form names ${name} ${deployed}; not answered`);
+    }
+  }
 }
 
 /** The pasted request, its description, the orchestrator over the form's descriptor and the request's method. */
@@ -46,7 +68,8 @@ export type DescribedRequest = {
 /**
  * The Describe step, also the first step of Sign: the orchestrator's description of the pasted request shown, the
  * method detected from `request.method`, and the fields its config fixes filled in (the zkPassport domain and scope,
- * the Aadhaar seed). A module no implementation serves is the orchestrator's refusal, thrown here.
+ * the Aadhaar seed). A request for another chain, manager or action than the form's is refused before anything else
+ * is asked; a module no implementation serves is the orchestrator's refusal, thrown here.
  */
 export function describeRequest(): DescribedRequest {
   const request = pastedRequest();
@@ -60,6 +83,7 @@ export function describeRequest(): DescribedRequest {
   note('description', description);
   note('method', kind ?? 'not named by the deployment form');
   descriptionOut.textContent = `${summary(description)}\n\n${show(description)}`;
+  ensureSameDeployment(description, descriptor);
 
   if (description.device === 'no-implementation' || kind === undefined) {
     orchestrator.signingInput(request);

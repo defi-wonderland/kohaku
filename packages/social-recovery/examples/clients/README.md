@@ -26,7 +26,16 @@ pnpm run recovery                                     # or: pnpm run recovery --
 pnpm run cancel
 pnpm run e2e
 pnpm run dev                                          # the pages (below): / is the holder, /approver.html the approver
-pnpm build                                            # tsc --noEmit, then vite build of both pages
+```
+
+Build the pages through Vite's JS API with an empty `envDir`, so no `VITE_` value of your `.env` is baked into the
+output (the package's `build` script and a plain `vite build` read the `.env` and bake its `VITE_` values in):
+
+```sh
+pnpm --filter @kohaku-eth/social-recovery-example-clients exec tsc --noEmit
+EMPTY_ENV="$(mktemp -d)"                               # a NEW empty directory every time, never a reused one
+cd packages/social-recovery/examples/clients
+node --input-type=module -e "import { build } from 'vite'; await build({ envDir: process.env.EMPTY_ENV, build: { outDir: '/tmp/clients-dist', emptyOutDir: true } });"
 ```
 
 ## The holder's account: three modes (`ACCOUNT_MODE`)
@@ -92,9 +101,10 @@ the holder key as the one candidate key and the order's token as the token allow
 ## The pages
 
 `pnpm run dev` serves both pages with Vite: `index.html`, the **holder** page, and `approver.html`, the **approver**
-page, one app with two entries (`pnpm build` builds both). Each names its role and links the other. Open them in two
+page, one app with two entries (the empty-`envDir` build above builds both). Each names its role and links the other. Open them in two
 tabs of the same browser: the holder tab keeps its open gathering while you answer its requests in the approver tab.
-Neither page holds a key or an RPC URL of its own; the `VITE_` variables only prefill their forms.
+Neither page holds a key; the `VITE_` variables only prefill their forms, and every `VITE_` value, the optional
+`VITE_READ_RPC_URL` included, is visible in the served page.
 
 Shared by both pages (`src/web/`): `wallet.ts` (the connection and its session checks), `connect.ts` and `chain.ts`
 (Connect, the Sepolia switch, the wallet request timeouts), `lifetime.ts` (each action's lifetime), `actions.ts` (the
@@ -138,7 +148,8 @@ your gitignored `.env` or the form, never in a commit, and like every `VITE_` va
   - Setup: one credential line per guardian, in any mix of the four methods: a credential line copied from the approver
     page's enrollment (the SDK's `Credential` record as JSON, `{ "method": …, "config": … }`, optional `label` and
     `salt`), or a bare address for a wallet guardian (its config built through the orchestrator's `configFrom` for the
-    deployment's wallet method). Then one clause, the threshold, the wait (default 120 s) and the backup password →
+    deployment's wallet method; addresses on one line may be separated by whitespace or commas). A credential whose
+    module is not one of the applied deployment's four methods is refused, naming its line. Then one clause, the threshold, the wait (default 120 s) and the backup password →
     `validateSetup` → `describeSetup` → `prepareCommitSetup` → one `executeBySender` to the account → `confirmSetup`.
     The setup registers each guardian's real module and config on chain.
   - Attempt: the new authority (another of the wallet's accounts) and the payment order → `initRecoveryGathering` →
@@ -150,7 +161,8 @@ your gitignored `.env` or the form, never in a commit, and like every `VITE_` va
 
 ### The approver page
 
-It reads no chain and sends no transaction, and it carries **no testing material**: every answer and every enrollment
+Its Deployment block and the holder's descriptor need no chain read (the zkPassport SDK's own verifier may query a
+chain or its API), it sends no transaction, and it carries **no testing material**: every answer and every enrollment
 is made with real material, and the on-chain verifiers judge it.
 
 - **Deployment**: a reduced block (the manager, the four methods, the action, the Ambire implementation, the deploy
@@ -159,7 +171,9 @@ is made with real material, and the on-chain verifiers judge it.
   action as the audited one), and the orchestrator is
   `SocialRecoveryBuilder.from({ descriptor, deviceBindings }).withMethod(zkPassportMethod()).withMethod(anonAadhaarMethod({ artifacts })).buildMethodsOrchestrator()`.
 - **Answer a request**: paste a request line, **Describe** shows `describeRequest` (the account, the new and the removed
-  key, the order, the deadline); a request naming a module the form does not name is the orchestrator's refusal. The
+  key, the order, the deadline, the chain and the manager); a request for another chain id, manager or action than the
+  form's is refused before any signing input, device or wallet prompt; a request naming a module the form does not
+  name is the orchestrator's refusal. The
   method is read from `request.method`, and **Answer** runs `signingInput` → the material → `replyFrom` and shows the
   reply line with a Copy button and the local `verify` verdict (`not-judged` for zkPassport, whose proof only the chain
   checks):
@@ -190,8 +204,8 @@ own bytes with the SDK's `creationPrivileges` (one entry, that slot, value 1) be
 at random (`crypto.getRandomValues`); type one to re-use it. **Create** on an address that already holds code uses that account
 but keeps no creation record, since the page does not know the block it was created in.
 
-Never in the bundle: Vite exposes every `VITE_` variable to the browser, so no private key and no RPC URL may carry that
-prefix. `src/env.ts` (the scripts' keys and RPC URL) is not imported by either page. No proving file is bundled: the
+Never in the bundle: Vite exposes every `VITE_` variable to the browser, so no private key may carry that prefix, and
+any `VITE_` endpoint such as `VITE_READ_RPC_URL` is visible to whoever opens the page. `src/env.ts` (the scripts' keys and RPC URL) is not imported by either page. No proving file is bundled: the
 Aadhaar files are downloaded by the prover when it first runs.
 
 ## Files

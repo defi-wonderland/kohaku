@@ -26,8 +26,8 @@ export interface IPolicyManagerInteractor {
     privateMetadata: Hex,
     block?: PinnedBlock,
   ): Promise<PreparedCall>;
-  prepareClearSetup(action: Address, block?: PinnedBlock): Promise<PreparedCall>;
-  prepareCancelByOwner(action: Address, block?: PinnedBlock): Promise<PreparedCall>;
+  prepareClearSetup(action: Address, nonce: bigint, block?: PinnedBlock): Promise<PreparedCall>;
+  prepareCancelByOwner(action: Address, attemptId: bigint, block?: PinnedBlock): Promise<PreparedCall>;
   prepareStartAttempt(request: AttemptRequest, block?: PinnedBlock): Promise<PreparedCall>;
   prepareCancelByProofs(request: CancelRequest, block?: PinnedBlock): Promise<PreparedCall>;
   prepareCancelByVeto(

@@ -2,7 +2,7 @@
   "format": "method-passkey-proof-v1",
   "blessed": false,
   "note": "Two rows copied verbatim from the contracts repository pin, which the blessed SDK copy of method-passkey-proof.json does not hold yet. Not blessed: the blessed copy is replaced, not edited, when the vectors are synced.",
-  "source": "defi-wonderland/social-recovery-contracts@9c8778b design/kats/method-passkey-proof.json",
+  "source": "defi-wonderland/social-recovery-contracts@0b7073a design/kats/method-passkey-proof.json",
   "derivation": "abi.encode(bytes authenticatorData, bytes clientDataJSON, uint256 r, uint256 s)",
   "vectors": [
     {

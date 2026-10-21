@@ -5,7 +5,7 @@ import { passkeyMethod } from '../../src';
 import type { Hex } from '../../src/interfaces';
 import { readVector } from '../kat/read-vector';
 import { chainAcceptsClientData } from './chain-model';
-import { base64url, bytesOf, CONFIG_FILE, type ConfigVectorFile, ctxFor, derOf, hexOf, type ProofVectorFile, sha256, word } from './fixtures';
+import { base64url, bytesOf, CONFIG_FILE, type ConfigVectorFile, ctxFor, derOf, hexOf, PROOF_FILE, type ProofVectorFile, sha256, word } from './fixtures';
 
 const method = passkeyMethod();
 const pinned = JSON.parse(readFileSync(new URL('fixtures/pin-proof-rows.json', import.meta.url), 'utf8')) as ProofVectorFile & {
@@ -38,11 +38,17 @@ const rowNamed = (name: string): ProofVectorFile['vectors'][number] => {
   return row;
 };
 
-describe('the two proof rows of the contracts pin the blessed copy lacks (unblessed fixture)', () => {
+describe('the two proof rows of the contracts pin (unblessed fixture)', () => {
   it('is marked unblessed, names its source and holds exactly the two rows', () => {
     expect(pinned.blessed).toBe(false);
-    expect(pinned.source).toContain('9c8778b');
+    expect(pinned.source).toContain('0b7073a');
     expect(pinned.vectors.map((row) => row['id'])).toEqual(['missing-challenge-closing-quote', 'invalid-signature']);
+  });
+
+  it('holds each row exactly as the copied proof vector of the same pin does', () => {
+    const copied = (readVector(PROOF_FILE) as unknown as ProofVectorFile).vectors;
+
+    for (const row of pinned.vectors) expect(copied.find((candidate) => candidate['id'] === row['id'])).toEqual(row);
   });
 
   for (const row of pinned.vectors) {

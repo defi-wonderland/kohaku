@@ -3,6 +3,7 @@ import type { Hex } from '../../src/interfaces';
 import { anonAadhaarMethod } from '../../src/method-aadhaar';
 import {
   CERTIFICATE,
+  clockAt,
   configBytes,
   ctxFor,
   FRESHNESS_WINDOW,
@@ -20,9 +21,6 @@ import {
 
 const DIGEST: Hex = '0x17498ba208aefe001e6e2f2adec41cd16d0285e23660df6e310d3daac040c339';
 const PARAMS = { nullifierSeed: 77n, issuerCertificate: CERTIFICATE };
-
-/** Stubs `Date.now` at `seconds` past the epoch, plus `extraMs` milliseconds. */
-const clockAt = (seconds: bigint, extraMs = 0) => vi.spyOn(Date, 'now').mockReturnValue(Number(seconds) * 1000 + extraMs);
 
 /** The reply to a request under a config with `window`, over a QR the stack signs at `SIGNED_AT`. */
 async function replyUnder(window: bigint): Promise<Hex | { readonly kind: string }> {
@@ -75,6 +73,25 @@ describe('replyFrom refuses a QR older than the config window by the system cloc
     clockAt(SIGNED_AT + FRESHNESS_WINDOW, 999);
 
     expect(typeof (await replyUnder(FRESHNESS_WINDOW))).toBe('string');
+  });
+});
+
+describe('replyFrom refuses a config window under the minimum before proving', () => {
+  it.each([0n, 1n, MIN_FRESHNESS_WINDOW - 1n])('a window of %s seconds is request-unsupported and the prover never runs', async (window) => {
+    clockAt(SIGNED_AT + 600n);
+
+    const double = stackDouble({ pcd: pcdOf(SYNTHETIC_UPSTREAM, signalsFor(22n, 77n, DIGEST)) });
+    const method = anonAadhaarMethod({ stack: double.stack });
+    const ctx = ctxFor(configBytes(22n, 77n, window), DIGEST);
+
+    expect(isFailure(await method.replyFrom(ctx, method.signingInput(ctx, PARAMS), { qrData: QR_DATA }), 'request-unsupported')).toBe(true);
+    expect(double.proveCalls).toHaveLength(0);
+  });
+
+  it('a window of exactly the minimum proceeds to the proof bytes', async () => {
+    clockAt(SIGNED_AT + 600n);
+
+    expect(typeof (await replyUnder(MIN_FRESHNESS_WINDOW))).toBe('string');
   });
 });
 

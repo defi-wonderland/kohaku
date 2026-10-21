@@ -4,7 +4,7 @@ import type { EnrollInput, Hex, Input, Material } from '../../src/interfaces';
 import { anonAadhaarMethod } from '../../src/method-aadhaar';
 import {
   CERTIFICATE,
-  clockAt,
+  clockForFile,
   configBytes,
   configRow,
   ctxFor,
@@ -27,7 +27,7 @@ const CONFIG = configBytes(22n, 77n);
 const boundPcd = pcdOf(SYNTHETIC_UPSTREAM, signalsFor(22n, 77n, DIGEST));
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-clockAt(FRESH_NOW);
+clockForFile(FRESH_NOW);
 
 describe('enrollment', () => {
   it('enrollInput carries the seed and the certificate and no field to reveal, touching no stack', () => {

@@ -8,6 +8,7 @@ import {
   METHOD_AADHAAR_ENROLL_KIND,
   METHOD_AADHAAR_FRESHNESS_WINDOW,
   METHOD_AADHAAR_MATERIAL_REJECTED,
+  METHOD_AADHAAR_MIN_FRESHNESS_WINDOW,
   METHOD_AADHAAR_REQUEST_UNSUPPORTED,
   METHOD_AADHAAR_SEED_MISMATCH_MESSAGE,
   METHOD_AADHAAR_SEED_PARAM,
@@ -103,7 +104,9 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
 
   /**
    * Proves over the digest and returns the proof unless its bindings fail, the QR is older than the config's window
-   * by the system clock, or the local verdict rejects it. An abort at any point, verification included, is `device-refused`.
+   * by the system clock, or the local verdict rejects it. A config window under the minimum is `request-unsupported`
+   * before proving. The chain accepts the proof until one window after the QR's signing time, whatever the request's
+   * validity, so the holder's simulation refuses one that aged. An abort at any point, verification included, is `device-refused`.
    */
   async replyFrom(ctx: Ctx, input: Input, material: Material): Promise<Hex | ReplyFailure> {
     const params = readInput(input);
@@ -122,6 +125,8 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
     } catch {
       return METHOD_AADHAAR_REQUEST_UNSUPPORTED;
     }
+
+    if (config.freshnessWindow < METHOD_AADHAAR_MIN_FRESHNESS_WINDOW) return METHOD_AADHAAR_REQUEST_UNSUPPORTED;
 
     if (!isDigest(ctx.digest)) return METHOD_AADHAAR_REQUEST_UNSUPPORTED;
 

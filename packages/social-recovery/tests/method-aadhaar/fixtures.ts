@@ -95,8 +95,12 @@ export const SIGNED_AT = 1_700_000_000n;
 /** A clock ten minutes after `SIGNED_AT`, inside any window the contract accepts. */
 export const FRESH_NOW = SIGNED_AT + 600n;
 
+/** Stubs `Date.now` at `seconds` past the epoch plus `extraMs` milliseconds, now, and returns the spy. */
+export const clockAt = (seconds: bigint, extraMs = 0): MockInstance<() => number> =>
+  vi.spyOn(Date, 'now').mockReturnValue(Number(seconds) * 1000 + extraMs);
+
 /** Stubs `Date.now` at `seconds` for every test of the calling file, so a QR's age never depends on the real clock. */
-export function clockAt(seconds: bigint): void {
+export function clockForFile(seconds: bigint): void {
   let clock: MockInstance<() => number> | undefined;
 
   beforeEach(() => {

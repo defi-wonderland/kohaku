@@ -4,7 +4,7 @@ import type { Hex, Material } from '../../src/interfaces';
 import { anonAadhaarMethod } from '../../src/method-aadhaar';
 import {
   CERTIFICATE,
-  clockAt,
+  clockForFile,
   configBytes,
   ctxFor,
   FRESH_NOW,
@@ -22,7 +22,7 @@ const PARAMS = { nullifierSeed: 77n, issuerCertificate: CERTIFICATE };
 const CONFIG = configBytes(22n, 77n);
 const FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 
-clockAt(FRESH_NOW);
+clockForFile(FRESH_NOW);
 
 /** The error `run` throws, or `undefined` when it returns. */
 function thrown(run: () => unknown): unknown {

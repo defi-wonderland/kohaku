@@ -5,7 +5,7 @@ import { anonAadhaarMethod } from '../../src/method-aadhaar';
 import { keccak256 as ownKeccak } from '../helpers/keccak';
 import {
   CERTIFICATE,
-  clockAt,
+  clockForFile,
   configBytes,
   ctxFor,
   FRESH_NOW,
@@ -33,7 +33,7 @@ const SEED = 5n;
 const NULLIFIER = 6n;
 const CONFIG = configBytes(NULLIFIER, SEED);
 
-clockAt(FRESH_NOW);
+clockForFile(FRESH_NOW);
 
 /** The signal hash by hand: the keccak256 hash read big-endian, less its three low bits. */
 function reduce(digest: Hex): bigint {

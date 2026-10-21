@@ -26,7 +26,9 @@ export interface IPolicyManagerInteractor {
     privateMetadata: Hex,
     block?: PinnedBlock,
   ): Promise<PreparedCall>;
+  /** `nonce` is the stored `setupNonce` the clear names, read from `stateOf`. */
   prepareClearSetup(action: Address, nonce: bigint, block?: PinnedBlock): Promise<PreparedCall>;
+  /** `attemptId` is the waiting attempt's, read from `stateOf`. */
   prepareCancelByOwner(action: Address, attemptId: bigint, block?: PinnedBlock): Promise<PreparedCall>;
   prepareStartAttempt(request: AttemptRequest, block?: PinnedBlock): Promise<PreparedCall>;
   prepareCancelByProofs(request: CancelRequest, block?: PinnedBlock): Promise<PreparedCall>;

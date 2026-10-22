@@ -82,6 +82,6 @@ export function coreStack(artifacts: AnonAadhaarArtifacts | undefined): AnonAadh
     generateArgs: async (options) =>
       (await load()).generateArgs({ ...options, fieldsToRevealArray: [...options.fieldsToRevealArray] }),
     prove: async (args, onProgress) => (await load()).prove(args, onProgress),
-    verify: async (pcd) => (await load()).verify(pcd),
+    verify: async (pcd, testMode) => (await load()).verify(pcd, testMode),
   };
 }

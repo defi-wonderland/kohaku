@@ -61,6 +61,9 @@ export const METHOD_AADHAAR_PUBLIC_INPUT_COUNT = METHOD_AADHAAR_PUBLIC_INPUTS.le
 /** The public inputs that disclose a field of the card; a proof the method accepts carries zero in each. */
 export const METHOD_AADHAAR_DISCLOSURE_INPUTS = Object.freeze(['ageAbove18', 'gender', 'pincode', 'state'] as const);
 
+/** Test mode where the factory's options leave it unset: off. */
+export const METHOD_AADHAAR_DEFAULT_TEST_MODE = false;
+
 /** The milliseconds in one second, the system clock's unit. */
 export const METHOD_AADHAAR_MILLISECONDS_PER_SECOND = 1000;
 

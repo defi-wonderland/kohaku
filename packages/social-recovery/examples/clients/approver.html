@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Client flows: approver</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 960px; padding: 16px; }
+      fieldset { margin: 12px 0; }
+      label { display: block; margin: 4px 0; }
+      label input, label textarea, label select { display: block; font-family: monospace; width: 100%; box-sizing: border-box; }
+      textarea { min-height: 72px; }
+      button { margin: 4px 8px 4px 0; padding: 6px 12px; }
+      pre { background: #f4f4f4; overflow-x: auto; padding: 8px; white-space: pre-wrap; word-break: break-all; }
+      #status { font-weight: bold; }
+      #trace { max-height: 480px; overflow-y: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>Social recovery: the approver</h1>
+    <p>
+      The guardian's page: answer a request the <a href="index.html">holder page</a> gathered, with real material for
+      its method, and copy the reply back there; or enroll as a guardian and copy the credential line into the holder's
+      setup form. The Deployment block and the holder's descriptor need no chain read on this page (the zkPassport SDK's
+      own verifier may query a chain or its API), and it sends no transaction. There is no testing material here: a wallet signs
+      through the connected account, a passkey through this browser, zkPassport through the phone app and a real
+      document, Aadhaar through a real secure QR code and UIDAI's production certificate.
+    </p>
+    <button id="connect" type="button">Connect wallet</button>
+    <p id="connection">Not connected. (Only a wallet guardian needs the connection.)</p>
+    <p id="status"></p>
+
+    <h2>1. Deployment</h2>
+    <fieldset>
+      <label>Policy manager <input id="manager" /></label>
+      <label>Wallet (ECDSA) method <input id="method-ecdsa" /></label>
+      <label>Passkey method <input id="method-passkey" /></label>
+      <label>Aadhaar method (empty: the zero address) <input id="method-aadhaar" /></label>
+      <label>zkPassport method (empty: the zero address) <input id="method-zkpassport" /></label>
+      <label>Recovery action <input id="action" /></label>
+      <label>Ambire implementation <input id="implementation" /></label>
+      <label>Deploy block <input id="deploy-block" /></label>
+      <label>Manager version (optional) <input id="manager-version" /></label>
+    </fieldset>
+
+    <h2>2. Method parameters</h2>
+    <fieldset>
+      <legend>Passkey (relying party: this page's host)</legend>
+      <label>Credential id (optional, base64url) <input id="passkey-credential-id" /></label>
+      <label>User name (enrollment only) <input id="enroll-user" /></label>
+    </fieldset>
+    <fieldset>
+      <legend>zkPassport</legend>
+      <label>Domain (empty: this page's host) <input id="zk-domain" /></label>
+      <label>Scope <input id="zk-scope" /></label>
+      <label>Name shown in the app (optional) <input id="zk-name" /></label>
+      <label>Purpose shown in the app (optional) <input id="zk-purpose" /></label>
+      <p>Request link (open it on the phone that holds the zkPassport app): <a id="zk-link" target="_blank" rel="noopener"></a></p>
+    </fieldset>
+    <fieldset>
+      <legend>Aadhaar</legend>
+      <label>Nullifier seed (empty at enrollment: a new one is drawn) <input id="aadhaar-seed" /></label>
+      <label>Issuer certificate: UIDAI's production certificate (PEM) <textarea id="aadhaar-certificate"></textarea></label>
+      <label>Or load it from a file <input id="aadhaar-certificate-file" type="file" accept=".cer,.pem,.crt" /></label>
+      <button id="load-certificate" type="button">Load the certificate file</button>
+      <label>Secure QR code data (the scanned number) <textarea id="aadhaar-qr"></textarea></label>
+      <label>Proving files
+        <select id="aadhaar-origin">
+          <option value="server">server: the whole zkey, downloaded once</option>
+          <option value="chunked">chunked: the zkey in parts (fallback)</option>
+        </select>
+      </label>
+      <label>Prover progress <input id="aadhaar-progress" readonly /></label>
+    </fieldset>
+    <button id="abort" type="button" data-anytime>Abort the zkPassport or Aadhaar step</button>
+
+    <h2>3. Answer a request</h2>
+    <fieldset>
+      <label>Request line (JSON, from the holder page) <textarea id="request-in"></textarea></label>
+      <button id="describe" type="button">Describe</button>
+      <pre id="description-out"></pre>
+      <button id="sign" type="button">Answer with the request's method</button>
+      <pre id="reply-out"></pre>
+      <button id="copy-reply" type="button">Copy the reply line</button>
+    </fieldset>
+
+    <h2>4. Enroll as a guardian</h2>
+    <fieldset>
+      <label>Method
+        <select id="enroll-method">
+          <option value="wallet">wallet: the connected account</option>
+          <option value="passkey">passkey: a new one in this browser</option>
+          <option value="zkpassport">zkPassport: the phone app and a real document</option>
+          <option value="aadhaar">Aadhaar: a real secure QR code</option>
+        </select>
+      </label>
+      <button id="enroll" type="button">Enroll</button>
+      <pre id="credential-out"></pre>
+      <button id="copy-credential" type="button">Copy the credential line</button>
+    </fieldset>
+
+    <h2>Trace</h2>
+    <button id="clear-trace" type="button">Clear</button>
+    <pre id="trace"></pre>
+    <script type="module" src="/src/web/approver.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,28 @@
+{
+  "name": "@kohaku-eth/social-recovery-example-methods",
+  "version": "0.0.0",
+  "description": "The methods playground: every recovery method enrolling, signing and verifying through the methods orchestrator, with no chain.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "dev": "vite",
+    "lint": "eslint .",
+    "enroll": "tsx src/enroll.ts",
+    "sign": "tsx src/sign.ts",
+    "verify": "tsx src/verify.ts"
+  },
+  "dependencies": {
+    "@anon-aadhaar/core": "2.4.3",
+    "@kohaku-eth/social-recovery": "workspace:*",
+    "@zkpassport/sdk": "0.17.1",
+    "ox": "^0.12.0",
+    "viem": "^2.51.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.2",
+    "vite": "8.3.3"
+  }
+}

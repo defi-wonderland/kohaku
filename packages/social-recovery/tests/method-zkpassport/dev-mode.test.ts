@@ -198,6 +198,14 @@ describe.each(MODES)('dev mode %s: configFrom reads the proofs from either mater
     expect(verifierCalls(double.calls).map((call) => call.args.proof)).toEqual([inner]);
   });
 
+  it('a null result list beside a valid outside list is refused, not read as absence', async () => {
+    const { double, method } = build(devMode);
+    const before = verifierCalls(double.calls).length;
+
+    await expect(method.configFrom(method.enrollInput(PARAMS), { result: { ...result, proofs: null }, proofs })).resolves.toEqual(rejected);
+    expect(verifierCalls(double.calls).length).toBe(before);
+  });
+
   it('with proofs in both places, a result list without an outer proof is refused, not completed from outside', async () => {
     const { method } = build(devMode);
 

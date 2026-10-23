@@ -55,9 +55,9 @@ const outerOf = (proofs: unknown): ZkPassportStackProof | undefined => {
 
 const isFailure = (value: unknown): value is ReplyFailure => isRecord(value) && value['kind'] === 'reply-failure';
 
-/** The ceremony's proof list: `material.result.proofs` where present, else `material.proofs`. */
+/** The ceremony's proof list: `material.result.proofs` where the member is present, else `material.proofs`; an explicit `null` is a malformed list, not absence. */
 const enrolledProofs = (material: { readonly [key: string]: unknown }, result: { readonly [key: string]: unknown }): unknown =>
-  result['proofs'] ?? material['proofs'];
+  result['proofs'] === undefined ? material['proofs'] : result['proofs'];
 
 /**
  * The config built from `material.result`, the ceremony's proof list and the stack's verifier parameters for the session.

@@ -88,7 +88,7 @@ export const acceptedNullifierType = (publicInputs: readonly string[], devMode: 
 
   if (type === undefined) return false;
 
-  return type === METHOD_ZKPASSPORT_NON_SALTED_NULLIFIER || (devMode && METHOD_ZKPASSPORT_DEV_MODE_NULLIFIER_TYPES.includes(type));
+  return devMode ? METHOD_ZKPASSPORT_DEV_MODE_NULLIFIER_TYPES.includes(type) : type === METHOD_ZKPASSPORT_NON_SALTED_NULLIFIER;
 };
 
 /** A unique identifier as the config's `bytes32` word, lower-case. */

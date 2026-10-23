@@ -129,7 +129,6 @@ export function stackDouble(options: StackDoubleOptions = {}): StackDouble {
               onResult: register('onResult'),
               onBridgeConnect: register('onBridgeConnect'),
               onBridgeConnectionLost: register('onBridgeConnectionLost'),
-              cancel: register('cancel'),
             };
           },
         };

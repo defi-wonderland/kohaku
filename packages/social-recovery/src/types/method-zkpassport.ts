@@ -60,7 +60,7 @@ export type ZkPassportRequest = {
   onError(callback: (error: string) => void): void;
   /** @deprecated The verified flag can be tampered with in the browser; verify the proofs with `verify()` instead. */
   onResult(
-    callback: (response: { verified: boolean; uniqueIdentifier?: string; proofs?: ZkPassportStackProof[]; [member: string]: unknown }) => unknown,
+    callback: (response: { verified: boolean; uniqueIdentifier: string | undefined; proofs: ZkPassportStackProof[]; [member: string]: unknown }) => unknown,
   ): void;
   onBridgeConnect(callback: () => void): void;
   onBridgeConnectionLost(callback: () => void): void;

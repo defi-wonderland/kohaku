@@ -1,5 +1,13 @@
 # @kohaku-eth/privacy-pools
 
+## 0.1.0-alpha.29
+
+### Minor Changes
+
+- 2b7208a: Add Privacy Pools v2 plugin (`createPPv2Plugin` / `createPPv2Broadcaster`) under
+  `src/v2/`, adapting Kohaku `Host` capabilities onto `@0xbow/privacy-pools-v2-sdk`. Alpha,
+  UNAUDITED. See `specs/001-privacy-pools-v2/`.
+
 ## 0.1.0-alpha.28
 
 ### Patch Changes

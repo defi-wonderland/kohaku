@@ -1,0 +1,21 @@
+{
+  "name": "@kohaku-eth/recovery-poc-sdk",
+  "version": "0.0.0",
+  "private": true,
+  "description": "PoC SDK glue: calldata builders that drive the RecoveryControllerPoC -> AmbireAccountAdapter -> AmbireAccount signer-rotation seam. Mirrors how the extension consumes @kohaku-eth/* today.",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "exports": {
+    ".": "./index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}

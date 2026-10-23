@@ -1,6 +1,6 @@
 {
   "name": "@kohaku-eth/ppv2-sample-app",
-  "version": "0.0.1",
+  "version": "0.0.2-alpha.0",
   "description": "Sample wallet integration of the Privacy Pools v2 Kohaku plugin",
   "private": true,
   "type": "module",

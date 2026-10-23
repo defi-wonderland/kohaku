@@ -9,7 +9,8 @@
     "@kohaku-eth/example-pq-account": "0.0.1-alpha.1",
     "@kohaku-eth/plugins": "0.0.1-alpha.1",
     "@kohaku-eth/tornado-cash": "0.0.2-alpha.8",
-    "@kohaku-eth/mimc-tree": "0.0.1"
+    "@kohaku-eth/mimc-tree": "0.0.1",
+    "@kohaku-eth/ppv2-sample-app": "0.0.1"
   },
   "changesets": [
     "add-privacy-pools-demo",
@@ -48,6 +49,7 @@
     "pp-paymaster-refund-recipient",
     "pp-signature-secret-manager",
     "pp-withdraw-tree-depth-32",
+    "ppv2-plugin",
     "privacy-pools-history",
     "provider-log-index",
     "puny-olives-mate",

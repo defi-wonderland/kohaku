@@ -164,12 +164,15 @@ describe('the package surface', () => {
     expect([...entry.keys()].sort()).toEqual(['anonAadhaarMethod', ...INTEGRATOR_TYPES].sort());
   }, PROGRAM_TIMEOUT);
 
-  it('the core entry src/index.ts exports no Aadhaar name but the method\'s constants, the default test mode among them', () => {
+  it('the core entry src/index.ts exports no Aadhaar name but every METHOD_AADHAAR_* constant', () => {
     const program = createSourceProgram();
-    const entry = resolveExports(program.getTypeChecker(), requireSourceFile(program, join(SRC_ROOT, 'index.ts')));
+    const checker = program.getTypeChecker();
+    const entry = resolveExports(checker, requireSourceFile(program, join(SRC_ROOT, 'index.ts')));
+    const constants = resolveExports(checker, requireSourceFile(program, join(SRC_ROOT, 'constants', 'method-aadhaar.ts')));
     const names = [...entry.keys()].filter((name) => /aadhaar/i.test(name));
 
     expect(names.filter((name) => !name.startsWith('METHOD_AADHAAR_'))).toEqual([]);
+    expect(names.sort()).toEqual([...constants.keys()].sort());
     expect(names).toContain('METHOD_AADHAAR_DEFAULT_TEST_MODE');
   }, PROGRAM_TIMEOUT);
 

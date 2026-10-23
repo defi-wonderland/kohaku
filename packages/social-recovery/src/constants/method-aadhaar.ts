@@ -104,6 +104,9 @@ export const METHOD_AADHAAR_STACK_VERSION = '2.4.3';
 /** The calls the loaded stack must expose as functions. */
 export const METHOD_AADHAAR_STACK_CALLS = Object.freeze(['init', 'generateArgs', 'prove', 'verify'] as const);
 
+/** The stack's members naming the two signing keys it verifies against: UIDAI's outside test mode, its own test key in it. */
+export const METHOD_AADHAAR_STACK_KEY_MEMBERS = Object.freeze(['productionPublicKeyHash', 'testPublicKeyHash'] as const);
+
 /** The stack's member naming its artifact origins, and the member a CommonJS package's exports may arrive under. */
 export const METHOD_AADHAAR_STACK_ORIGINS_MEMBER = 'ArtifactsOrigin';
 export const METHOD_AADHAAR_STACK_DEFAULT_MEMBER = 'default';

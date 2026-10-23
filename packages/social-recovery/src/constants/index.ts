@@ -16,7 +16,7 @@ export * from './client-core';
 export * from './setup-client';
 export * from './recovery-client';
 export * from './method-zkpassport';
-export { METHOD_AADHAAR_DEFAULT_TEST_MODE } from './method-aadhaar';
+export * from './method-aadhaar';
 export * from './method-passkey';
 export * from './method-passkey-webauthn';
 export * from './methods-orchestrator';

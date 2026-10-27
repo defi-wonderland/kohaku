@@ -18,10 +18,12 @@ import { isRecord } from './inputs';
 /** Thrown when the default stack cannot be loaded or initialised. */
 export class AadhaarStackUnavailable extends Error {}
 
+/** The loaded peer with the three time calls present, the shape `signedAt` reads. */
+type AadhaarTimeSurface = AadhaarCoreSurface & Required<Pick<AadhaarCoreSurface, (typeof METHOD_AADHAAR_STACK_TIME_CALLS)[number]>>;
+
 function isLoaded(value: unknown): value is AadhaarCoreSurface {
   try {
     assertDependency(value, METHOD_AADHAAR_STACK_CALLS, METHOD_AADHAAR_STACK_PACKAGE);
-    assertDependency(value, METHOD_AADHAAR_STACK_TIME_CALLS, METHOD_AADHAAR_STACK_PACKAGE);
   } catch {
     return false;
   }
@@ -85,10 +87,24 @@ function signedByModeKey(core: AadhaarCoreSurface, pcd: AadhaarPcd, testMode: bo
   }
 }
 
-/** The QR's signing time read with the peer's helpers, imported without `init`; any failure is `undefined`. */
+/** Whether the loaded peer exposes the three time calls `signedAt` reads with. */
+function readsTime(core: AadhaarCoreSurface): core is AadhaarTimeSurface {
+  try {
+    assertDependency(core, METHOD_AADHAAR_STACK_TIME_CALLS, METHOD_AADHAAR_STACK_PACKAGE);
+  } catch {
+    return false;
+  }
+
+  return true;
+}
+
+/** The QR's signing time read with the peer's helpers, imported without `init`; any failure or a peer without them is `undefined`. */
 async function signedAtOf(qrData: string): Promise<bigint | undefined> {
   try {
     const core = await importCore();
+
+    if (!readsTime(core)) return undefined;
+
     const bytes = core.convertBigIntToByteArray(BigInt(qrData));
     const raw = core.decompressByteArray(bytes);
 
@@ -102,7 +118,8 @@ async function signedAtOf(qrData: string): Promise<bigint | undefined> {
  * The default stack, loaded on first use; without artifacts every call but `signedAt` rejects with `AadhaarStackUnavailable`.
  * Once loaded, `verify` answers false without calling the peer for a test-key proof outside test mode and for any
  * other key in it; outside test mode a key the peer does not know is left to the peer's throw, `not-judged`.
- * `signedAt` imports the peer without `init`, so it downloads no artifact.
+ * `signedAt` imports the peer without `init`, so it downloads no artifact; a peer without the three time calls still loads, and
+ * `signedAt` answers undefined.
  */
 export function coreStack(artifacts: AnonAadhaarArtifacts | undefined): AnonAadhaarStack {
   let loading: Promise<AadhaarCoreSurface> | undefined;

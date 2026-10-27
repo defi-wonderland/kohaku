@@ -74,8 +74,8 @@ describe('the pre-prover time read surface', () => {
     expectTypeOf<AnonAadhaarStack['signedAt']>().toEqualTypeOf<((qrData: string) => Promise<bigint | undefined>) | undefined>();
   });
 
-  it('the slack past the window is one hour, the precision of the QR time, as a bigint of seconds', () => {
-    expect(constants.METHOD_AADHAAR_SIGNED_AT_SLACK).toBe(3_600n);
+  it('the slack past the window is zero seconds, as a bigint: the read is the circuit\'s own hour-truncated time', () => {
+    expect(constants.METHOD_AADHAAR_SIGNED_AT_SLACK).toBe(0n);
   });
 
   it('the time calls are the peer\'s three helpers, frozen, and distinct from the calls init needs', () => {

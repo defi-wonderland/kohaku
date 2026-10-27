@@ -88,8 +88,7 @@ describe('replyFrom refuses a QR the stack reads as long expired before proving'
 
 describe('replyFrom lets the prover run, and isFresh judge, every other read', () => {
   it.each([
-    ['exactly the window plus the slack old', LAST_LET_THROUGH, SIGNED_AT],
-    ['inside the slack past the window', SIGNED_AT + FRESHNESS_WINDOW + 1n, SIGNED_AT],
+    ['read a second younger than its proof\'s time', LAST_LET_THROUGH + 1n, SIGNED_AT + 1n],
     ['read as signed after now', SIGNED_AT + FRESHNESS_WINDOW + METHOD_AADHAAR_SIGNED_AT_SLACK + 10n, LAST_LET_THROUGH + 3_600n],
     ['read as undefined', LAST_LET_THROUGH + 1n, undefined],
     ['a read that rejects', LAST_LET_THROUGH + 1n, 'throw'],
@@ -112,6 +111,15 @@ describe('replyFrom lets the prover run, and isFresh judge, every other read', (
     clockAt(FRESH_NOW);
 
     const { double, stack } = harness(read);
+
+    expect(isProof(await replyWith(stack))).toBe(true);
+    expect(double.order).toEqual(['generateArgs', 'prove', 'verify']);
+  });
+
+  it('a QR read exactly the window plus the slack old passes the pre-read and isFresh alike', async () => {
+    clockAt(LAST_LET_THROUGH);
+
+    const { double, stack } = harness(SIGNED_AT);
 
     expect(isProof(await replyWith(stack))).toBe(true);
     expect(double.order).toEqual(['generateArgs', 'prove', 'verify']);

@@ -1,4 +1,5 @@
 import { METHOD_ZKPASSPORT_VERSION_PART_BYTES, METHOD_ZKPASSPORT_VERSION_PARTS } from '../constants/method-zkpassport';
+import { METHOD_ZKPASSPORT_DECIMAL_PATTERN } from '../constants/method-zkpassport-parse';
 import { assertBytes32 } from '../formats/guards';
 import type { Hex } from '../interfaces';
 
@@ -7,7 +8,7 @@ const PART_LIMIT = 2 ** (METHOD_ZKPASSPORT_VERSION_PART_BYTES * 8);
 const WORD_DIGITS = 64;
 const HEAD_DIGITS = 2 + METHOD_ZKPASSPORT_VERSION_PARTS * PART_DIGITS;
 
-const isDecimal = (part: string): boolean => part !== '' && [...part].every((digit) => digit >= '0' && digit <= '9');
+const isDecimal = (part: string): boolean => METHOD_ZKPASSPORT_DECIMAL_PATTERN.test(part);
 
 /**
  * The version a zkPassport trusted-key word names, as `major.minor.patch`. The peer's `params.version` is this word;

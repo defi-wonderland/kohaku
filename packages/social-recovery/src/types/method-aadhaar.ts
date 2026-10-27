@@ -71,13 +71,13 @@ export type AadhaarCoreSurface = {
   readonly prove: (args: unknown, onProgress?: AadhaarProgress) => Promise<AadhaarPcd>;
   readonly verify: (pcd: unknown, testMode?: boolean) => Promise<boolean>;
   readonly ArtifactsOrigin: { readonly [name: string]: unknown };
-  /** The decimal hash of the key `verify` checks outside test mode (UIDAI's) and in it (the stack's test key). */
+  /** The decimal hashes of the peer's two keys: UIDAI's 2021 key, which only the peer's `verify` checks, and its test key, the one the default stack refuses locally outside test mode. */
   readonly productionPublicKeyHash: string;
   readonly testPublicKeyHash: string;
-  /** The QR's signing time to the hour, from the raw bytes `decompressByteArray` returns. */
-  readonly timestampToUTCUnix: (rawData: Uint8Array) => number;
-  readonly decompressByteArray: (byteArray: Uint8Array) => Uint8Array;
-  readonly convertBigIntToByteArray: (bigInt: bigint) => Uint8Array;
+  /** The QR's signing time to the hour, from the raw bytes `decompressByteArray` returns; the three are optional, a peer without them leaves `signedAt` undefined. */
+  readonly timestampToUTCUnix?: (rawData: Uint8Array) => number;
+  readonly decompressByteArray?: (byteArray: Uint8Array) => Uint8Array;
+  readonly convertBigIntToByteArray?: (bigInt: bigint) => Uint8Array;
 };
 
 /** An injected stack or the installed stack's artifacts, not both; with neither the stack is unavailable. */

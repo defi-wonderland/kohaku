@@ -54,7 +54,7 @@ afterEach(() => {
   vi.doUnmock('@anon-aadhaar/core');
 });
 
-describe('the default stack refuses a peer surface missing a time call', () => {
+describe('the default stack loads a peer surface missing a time call, its signedAt answering undefined', () => {
   it('the full surface loads: a production-key proof is satisfied', async () => {
     const members = surface();
     const { anonAadhaarMethod } = await loadOver(members);
@@ -63,13 +63,13 @@ describe('the default stack refuses a peer surface missing a time call', () => {
     expect(members['init']).toHaveBeenCalledTimes(1);
   });
 
-  it.each(METHOD_AADHAAR_STACK_TIME_CALLS)('without %s the stack does not load: not-judged, init never called', async (missing) => {
+  it.each(METHOD_AADHAAR_STACK_TIME_CALLS)('without %s the stack still loads: a production-key proof is satisfied', async (missing) => {
     const members = surface(missing);
     const { anonAadhaarMethod } = await loadOver(members);
 
-    expect(await anonAadhaarMethod({ artifacts: ARTIFACTS }).verify(ctxFor(configBytes(22n, 77n), DIGEST), proof)).toBe('not-judged');
-    expect(members['init']).not.toHaveBeenCalled();
-    expect(members['verify']).not.toHaveBeenCalled();
+    expect(await anonAadhaarMethod({ artifacts: ARTIFACTS }).verify(ctxFor(configBytes(22n, 77n), DIGEST), proof)).toBe('satisfied');
+    expect(members['init']).toHaveBeenCalledTimes(1);
+    expect(members['verify']).toHaveBeenCalledTimes(1);
   });
 
   it.each(METHOD_AADHAAR_STACK_TIME_CALLS)('without %s the stack\'s signedAt answers undefined', async (missing) => {

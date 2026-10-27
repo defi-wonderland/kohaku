@@ -49,6 +49,11 @@ export type AnonAadhaarStack = {
   readonly generateArgs: (options: AadhaarArgsOptions) => Promise<AadhaarProverArgs>;
   readonly prove: (args: AadhaarProverArgs, onProgress?: AadhaarProgress, signal?: AbortSignal) => Promise<AadhaarPcd>;
   readonly verify: (pcd: AadhaarPcd, testMode?: boolean) => Promise<boolean>;
+  /**
+   * The QR's signing time in Unix seconds, read before proving, or `undefined` where it cannot be read; the default stack provides it.
+   * `replyFrom` refuses a QR older than the config's window by more than `METHOD_AADHAAR_SIGNED_AT_SLACK` without proving.
+   */
+  readonly signedAt?: (qrData: string) => Promise<bigint | undefined>;
 };
 
 /** Where the circuit's artifacts are, the arguments of the stack's `init`. */
@@ -69,6 +74,10 @@ export type AadhaarCoreSurface = {
   /** The decimal hash of the key `verify` checks outside test mode (UIDAI's) and in it (the stack's test key). */
   readonly productionPublicKeyHash: string;
   readonly testPublicKeyHash: string;
+  /** The QR's signing time to the hour, from the raw bytes `decompressByteArray` returns. */
+  readonly timestampToUTCUnix: (rawData: Uint8Array) => number;
+  readonly decompressByteArray: (byteArray: Uint8Array) => Uint8Array;
+  readonly convertBigIntToByteArray: (bigInt: bigint) => Uint8Array;
 };
 
 /** An injected stack or the installed stack's artifacts, not both; with neither the stack is unavailable. */

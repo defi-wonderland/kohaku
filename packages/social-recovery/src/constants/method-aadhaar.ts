@@ -22,6 +22,9 @@ export const METHOD_AADHAAR_FRESHNESS_WINDOW = 86400n;
 /** The shortest freshness window, in seconds, a config may carry; a shorter one is judged `rejected`. */
 export const METHOD_AADHAAR_MIN_FRESHNESS_WINDOW = 3600n;
 
+/** The seconds past the window a QR's signing time read before proving may lie before `replyFrom` refuses it: the hour the read is precise to. */
+export const METHOD_AADHAAR_SIGNED_AT_SLACK = 3600n;
+
 /** The proof's ABI layout, the Groth16 verifier's `verifyProof` arguments. */
 export const METHOD_AADHAAR_PROOF_ABI = [
   { name: 'a', type: 'uint256[2]' },
@@ -103,6 +106,13 @@ export const METHOD_AADHAAR_STACK_VERSION = '2.4.3';
 
 /** The calls the loaded stack must expose as functions. */
 export const METHOD_AADHAAR_STACK_CALLS = Object.freeze(['init', 'generateArgs', 'prove', 'verify'] as const);
+
+/** The calls the loaded stack must expose as functions to read a QR's signing time without `init`. */
+export const METHOD_AADHAAR_STACK_TIME_CALLS = Object.freeze([
+  'timestampToUTCUnix',
+  'decompressByteArray',
+  'convertBigIntToByteArray',
+] as const);
 
 /** The stack's members naming the two signing keys it verifies against: UIDAI's outside test mode, its own test key in it. */
 export const METHOD_AADHAAR_STACK_KEY_MEMBERS = Object.freeze(['productionPublicKeyHash', 'testPublicKeyHash'] as const);

@@ -166,6 +166,20 @@ describe('the pre-prover read sits after the earlier refusals', () => {
     expect(isFailure(await replyWith(stack, FRESHNESS_WINDOW, { signal: controller.signal }), 'device-refused')).toBe(true);
     expect(double.total()).toBe(0);
   });
+
+  it('a signal aborted while signedAt is pending settles the reply as device-refused', async () => {
+    clockAt(FRESH_NOW);
+
+    const { double, stack: base } = harness(SIGNED_AT);
+    const controller = new AbortController();
+    const signedAt = (): Promise<bigint | undefined> => new Promise(() => undefined);
+    const reply = replyWith({ ...base, signedAt }, FRESHNESS_WINDOW, { signal: controller.signal });
+
+    controller.abort();
+
+    expect(isFailure(await reply, 'device-refused')).toBe(true);
+    expect(double.total()).toBe(0);
+  });
 });
 
 describe('verify makes no time read', () => {

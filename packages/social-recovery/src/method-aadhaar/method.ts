@@ -107,7 +107,7 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
    * by the system clock, or the local verdict rejects it. A config window under the minimum is `request-unsupported`
    * before proving, and a QR the stack's `signedAt` reads as older than the window by more than the slack is
    * `material-rejected` before proving. The chain accepts the proof until one window after the QR's signing time, whatever the request's
-   * validity, so the holder's simulation refuses one that aged. An abort at any point, verification included, is `device-refused`.
+   * validity, so the holder's simulation refuses one that aged. An abort at any point, the time read and verification included, is `device-refused`.
    */
   async replyFrom(ctx: Ctx, input: Input, material: Material): Promise<Hex | ReplyFailure> {
     const params = readInput(input);
@@ -133,7 +133,12 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
 
     if (config.nullifierSeed !== params.nullifierSeed) return METHOD_AADHAAR_MATERIAL_REJECTED;
 
-    if (await agedBeforeProving(this.#stack, supplied.qrData, config, nowInSeconds())) return METHOD_AADHAAR_MATERIAL_REJECTED;
+    const aging = agedBeforeProving(this.#stack, supplied.qrData, config, nowInSeconds());
+    const aged = await untilSettled(aging, supplied.signal);
+
+    if (isFailure(aged)) return aged;
+
+    if (aged) return METHOD_AADHAAR_MATERIAL_REJECTED;
 
     const options = argsOptions(params, supplied.qrData, signalFromDigest(ctx.digest));
     const pcd = await runProver(this.#stack, options, supplied);

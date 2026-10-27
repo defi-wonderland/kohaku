@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Methods playground: holder</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 860px; padding: 16px; }
+      button { margin: 4px 8px 4px 0; padding: 6px 12px; }
+      textarea { box-sizing: border-box; font-family: monospace; width: 100%; }
+      label { display: block; margin: 4px 0; }
+      pre { background: #f4f4f4; overflow-x: auto; padding: 8px; white-space: pre-wrap; word-break: break-all; }
+      #status { font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <h1>Holder page</h1>
+    <p>
+      You are the account holder. Paste one credential line per guardian (from the
+      <a href="./approver.html">approver page</a>, any mix of methods), build the sample setup and its approval and
+      cancellation requests, send each place its request line, then file the replies that come back. No wallet and no
+      chain are needed here; the requests are built for the chain id below.
+    </p>
+    <label>Chain id the requests carry (31337 unless an approver signs with a real wallet on another chain)
+      <input id="chain-id" type="text" value="31337" />
+    </label>
+    <label>Credential lines, one per guardian, in place order
+      <textarea id="credentials" rows="5"></textarea>
+    </label>
+    <button id="read" type="button">1. Read the credentials</button>
+    <div id="places"></div>
+    <label>Threshold (approvals needed) <input id="threshold" type="text" value="2" /></label>
+    <label>Wait before a recovery can be consumed, in seconds <input id="wait" type="text" value="259200" /></label>
+    <button id="gather" type="button">2. Make the requests</button>
+    <div id="requests"></div>
+    <label>A reply line from an approver
+      <textarea id="reply" rows="4"></textarea>
+    </label>
+    <label><input id="aadhaar-test" type="checkbox" checked /> Aadhaar replies were proven in testing mode (verify checks the test key)</label>
+    <button id="file" type="button">3. File the reply</button>
+    <p id="status"></p>
+    <div id="trace"></div>
+    <script type="module" src="/src/web/holder/main.ts"></script>
+  </body>
+</html>

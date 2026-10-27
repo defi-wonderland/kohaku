@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Methods playground: approver</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 0 auto; max-width: 860px; padding: 16px; }
+      button { margin: 4px 8px 4px 0; padding: 6px 12px; }
+      textarea { box-sizing: border-box; font-family: monospace; width: 100%; }
+      label { display: block; margin: 4px 0; }
+      fieldset { margin: 8px 0; }
+      pre { background: #f4f4f4; overflow-x: auto; padding: 8px; white-space: pre-wrap; word-break: break-all; }
+      #verdict { font-size: 1.2em; font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <h1>Approver page</h1>
+    <p>
+      You are a guardian. Enrol a credential and send its line to the holder (the
+      <a href="./index.html">holder page</a>); later paste the request the holder sends you, sign it, and send the reply
+      line back. Nothing is sent to any chain.
+    </p>
+    <p id="chain"></p>
+    <label>Method
+      <select id="method">
+        <option value="wallet">Wallet</option>
+        <option value="passkey">Passkey</option>
+        <option value="zkpassport">zkPassport</option>
+        <option value="aadhaar">Aadhaar</option>
+      </select>
+    </label>
+    <label><input id="testing" type="checkbox" checked /> <span id="testing-label"></span></label>
+    <p id="real-label"></p>
+    <fieldset id="fields-wallet">
+      <legend>Wallet</legend>
+      <button id="connect" type="button">Connect wallet (real mode)</button>
+      <p id="connection"></p>
+    </fieldset>
+    <fieldset id="fields-passkey" hidden>
+      <legend>Passkey</legend>
+      <label>User name shown by the authenticator <input id="passkey-user" type="text" value="playground guardian" /></label>
+    </fieldset>
+    <fieldset id="fields-zkpassport" hidden>
+      <legend>zkPassport</legend>
+      <label>Service domain (empty: this page's host) <input id="zk-domain" type="text" /></label>
+      <label>Scope (empty: social-recovery-playground) <input id="zk-scope" type="text" /></label>
+      <div id="app-link"></div>
+    </fieldset>
+    <fieldset id="fields-aadhaar" hidden>
+      <legend>Aadhaar</legend>
+      <label>Nullifier seed (the same at enrolment and at every approval) <input id="aadhaar-seed" type="text" value="1234" /></label>
+      <label>QR data (testing mode: a test QR from
+        <a href="https://documentation.anon-aadhaar.pse.dev/docs/generate-qr" target="_blank" rel="noopener">anon-aadhaar's generator</a>)
+        <textarea id="aadhaar-qr" rows="4"></textarea>
+      </label>
+      <label>Production certificate, PEM (real mode only)
+        <textarea id="aadhaar-certificate" rows="4"></textarea>
+      </label>
+      <label>Proving files
+        <select id="aadhaar-origin">
+          <option value="server">one download of the proving key (server)</option>
+          <option value="chunked">the proving key in chunks (chunked)</option>
+        </select>
+      </label>
+      <p>The prover downloads about 10 MB of circuit and a 612 MB proving key at the first proof, then proves for tens of seconds.</p>
+    </fieldset>
+    <button id="enrol" type="button">Enrol</button>
+    <div id="credential-line"></div>
+    <label>A request line from the holder
+      <textarea id="request" rows="5"></textarea>
+    </label>
+    <button id="describe" type="button">Describe the request</button>
+    <button id="sign" type="button">Sign the request</button>
+    <button id="abort" type="button">Abort</button>
+    <p id="progress"></p>
+    <pre id="description"></pre>
+    <div id="reply-line"></div>
+    <p id="verdict"></p>
+    <div id="trace"></div>
+    <script type="module" src="/src/web/approver/main.ts"></script>
+  </body>
+</html>

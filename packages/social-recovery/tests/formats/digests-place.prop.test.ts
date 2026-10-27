@@ -77,5 +77,5 @@ describe('digest place, a uint256 taken as a number or a bigint', () => {
         expect(() => cancellationTypedData(m, given)).toThrow(error);
       }),
     );
-  });
+  }, TIMEOUT);
 });

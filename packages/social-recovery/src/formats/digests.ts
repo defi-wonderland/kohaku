@@ -79,7 +79,7 @@ function cancellationParts(members: CancellationMembers, place: number | bigint)
 }
 
 /**
- * The `Approval` typed data for one place, as a wallet's signing call takes it; throws on a member outside its width.
+ * The `Approval` typed data for one place, as a wallet's signing call takes it; throws on a member outside its width. The place is a non-negative safe integer as a number, or a `uint256` as a bigint.
  * The types omit `EIP712Domain`: a signing library supplies it from the domain, and a raw `eth_signTypedData_v4` caller adds it from the domain's four fields.
  */
 export function approvalTypedData(members: ApprovalMembers, place: number | bigint): ApprovalTypedData {
@@ -89,7 +89,7 @@ export function approvalTypedData(members: ApprovalMembers, place: number | bigi
 }
 
 /**
- * The `Cancellation` typed data for one place; throws on a member outside its width.
+ * The `Cancellation` typed data for one place; throws on a member outside its width. The place is a non-negative safe integer as a number, or a `uint256` as a bigint.
  * The types omit `EIP712Domain`: a signing library supplies it from the domain, and a raw `eth_signTypedData_v4` caller adds it from the domain's four fields.
  */
 export function cancellationTypedData(members: CancellationMembers, place: number | bigint): CancellationTypedData {
@@ -105,14 +105,14 @@ export function typedDataDigest(typedData: ApprovalTypedData | CancellationTyped
   return hashTypedData({ domain, types, primaryType, message });
 }
 
-/** The EIP-712 digest of the `Approval` message for one place. */
+/** The EIP-712 digest of the `Approval` message for one place: a non-negative safe integer as a number, or a `uint256` as a bigint. */
 export function approvalDigest(members: ApprovalMembers, place: number | bigint): Hex {
   const { domain, message } = approvalParts(members, place);
 
   return typedDataDigest({ domain, types: FORMATS_APPROVAL_TYPED_DATA_TYPES, primaryType: FORMATS_APPROVAL_PRIMARY_TYPE, message });
 }
 
-/** The EIP-712 digest of the `Cancellation` message for one place. */
+/** The EIP-712 digest of the `Cancellation` message for one place: a non-negative safe integer as a number, or a `uint256` as a bigint. */
 export function cancellationDigest(members: CancellationMembers, place: number | bigint): Hex {
   const { domain, message } = cancellationParts(members, place);
 

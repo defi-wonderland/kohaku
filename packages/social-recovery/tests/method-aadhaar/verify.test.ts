@@ -131,11 +131,21 @@ describe('a consistent proof', () => {
     expect(core.init).toHaveBeenCalledWith(CHUNKED_INIT);
   });
 
-  it('under the default bucket is not-judged when the peer\'s init refuses', async () => {
-    core.init.mockRejectedValueOnce(new Error('No available storage method found.'));
+  it.each([
+    [true, 'satisfied'],
+    [false, 'rejected'],
+  ] as const)('under the default bucket, where storage fails only inside the peer\'s prove, the peer\'s verify answering %s is %s', async (answer, verdict) => {
+    core.prove.mockImplementation(() => Promise.reject(new Error('No available storage method found.')));
+    core.verify.mockResolvedValueOnce(answer);
 
-    expect(await anonAadhaarMethod().verify(CTX, proofWith())).toBe('not-judged');
-    expect(core.verify).not.toHaveBeenCalled();
+    try {
+      expect(await anonAadhaarMethod().verify(CTX, proofWith())).toBe(verdict);
+      expect(core.init.mock.calls).toEqual([[CHUNKED_INIT]]);
+      expect(core.verify).toHaveBeenCalledTimes(1);
+      expect(core.prove).not.toHaveBeenCalled();
+    } finally {
+      core.prove.mockImplementation(() => Promise.resolve({}));
+    }
   });
 
   it('with a stack that throws on the issuer key is not-judged', async () => {

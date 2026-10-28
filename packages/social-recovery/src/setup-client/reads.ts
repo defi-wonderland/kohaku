@@ -1,5 +1,5 @@
 import { pinBlockHeader } from '../client-core';
-import { assertBytes, sameAddress } from '../formats/guards';
+import { assertBytes, assertDependency, sameAddress } from '../formats/guards';
 import {
   METHOD_TIERS,
   type ActionInfo,
@@ -35,14 +35,18 @@ function tierOf(implementation: IRecoveryMethod | undefined): MethodTier | undef
   return tier !== undefined && METHOD_TIERS.includes(tier) ? tier : undefined;
 }
 
-/** The implementation's codec, where it has a `decodeConfig` to judge configs with. */
-function codecOf(implementation: IRecoveryMethod | undefined): Pick<IMethodCodec, 'decodeConfig'> | undefined {
-  const codec = implementation?.codec;
+/** The registered implementation's codec to judge configs with, refusing one without a `decodeConfig` function. */
+function codecOf(implementation: IRecoveryMethod | undefined, module: Address): Pick<IMethodCodec, 'decodeConfig'> | undefined {
+  if (implementation === undefined) return undefined;
 
-  return typeof codec?.decodeConfig === 'function' ? codec : undefined;
+  const { codec } = implementation;
+
+  assertDependency(codec, ['decodeConfig'], `methods.get(${module}).codec`);
+
+  return codec;
 }
 
-/** One method module's reads at the block, beside whether this build serves it, the tier it states and its config decoder. */
+/** One method module's reads at the block, beside whether this build serves it, the tier it states and its config decoder, refusing a registered codec without one. */
 async function methodReads(parts: SetupClientParts, module: Address, block: PinnedBlock): Promise<MethodReads> {
   const [moduleInfo, trustedParties, paused] = await Promise.all([
     parts.policyManager.moduleInfo(module, block),
@@ -51,7 +55,7 @@ async function methodReads(parts: SetupClientParts, module: Address, block: Pinn
   ]);
   const implementation = implementationOf(parts, module);
   const tier = tierOf(implementation);
-  const codec = codecOf(implementation);
+  const codec = codecOf(implementation, module);
 
   return {
     module,

@@ -16,6 +16,7 @@ import {
   type SetupValidationContext,
 } from '../../src/index';
 import {
+  ACCEPT_EVERY_CONFIG,
   ACCOUNT,
   ACTION,
   ACTION_INFO,
@@ -280,7 +281,7 @@ describe('validateSetup', () => {
     expect(result).toEqual(validateSetup(draft, expectedContext(draft, { registry })));
   });
 
-  it('the stub registry, whose codecs carry no decodeConfig, judges no config', async () => {
+  it('the stub registry, whose codecs accept every config, raises no malformed config and hands its decoder on', async () => {
     const draft: SetupDraft = {
       ...DRAFT,
       clauses: [{ threshold: 1, credentials: [{ method: METHOD_A, config: '0x01' }, { method: METHOD_B, config: `0x${'ab'.repeat(20)}` }] }],
@@ -289,6 +290,35 @@ describe('validateSetup', () => {
 
     expect(result.errors.map((finding) => finding.code)).not.toContain('credential.config-malformed');
     expect(result).toEqual(validateSetup(draft, expectedContext(draft)));
-    expect(expectedContext(draft).methods.every((reads) => !('codec' in reads))).toBe(true);
+    expect(expectedContext(draft).methods.map((reads) => reads.codec?.decodeConfig)).toEqual([ACCEPT_EVERY_CONFIG, ACCEPT_EVERY_CONFIG]);
+  });
+
+  describe.each([
+    ['an empty codec', {}],
+    ['a codec whose decodeConfig is a string', { decodeConfig: 'decode' }],
+  ])('a registered implementation with %s', (_why, codec) => {
+    const registry = (): MethodRegistry =>
+      new Map<Address, IRecoveryMethod>([
+        [METHOD_A, { ...methodStub([METHOD_A]), codec: codec as IRecoveryMethod['codec'] }],
+        [METHOD_B, methodStub([METHOD_B])],
+      ]);
+    const draft: SetupDraft = { ...DRAFT, clauses: [{ threshold: 1, credentials: [{ method: METHOD_A, config: WALLET_WORD }] }] };
+
+    it('makes validateSetup reject with a TypeError', async () => {
+      await expect(build({ methods: registry() }).client.validateSetup(draft)).rejects.toThrow(TypeError);
+    });
+
+    it('makes describeSetup reject with a TypeError', async () => {
+      await expect(build({ methods: registry() }).client.describeSetup(draft)).rejects.toThrow(TypeError);
+    });
+  });
+
+  it('a module no implementation is registered for still gets no judgment', async () => {
+    const draft: SetupDraft = { ...DRAFT, clauses: [{ threshold: 1, credentials: [{ method: METHOD_C, config: '0x04' }] }] };
+    const result = await build().client.validateSetup(draft);
+
+    expect(result.errors.map((finding) => finding.code)).not.toContain('credential.config-malformed');
+    expect(expectedContext(draft).methods).toEqual([expect.not.objectContaining({ codec: expect.anything() })]);
+    expect(result).toEqual(validateSetup(draft, expectedContext(draft)));
   });
 });

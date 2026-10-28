@@ -183,15 +183,27 @@ describe('every typed failure the method answers is frozen', () => {
     expect(Object.isFrozen(config)).toBe(true);
   });
 
-  it('device-unavailable under the default bucket whose init the peer refuses is frozen', async () => {
-    core.init.mockRejectedValueOnce(new Error('No available storage method found.'));
+  it('material-rejected under the default bucket whose storage fails inside the peer\'s prove, after init and generateArgs, is frozen', async () => {
+    core.prove.mockRejectedValueOnce(new Error('No available storage method found.'));
+
+    const method = anonAadhaarMethod();
+    const reply = await method.replyFrom(ctx, method.signingInput(ctx, PARAMS), { qrData: QR_DATA });
+
+    expect(isFailure(reply, 'material-rejected')).toBe(true);
+    expect(Object.isFrozen(reply)).toBe(true);
+    expect(core.init.mock.calls).toEqual([[CHUNKED_INIT]]);
+    expect(core.generateArgs).toHaveBeenCalledTimes(1);
+    expect(core.prove).toHaveBeenCalledTimes(1);
+  });
+
+  it('device-unavailable through an injected adapter whose own init rejects is frozen, the prover never called', async () => {
+    core.init.mockRejectedValueOnce(new Error('adapter: init refused'));
 
     const method = anonAadhaarMethod();
     const reply = await method.replyFrom(ctx, method.signingInput(ctx, PARAMS), { qrData: QR_DATA });
 
     expect(isFailure(reply, 'device-unavailable')).toBe(true);
     expect(Object.isFrozen(reply)).toBe(true);
-    expect(core.init.mock.calls).toEqual([[CHUNKED_INIT]]);
     expect(core.prove).not.toHaveBeenCalled();
   });
 });

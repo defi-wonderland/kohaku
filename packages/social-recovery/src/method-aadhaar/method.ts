@@ -1,6 +1,5 @@
 import { FORMATS_ZERO_ADDRESS } from '../constants/formats';
 import {
-  METHOD_AADHAAR_DEFAULT_ARTIFACTS,
   METHOD_AADHAAR_DEFAULT_TEST_MODE,
   METHOD_AADHAAR_DEVICE_BINDING,
   METHOD_AADHAAR_DEVICE_FACTS,
@@ -14,6 +13,7 @@ import {
   METHOD_AADHAAR_STACK_AND_ARTIFACTS_MESSAGE,
   METHOD_AADHAAR_VECTOR_FILES,
 } from '../constants/method-aadhaar';
+import { METHOD_AADHAAR_DEFAULT_ARTIFACTS } from '../constants/method-aadhaar-bucket';
 import { sameAddress } from '../formats/guards';
 import type {
   Address,

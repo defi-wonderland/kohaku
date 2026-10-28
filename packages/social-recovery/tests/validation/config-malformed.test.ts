@@ -1,6 +1,8 @@
+import { size } from 'viem';
 import { describe, expect, it, vi } from 'vitest';
-import { passkeyMethod, validateSetup, walletMethod, type Address, type Credential, type Hex, type IMethodCodec, type MethodReads, type SetupValidationContext } from '../../src/index';
+import { describeSetup, passkeyMethod, validateSetup, walletMethod, type Address, type Credential, type Hex, type IMethodCodec, type MethodReads, type SetupValidationContext } from '../../src/index';
 import { anonAadhaarMethod, zkPassportMethod } from '../../src/recovery-methods';
+import { CONTEXT as DESCRIPTION_CONTEXT, DRAFT as DESCRIPTION_DRAFT, ECDSA as DESCRIPTION_ECDSA, withMethod } from '../description/setup-fixtures';
 import { readVector } from '../kat/read-vector';
 import { AADHAAR, ECDSA, PASSKEY, SETUP_CONTEXT, UNSHIPPED, ZKPASSPORT, findingsOf, withClauses } from './fixtures';
 
@@ -38,7 +40,8 @@ const WALLET_ZERO_CONFIG = encodedOf('method-ecdsa-config.json', 1);
 const PASSKEY_CONFIG = encodedOf('method-passkey-config.json');
 const ZKPASSPORT_CONFIG = encodedOf('method-zkpassport-config.json');
 
-const bytesOf = (config: Hex): number => (config.length - 2) / 2;
+/** The byte length the finding names, viem's `size` of the config. */
+const bytesOf = (config: Hex): number => size(config);
 
 /** The one finding the validator should raise for `config` at `place` under `module`. */
 const malformed = (place: number, module: Address, config: Hex) => ({
@@ -143,6 +146,25 @@ describe('credential.config-malformed in the pure validateSetup', () => {
   });
 });
 
+describe('the byte length the finding names', () => {
+  it('is viem\'s size of the config, zero for the empty config', () => {
+    const result = validateSetup(oneClause([{ method: ECDSA, config: '0x' }]), withCodecs());
+
+    expect(findingsOf(result, CODE)).toEqual([{ code: CODE, subject: 'credential', values: { place: 0, module: ECDSA, bytes: size('0x') } }]);
+    expect(size('0x')).toBe(0);
+  });
+
+  it.each([
+    ['an odd-length config', '0x123'],
+    ['an un-prefixed config', '1234'],
+  ])('%s never reaches the codec: the draft guard refuses it with a TypeError first', (_why, config) => {
+    const decodeConfig = vi.fn(() => ({}));
+
+    expect(() => validateSetup(oneClause([{ method: ECDSA, config: config as Hex }]), withCodecs(new Map([[ECDSA, { decodeConfig }]])))).toThrow(TypeError);
+    expect(decodeConfig).not.toHaveBeenCalled();
+  });
+});
+
 describe('reads without a codec', () => {
   it.each(BAD)('%s raises nothing when the reads carry no codec', (_why, module, config) => {
     expect(findingsOf(validateSetup(oneClause([{ method: module, config }]), SETUP_CONTEXT), CODE)).toEqual([]);
@@ -155,20 +177,49 @@ describe('reads without a codec', () => {
   });
 });
 
-describe('a codec without a decodeConfig function', () => {
-  it.each([
-    ['an empty codec', {}],
-    ['a decodeConfig that is a string', { decodeConfig: 'decode' }],
-    ['a null codec', null],
-  ])('%s on the reads is a TypeError, never a finding', (_why, codec) => {
-    const context = withCodecs(new Map([[ECDSA, codec as unknown as Pick<IMethodCodec, 'decodeConfig'>]]));
+/** The reads entry the pure validator names in its TypeError for a module's codec. */
+const codecPath = (module: Address): RegExp => new RegExp(`context\\.methods\\[${SETUP_CONTEXT.methods.findIndex((reads) => reads.module === module)}\\]\\.codec`);
 
+const NOT_A_DECODER: readonly (readonly [string, unknown])[] = [
+  ['an empty codec', {}],
+  ['a decodeConfig that is a string', { decodeConfig: 'decode' }],
+  ['a codec that is a number', 42],
+  ['a codec that is a string', 'codec'],
+  ['a null codec', null],
+];
+
+describe('a codec without a decodeConfig function', () => {
+  it.each(NOT_A_DECODER)('%s on the reads is a TypeError naming the reads entry, never a finding', (_why, codec) => {
+    const context = withCodecs(new Map([[ECDSA, codec as Pick<IMethodCodec, 'decodeConfig'>]]));
+
+    expect(SETUP_CONTEXT.methods.some((reads) => reads.module === ECDSA)).toBe(true);
     expect(() => validateSetup(oneClause([{ method: ECDSA, config: WALLET_CONFIG }]), context)).toThrow(TypeError);
+    expect(() => validateSetup(oneClause([{ method: ECDSA, config: WALLET_CONFIG }]), context)).toThrow(codecPath(ECDSA));
   });
 
   it('is a TypeError even on the reads of a module the draft does not name', () => {
     const context = withCodecs(new Map([[ZKPASSPORT, {} as unknown as Pick<IMethodCodec, 'decodeConfig'>]]));
 
     expect(() => validateSetup(oneClause([{ method: ECDSA, config: WALLET_CONFIG }]), context)).toThrow(TypeError);
+    expect(() => validateSetup(oneClause([{ method: ECDSA, config: WALLET_CONFIG }]), context)).toThrow(codecPath(ZKPASSPORT));
+  });
+});
+
+describe('describeSetup over reads whose codec is not a decoder', () => {
+  const plain = describeSetup(DESCRIPTION_DRAFT, DESCRIPTION_CONTEXT);
+
+  it.each(NOT_A_DECODER)('%s is accepted, the description unchanged, as it never reads the codec', (_why, codec) => {
+    const context = withMethod(DESCRIPTION_ECDSA, { codec } as unknown as Partial<MethodReads>);
+
+    expect(context.methods.find((reads) => reads.module === DESCRIPTION_ECDSA)).toHaveProperty('codec', codec);
+    expect(describeSetup(DESCRIPTION_DRAFT, context)).toEqual(plain);
+  });
+
+  it('a working codec on the reads changes nothing either, the description judging no config', () => {
+    const decodeConfig = vi.fn(() => ({}));
+    const context = withMethod(DESCRIPTION_ECDSA, { codec: { decodeConfig } });
+
+    expect(describeSetup(DESCRIPTION_DRAFT, context)).toEqual(plain);
+    expect(decodeConfig).not.toHaveBeenCalled();
   });
 });

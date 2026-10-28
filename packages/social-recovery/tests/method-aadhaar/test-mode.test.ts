@@ -115,12 +115,18 @@ describe('verify hands the stack the test-mode flag', () => {
     expect(core.verify).not.toHaveBeenCalled();
   });
 
-  it('under the default bucket whose init the peer refuses, test mode answers not-judged as the default does', async () => {
-    core.init.mockRejectedValueOnce(new Error('No available storage method found.')).mockRejectedValueOnce(new Error('No available storage method found.'));
+  it('under the default bucket, where storage fails only inside the peer\'s prove, test mode rejects without the peer and the default answers the peer\'s verify', async () => {
+    core.prove.mockImplementation(() => Promise.reject(new Error('No available storage method found.')));
 
-    expect(await anonAadhaarMethod({ testMode: true }).verify(CTX, proofWith())).toBe('not-judged');
-    expect(await anonAadhaarMethod().verify(CTX, proofWith())).toBe('not-judged');
-    expect(core.verify).not.toHaveBeenCalled();
+    try {
+      expect(await anonAadhaarMethod({ testMode: true }).verify(CTX, proofWith())).toBe('rejected');
+      expect(core.verify).not.toHaveBeenCalled();
+      expect(await anonAadhaarMethod().verify(CTX, proofWith())).toBe('satisfied');
+      expect(core.verify).toHaveBeenCalledTimes(1);
+      expect(core.prove).not.toHaveBeenCalled();
+    } finally {
+      core.prove.mockImplementation(() => Promise.resolve({}));
+    }
   });
 });
 

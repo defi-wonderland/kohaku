@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { METHOD_AADHAAR_DEFAULT_ARTIFACTS, METHOD_AADHAAR_SIGNED_AT_SLACK, METHOD_AADHAAR_STACK_TIME_CALLS } from '../../src/constants/method-aadhaar';
+import { METHOD_AADHAAR_SIGNED_AT_SLACK, METHOD_AADHAAR_STACK_TIME_CALLS } from '../../src/constants/method-aadhaar';
+import { METHOD_AADHAAR_DEFAULT_ARTIFACTS } from '../../src/constants/method-aadhaar-bucket';
 import { anonAadhaarMethod } from '../../src/method-aadhaar';
 import { coreStack } from '../../src/method-aadhaar/stack';
 import { CERTIFICATE, clockAt, configBytes, ctxFor, FRESHNESS_WINDOW, isFailure, pcdOf, signalsFor, SYNTHETIC_UPSTREAM } from './fixtures';

@@ -26,6 +26,8 @@ const DIGEST: Hex = '0x17498ba208aefe001e6e2f2adec41cd16d0285e23660df6e310d3daac
 const PARAMS = { nullifierSeed: 77n, issuerCertificate: CERTIFICATE };
 const CONFIG = configBytes(22n, 77n);
 const boundPcd = pcdOf(SYNTHETIC_UPSTREAM, signalsFor(22n, 77n, DIGEST));
+/** The error the peer's chunk download throws where the browser offers no storage. */
+const STORAGE_FAILURE = 'No available storage method found.';
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 const core = vi.hoisted(() => ({
@@ -130,14 +132,25 @@ describe('enrollment', () => {
     expect(core.prove).toHaveBeenCalledTimes(1);
   });
 
-  it('configFrom under the default bucket whose init the peer refuses is device-unavailable, the prover never called', async () => {
-    core.init.mockRejectedValueOnce(new Error('No available storage method found.'));
+  it('configFrom through an injected adapter whose own init rejects is device-unavailable, the prover never called', async () => {
+    core.init.mockRejectedValueOnce(new Error('adapter: init refused'));
 
     const method = anonAadhaarMethod();
 
     expect(isFailure(await method.configFrom(method.enrollInput(PARAMS), { qrData: QR_DATA }), 'device-unavailable')).toBe(true);
     expect(core.generateArgs).not.toHaveBeenCalled();
     expect(core.prove).not.toHaveBeenCalled();
+  });
+
+  it('configFrom under the default bucket whose storage fails inside the peer\'s prove, after init and generateArgs, is material-rejected', async () => {
+    core.prove.mockRejectedValueOnce(new Error(STORAGE_FAILURE));
+
+    const method = anonAadhaarMethod();
+
+    expect(isFailure(await method.configFrom(method.enrollInput(PARAMS), { qrData: QR_DATA }), 'material-rejected')).toBe(true);
+    expect(core.init.mock.calls).toEqual([[CHUNKED_INIT]]);
+    expect(core.generateArgs).toHaveBeenCalledTimes(1);
+    expect(core.prove).toHaveBeenCalledTimes(1);
   });
 
   it('configFrom aborted while proving is device-refused', async () => {
@@ -252,14 +265,36 @@ describe('signing', () => {
     expect(core.prove).toHaveBeenCalledTimes(1);
   });
 
-  it('replyFrom under the default bucket whose init the peer refuses is device-unavailable', async () => {
-    core.init.mockRejectedValueOnce(new Error('No available storage method found.'));
+  it('replyFrom under the default bucket whose storage fails inside the peer\'s prove, after init and generateArgs, is material-rejected', async () => {
+    core.prove.mockRejectedValueOnce(new Error(STORAGE_FAILURE));
 
     const method = anonAadhaarMethod();
     const ctx = ctxFor(CONFIG, DIGEST);
 
-    expect(isFailure(await method.replyFrom(ctx, method.signingInput(ctx, PARAMS), { qrData: QR_DATA }), 'device-unavailable')).toBe(true);
-    expect(core.prove).not.toHaveBeenCalled();
+    expect(isFailure(await method.replyFrom(ctx, method.signingInput(ctx, PARAMS), { qrData: QR_DATA }), 'material-rejected')).toBe(true);
+    expect(core.init.mock.calls).toEqual([[CHUNKED_INIT]]);
+    expect(core.generateArgs).toHaveBeenCalledTimes(1);
+    expect(core.prove).toHaveBeenCalledTimes(1);
+  });
+
+  it('verify on a proof under the default bucket answers what the peer\'s verify answers, a failing prove storage notwithstanding', async () => {
+    core.prove.mockImplementation(() => Promise.reject(new Error(STORAGE_FAILURE)));
+    core.verify.mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+
+    try {
+      const method = anonAadhaarMethod();
+      const ctx = ctxFor(CONFIG, DIGEST);
+      const proof = await anonAadhaarMethod({ stack: stackDouble({ pcd: boundPcd }).stack }).replyFrom(ctx, method.signingInput(ctx, PARAMS), { qrData: QR_DATA });
+
+      expect(typeof proof).toBe('string');
+      expect(await method.verify(ctx, proof as Hex)).toBe('satisfied');
+      expect(await method.verify(ctx, proof as Hex)).toBe('rejected');
+      expect(core.init.mock.calls).toEqual([[CHUNKED_INIT]]);
+      expect(core.prove).not.toHaveBeenCalled();
+      expect(core.verify).toHaveBeenCalledTimes(2);
+    } finally {
+      core.prove.mockImplementation(() => Promise.resolve({}));
+    }
   });
 
   it.each(['hang', 'hang-until-aborted'] as const)('replyFrom aborted during a prove that does %s is device-refused', async (prove) => {

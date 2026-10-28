@@ -2,7 +2,7 @@ import { GATHERING_SELECTION_UNFILLED_MESSAGE } from '../constants';
 import { normalizeAddress } from '../formats/guards';
 import { decodeSetupBody } from '../formats/setup-body';
 import type { Gathering, Moment, ProofPlace, Reply, Selection } from '../interfaces';
-import type { FiledPlace, OrderVerdict } from '../types/gathering';
+import type { FiledPlace, OrderRefusal, OrderVerdict } from '../types/gathering';
 import { submissionFindings } from '../validation';
 import { emptyFindings } from '../validation/common';
 import { ruleCountFindings } from '../validation/request-proofs';
@@ -25,7 +25,8 @@ const proofsAt = (places: readonly number[], filled: ReadonlyMap<number, FiledPl
 /**
  * The ordering's verdict at `now`: the proofs a completion submits, strictly increasing by place (the selection where one is
  * given, taken as given, otherwise the preferred satisfying set), or the refusal with its findings: the whole window result
- * where the window has passed, the rule's findings where the replies or the selection do not satisfy it.
+ * where the window has passed, the rule's findings where a filed or selected place lies past the rule's credential count or
+ * the replies or the selection do not satisfy the rule. Only the chosen replies are read as proofs.
  * Throws where the record is unread and where the selection names a place no reply fills.
  */
 export function orderVerdict(record: Gathering, selection: Selection | undefined, now: Moment): OrderVerdict {
@@ -41,16 +42,22 @@ export function orderVerdict(record: Gathering, selection: Selection | undefined
 
   if (!places.every((place) => filled.has(place))) throw new RangeError(GATHERING_SELECTION_UNFILLED_MESSAGE);
 
-  const candidate = proofsAt(places, filled);
   const findings = emptyFindings();
 
-  ruleCountFindings({ body, proofs: candidate }, findings);
+  ruleCountFindings({ body, proofs: places.map((place) => ({ place })) }, findings);
 
-  if (findings.errors.length > 0) return { outcome: 'refused', reason: 'rule-unsatisfied', findings };
+  if (findings.errors.length > 0) {
+    const outOfRange = findings.errors.some(({ code }) => code === 'proof.place-out-of-range');
+    const reason: OrderRefusal = outOfRange ? 'place-out-of-range' : 'rule-unsatisfied';
 
-  if (selection !== undefined) return { outcome: 'ordered', proofs: candidate };
+    return { outcome: 'refused', reason, findings };
+  }
 
-  const preferred = (preferredSet(body, filled) as FiledPlace[]).map((entry) => entry.entry.place);
+  if (selection !== undefined) return { outcome: 'ordered', proofs: proofsAt(places, filled) };
 
-  return { outcome: 'ordered', proofs: proofsAt(preferred, filled) };
+  const preferred = preferredSet(body, filled);
+
+  if (preferred === undefined) return { outcome: 'refused', reason: 'rule-unsatisfied', findings };
+
+  return { outcome: 'ordered', proofs: proofsAt(preferred.map((entry) => entry.entry.place), filled) };
 }

@@ -30,11 +30,18 @@ export const GATHERING_RULE_UNSATISFIED_MESSAGE = 'gathering: the replies do not
 /** Thrown by `order` where a selection names a place no filed reply fills. */
 export const GATHERING_SELECTION_UNFILLED_MESSAGE = 'gathering: the selection names a place no reply fills';
 
+/**
+ * Thrown by `order`, and by `complete` as a `KitRefusalError`, where a filed or selected place lies at or past the body's
+ * credential count; a record `addApproverReply` built never has one.
+ */
+export const GATHERING_PLACE_OUT_OF_RANGE_MESSAGE = "gathering: a filed place lies past the rule's credential count";
+
 /** Why the ordering's verdict refuses a completion. */
-export const GATHERING_ORDER_REFUSALS = ['window-passed', 'rule-unsatisfied'] as const;
+export const GATHERING_ORDER_REFUSALS = Object.freeze(['window-passed', 'rule-unsatisfied', 'place-out-of-range'] as const);
 
 /** The message `order` and `complete` throw for each refusal reason. */
 export const GATHERING_ORDER_REFUSAL_MESSAGES: Readonly<Record<OrderRefusal, string>> = Object.freeze({
   'window-passed': GATHERING_WINDOW_PASSED_MESSAGE,
   'rule-unsatisfied': GATHERING_RULE_UNSATISFIED_MESSAGE,
+  'place-out-of-range': GATHERING_PLACE_OUT_OF_RANGE_MESSAGE,
 });

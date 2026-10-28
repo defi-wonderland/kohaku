@@ -352,6 +352,20 @@ describe('describeSetup: the committed action', () => {
     expect(describeSetup(DRAFT, context).upgrade).toEqual({ upgradeableInPlace: false });
   });
 
+  it.each<[string, Partial<typeof CONTEXT.action>, Partial<typeof DESCRIPTOR>, boolean]>([
+    ['the shipped action', {}, {}, true],
+    ['the shipped action in lower case, left out of the audited list', { address: ACTION.toLowerCase() as Address }, { auditedActions: [] }, true],
+    ['an audited third party', { address: AUDITED_ONLY_ACTION }, {}, false],
+    ['a third party', { address: OTHER_ACTION }, {}, false],
+    ['a third party on a code-less account', { address: OTHER_ACTION, accountHoldsCode: false }, {}, false],
+  ])('upgradeableInPlace is false exactly where the action is shipped: %s', (_name, change, descriptor, shipped) => {
+    const described = describeSetup(DRAFT, withAction(change, descriptor));
+
+    expect(described.action.shipped).toBe(shipped);
+    expect(described.upgrade).toStrictEqual(shipped ? { upgradeableInPlace: false } : {});
+    expect('upgradeableInPlace' in described.upgrade).toBe(shipped);
+  });
+
   it('carries no account-code flag and no upgrade flag of its own', () => {
     expect(Object.keys(full.action)).not.toContain('accountHoldsCode');
     expect(Object.keys(full.action)).not.toContain('upgradeableInPlace');

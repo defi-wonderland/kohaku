@@ -3,8 +3,10 @@ import { beforeAll, describe, expect, expectTypeOf, it } from 'vitest';
 import * as core from '../../src/index';
 import {
   fileReply,
+  KitRefusalError,
   GATHERING_ORDER_REFUSAL_MESSAGES,
   GATHERING_ORDER_REFUSALS,
+  GATHERING_PLACE_OUT_OF_RANGE_MESSAGE,
   GATHERING_RULE_UNSATISFIED_MESSAGE,
   GATHERING_SELECTION_UNFILLED_MESSAGE,
   GATHERING_WINDOW_PASSED_MESSAGE,
@@ -20,6 +22,7 @@ import {
   type ValidationResult,
 } from '../../src/index';
 import { windowFactsOf } from '../../src/gathering/edge';
+import { rig } from '../recovery-client/doubles';
 import { constituents, exportedType, loadRecords, propertyNames, propertyType, stringLiterals, type RecordContext } from '../helpers/records';
 import {
   approvalGathering,
@@ -250,28 +253,6 @@ describe('orderVerdict: rule-unsatisfied, with the exact findings', () => {
     });
   });
 
-  it('a hand-built record whose places name a place past the body\'s count refuses with proof.place-out-of-range', () => {
-    const places = [0, 1, 2, 3, 4].map((p) => placeEntry(p));
-    const start = approvalGathering(places);
-    const record = approvalGathering(places, undefined, [0, 1, 2, 4].map((place) => replyFor(start, place)));
-
-    expect(orderVerdict(record, undefined, NOW)).toStrictEqual({
-      outcome: 'refused',
-      reason: 'rule-unsatisfied',
-      findings: { errors: [{ code: 'proof.place-out-of-range', subject: 'request', values: { place: 4, count: 4 } }], warnings: [] },
-    });
-  });
-
-  it('order now refuses that record too, with the rule message, where a selection reaches the place past the count', () => {
-    const places = [0, 1, 2, 3, 4].map((p) => placeEntry(p));
-    const start = approvalGathering(places);
-    const record = approvalGathering(places, undefined, [0, 1, 2, 4].map((place) => replyFor(start, place)));
-
-    expect(() => order(record, undefined, NOW)).toThrow(GATHERING_RULE_UNSATISFIED_MESSAGE);
-    expect(() => order(record, [0, 1, 2, 4], NOW)).toThrow(GATHERING_RULE_UNSATISFIED_MESSAGE);
-    expect(orderVerdict(record, [2, 0, 1], NOW)).toStrictEqual({ outcome: 'ordered', proofs: order(record, [2, 0, 1], NOW) });
-  });
-
   it('a rule refusal carries no window warning, even at a skewed moment', () => {
     const now = PINNED_AT + SKEW_SPAN + 1;
 
@@ -285,6 +266,114 @@ describe('orderVerdict: rule-unsatisfied, with the exact findings', () => {
 
   it('a refused verdict carries exactly outcome, reason and findings', () => {
     expect(Object.keys(orderVerdict(approvalGathering(), undefined, NOW)).sort()).toStrictEqual(['findings', 'outcome', 'reason']);
+  });
+});
+
+/** A hand-built record: places 0 to 4 in the map, the body counting four, replies at the given places, place 4 among them. */
+function pastTheCount(filed: readonly number[]): Gathering {
+  const places = [0, 1, 2, 3, 4].map((p) => placeEntry(p));
+  const start = approvalGathering(places);
+
+  return approvalGathering(places, undefined, filed.map((place) => replyFor(start, place)));
+}
+
+const PAST = { code: 'proof.place-out-of-range', subject: 'request', values: { place: 4, count: 4 } };
+
+describe('orderVerdict: place-out-of-range', () => {
+  it.each<[string, readonly number[], readonly number[] | undefined, unknown]>([
+    ['the filed places, the rule otherwise holding', [0, 1, 2, 4], undefined, { errors: [PAST], warnings: [] }],
+    ['a selection naming the place, the rule otherwise holding', [0, 1, 2, 4], [4, 0, 1, 2], { errors: [PAST], warnings: [] }],
+    ['the filed places, the rule also short', [1, 4], undefined, { errors: [PAST, shortClause(0, 1, 0), shortClause(1, 2, 1)], warnings: [] }],
+    ['a selection naming only the place', [0, 1, 2, 4], [4], { errors: [PAST, shortClause(0, 1, 0), shortClause(1, 2, 0)], warnings: [] }],
+  ])('%s: refused place-out-of-range with the whole rule result', (_name, filed, selection, findings) => {
+    const record = pastTheCount(filed);
+    const verdict = orderVerdict(record, selection, NOW);
+
+    expect(verdict).toStrictEqual({ outcome: 'refused', reason: 'place-out-of-range', findings });
+
+    const ordered = thrownBy(() => order(record, selection, NOW));
+    const completed = thrownBy(() => rig().client.complete(record, selection, NOW));
+
+    expect(ordered).toBeInstanceOf(RangeError);
+    expect(ordered).not.toBeInstanceOf(KitRefusalError);
+    expect((ordered as Error).message).toBe(GATHERING_PLACE_OUT_OF_RANGE_MESSAGE);
+    expect(completed).toBeInstanceOf(KitRefusalError);
+    expect((completed as KitRefusalError).message).toBe(GATHERING_PLACE_OUT_OF_RANGE_MESSAGE);
+    expect((completed as KitRefusalError).findings).toStrictEqual(findings);
+  });
+
+  it('a selection leaving the place out orders as before', () => {
+    const record = pastTheCount([0, 1, 2, 4]);
+
+    expect(orderVerdict(record, [2, 0, 1], NOW)).toStrictEqual({ outcome: 'ordered', proofs: order(record, [2, 0, 1], NOW) });
+    expect(order(record, [2, 0, 1], NOW).map((proof) => proof.place)).toStrictEqual([0, 1, 2]);
+  });
+
+  it('the window still wins over a place past the count', () => {
+    const verdict = orderVerdict(pastTheCount([0, 1, 2, 4]), undefined, VALID_UNTIL + 1);
+
+    expect(verdict.outcome === 'refused' && verdict.reason).toBe('window-passed');
+  });
+});
+
+/** The record with the reply at a place carrying a malformed method, as a hand edit leaves it. */
+function withMalformedMethod(record: Gathering, place: number): Gathering {
+  return { ...record, replies: record.replies.map((reply) => (reply.place === place ? { ...reply, method: '0x12' } : reply)) } as Gathering;
+}
+
+describe('orderVerdict: only the chosen replies are read', () => {
+  const clean = withReplies(approvalGathering(), [0, 1, 2, 3]);
+  const preferred = order(clean, undefined, NOW).map((proof) => proof.place);
+  const unchosen = [0, 1, 2, 3].filter((place) => !preferred.includes(place));
+
+  it('the preferred set leaves at least one filed place out', () => {
+    expect(unchosen.length).toBeGreaterThan(0);
+  });
+
+  it.each(unchosen)('with no selection, a malformed method at the unchosen place %i is never read', (place) => {
+    const record = withMalformedMethod(clean, place);
+
+    expect(order(record, undefined, NOW)).toStrictEqual(order(clean, undefined, NOW));
+    expect(orderVerdict(record, undefined, NOW)).toStrictEqual({ outcome: 'ordered', proofs: order(clean, undefined, NOW) });
+  });
+
+  it.each(unchosen)('with a selection leaving the malformed place %i out, only the selected replies are read', (place) => {
+    const record = withMalformedMethod(clean, place);
+
+    expect(orderVerdict(record, preferred, NOW)).toStrictEqual({ outcome: 'ordered', proofs: order(clean, preferred, NOW) });
+    expect(order(record, preferred, NOW)).toStrictEqual(order(clean, preferred, NOW));
+  });
+
+  it.each(unchosen)('a selection naming the malformed place %i reads it, and its method is refused', (place) => {
+    const record = withMalformedMethod(clean, place);
+
+    expect(() => orderVerdict(record, [0, 1, 2, 3], NOW)).toThrow();
+    expect(() => order(record, [0, 1, 2, 3], NOW)).toThrow();
+  });
+});
+
+describe('orderVerdict: never a bare TypeError on a readable record', () => {
+  const fixture = readFixture('order-criteria.json');
+  const rows: [string, Gathering][] = [
+    ...fixture.vectors.map((r) => [r['id'] as string, criteriaRecord(r.input as CriteriaInput)] as [string, Gathering]),
+    ['an approval with no reply', approvalGathering()],
+    ['an approval, one reply', withReplies(approvalGathering(), [1])],
+    ['an approval, every place', withReplies(approvalGathering(), [0, 1, 2, 3])],
+    ['a cancellation, every place', withReplies(cancellationGathering(), [3, 2, 1, 0])],
+    ['a body with no clauses', approvalGathering([], bodyOver([], []))],
+    ['a place past the count', pastTheCount([0, 1, 2, 4])],
+  ];
+
+  it.each(rows)('%s: the verdict returns, and a rule refusal carries the rule findings', (_name, record) => {
+    for (const now of [NOW, VALID_UNTIL, VALID_UNTIL + 1]) {
+      const verdict = orderVerdict(record, undefined, now);
+
+      if (verdict.outcome === 'refused' && verdict.reason === 'rule-unsatisfied') {
+        expect(verdict.findings.errors.length).toBeGreaterThan(0);
+        expect(verdict.findings.errors.every((finding) => finding.code === 'request.rule-unsatisfied')).toBe(true);
+        expect(verdict.findings.warnings).toStrictEqual([]);
+      }
+    }
   });
 });
 
@@ -324,7 +413,7 @@ describe('orderVerdict: the throws', () => {
 });
 
 /** The refusal reasons, listed independently of src/. */
-const REFUSAL_VALUES = ['window-passed', 'rule-unsatisfied'];
+const REFUSAL_VALUES = ['window-passed', 'rule-unsatisfied', 'place-out-of-range'];
 
 describe('the ordering verdict\'s records and constants', () => {
   let context: RecordContext;
@@ -333,18 +422,19 @@ describe('the ordering verdict\'s records and constants', () => {
     context = loadRecords();
   });
 
-  it.each(['GATHERING_ORDER_REFUSALS', 'GATHERING_ORDER_REFUSAL_MESSAGES', 'orderVerdict'])('the core entry exports %s as a value', (name) => {
+  it.each(['GATHERING_ORDER_REFUSALS', 'GATHERING_ORDER_REFUSAL_MESSAGES', 'GATHERING_PLACE_OUT_OF_RANGE_MESSAGE', 'orderVerdict'])('the core entry exports %s as a value', (name) => {
     const symbol = context.entry.get(name);
 
     expect(symbol, `${name} is not exported from src/index.ts`).toBeDefined();
     expect((symbol?.flags ?? 0) & (ts.SymbolFlags.Variable | ts.SymbolFlags.Function)).not.toBe(0);
   });
 
-  it('GATHERING_ORDER_REFUSALS is the two reasons in order, once each, from the core entry', () => {
+  it('GATHERING_ORDER_REFUSALS is the three reasons in order, once each, frozen, from the core entry', () => {
     expect(GATHERING_ORDER_REFUSALS).toStrictEqual(REFUSAL_VALUES);
-    expect(new Set(GATHERING_ORDER_REFUSALS).size).toBe(2);
+    expect(new Set(GATHERING_ORDER_REFUSALS).size).toBe(3);
+    expect(Object.isFrozen(GATHERING_ORDER_REFUSALS)).toBe(true);
     expect(core.GATHERING_ORDER_REFUSALS).toBe(GATHERING_ORDER_REFUSALS);
-    expectTypeOf(GATHERING_ORDER_REFUSALS).toEqualTypeOf<readonly ['window-passed', 'rule-unsatisfied']>();
+    expectTypeOf(GATHERING_ORDER_REFUSALS).toEqualTypeOf<readonly ['window-passed', 'rule-unsatisfied', 'place-out-of-range']>();
     expectTypeOf<OrderRefusal>().toEqualTypeOf<(typeof GATHERING_ORDER_REFUSALS)[number]>();
     expect(stringLiterals(exportedType(context, 'OrderRefusal'))).toStrictEqual([...REFUSAL_VALUES].sort());
   });
@@ -353,9 +443,12 @@ describe('the ordering verdict\'s records and constants', () => {
     expect(GATHERING_ORDER_REFUSAL_MESSAGES).toStrictEqual({
       'window-passed': GATHERING_WINDOW_PASSED_MESSAGE,
       'rule-unsatisfied': GATHERING_RULE_UNSATISFIED_MESSAGE,
+      'place-out-of-range': GATHERING_PLACE_OUT_OF_RANGE_MESSAGE,
     });
     expect(GATHERING_ORDER_REFUSAL_MESSAGES['window-passed']).toBe('gathering: the window has passed at this moment');
     expect(GATHERING_ORDER_REFUSAL_MESSAGES['rule-unsatisfied']).toBe('gathering: the replies do not satisfy the rule');
+    expect(GATHERING_ORDER_REFUSAL_MESSAGES['place-out-of-range']).toBe('gathering: a filed place lies past the rule\'s credential count');
+    expect(core.GATHERING_PLACE_OUT_OF_RANGE_MESSAGE).toBe(GATHERING_PLACE_OUT_OF_RANGE_MESSAGE);
     expect(Object.isFrozen(GATHERING_ORDER_REFUSAL_MESSAGES)).toBe(true);
     expect(core.GATHERING_ORDER_REFUSAL_MESSAGES).toBe(GATHERING_ORDER_REFUSAL_MESSAGES);
   });

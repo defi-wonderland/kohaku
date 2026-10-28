@@ -1,6 +1,7 @@
 import { getAddress } from 'viem';
 import { describe, expect, it } from 'vitest';
-import { describeSetup, type MethodDescriptionReads } from '../../src/index';
+import { describeSetup, validateSetup, type MethodDescriptionReads, type SetupValidationContext } from '../../src/index';
+import { DRAFT as VALIDATION_DRAFT, SETUP_CONTEXT } from '../validation/fixtures';
 import { CANDIDATE_A, CANDIDATE_B, CONFIGURATION, CONTEXT, DESCRIPTOR, DRAFT, ZKPASSPORT, withMethod } from './setup-fixtures';
 
 const LETTERED = '0xabcdef0123456789abcdef0123456789abcdef02';
@@ -91,5 +92,35 @@ describe('describeSetup refuses a malformed action read, naming the path', () =>
 
     expect(() => describeSetup(DRAFT, context)).toThrow(TypeError);
     expect(() => describeSetup(DRAFT, context)).toThrow(/context\.descriptor\.auditedActions/);
+  });
+});
+
+/** What a call threw, failing loudly where it returns. */
+function thrownBy(run: () => unknown): unknown {
+  try {
+    run();
+  } catch (thrown) {
+    return thrown;
+  }
+
+  throw new Error('expected a throw');
+}
+
+describe('describeSetup and validateSetup share one guard over the action reads', () => {
+  it.each<[string, (action: object) => unknown, RegExp]>([
+    ['the action itself', () => 'not-an-object', /^context\.action /],
+    ['actionInfo', (action) => ({ ...action, actionInfo: 'ambire' }), /^context\.action\.actionInfo /],
+    ['supportsAccount', (action) => ({ ...action, supportsAccount: 'yes' }), /^context\.action\.supportsAccount /],
+    ['accountHoldsCode', (action) => ({ ...action, accountHoldsCode: 1 }), /^context\.action\.accountHoldsCode /],
+  ])('a malformed %s throws the same TypeError message from both', (_member, change, path) => {
+    const described = thrownBy(() => describeSetup(DRAFT, { ...CONTEXT, action: change(CONTEXT.action) } as unknown as typeof CONTEXT));
+    const validated = thrownBy(() =>
+      validateSetup(VALIDATION_DRAFT, { ...SETUP_CONTEXT, action: change(SETUP_CONTEXT.action) } as unknown as SetupValidationContext),
+    );
+
+    expect(described).toBeInstanceOf(TypeError);
+    expect(validated).toBeInstanceOf(TypeError);
+    expect((described as Error).message).toMatch(path);
+    expect((validated as Error).message).toBe((described as Error).message);
   });
 });

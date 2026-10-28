@@ -166,7 +166,8 @@ export class RecoveryClient implements IRecoveryClient {
    * The submission the record's members make with the chosen proofs, strictly increasing by place: the selection where one is
    * given, taken as given, otherwise the preferred satisfying set. The places chosen are the request's proof places; the
    * record's other filed places are the ones left out. Throws a `KitRefusalError` with the findings where the window has
-   * passed at `now` or the rule is unsatisfied, and a `RangeError` where the selection names a place no reply fills.
+   * passed at `now`, the rule is unsatisfied or a filed or selected place lies past the rule's count, and a `RangeError` where
+   * the selection names a place no reply fills.
    */
   complete(gathering: Gathering, selection: Selection | undefined, now: Moment): AttemptRequest | CancelRequest {
     const verdict = orderVerdict(gathering, selection, now);

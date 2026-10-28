@@ -77,6 +77,8 @@ describe('describeSetup refuses a malformed action read, naming the path', () =>
     ['a null accountHoldsCode', { accountHoldsCode: null }, /context\.action\.accountHoldsCode/],
     ['a missing actionInfo', { actionInfo: undefined }, /context\.action\.actionInfo/],
     ['a string actionInfo', { actionInfo: 'ambire' }, /context\.action\.actionInfo/],
+    ['an actionInfo whose answered is a string', { actionInfo: { answered: 'yes' } }, /context\.action\.actionInfo\.answered/],
+    ['an answered actionInfo without a value', { actionInfo: { answered: true } }, /context\.action\.actionInfo\.value/],
   ])('throws a TypeError for %s', (_name, change, path) => {
     const context = { ...CONTEXT, action: { ...CONTEXT.action, ...change } } as unknown as typeof CONTEXT;
 
@@ -112,6 +114,8 @@ describe('describeSetup and validateSetup share one guard over the action reads'
     ['actionInfo', (action) => ({ ...action, actionInfo: 'ambire' }), /^context\.action\.actionInfo /],
     ['supportsAccount', (action) => ({ ...action, supportsAccount: 'yes' }), /^context\.action\.supportsAccount /],
     ['accountHoldsCode', (action) => ({ ...action, accountHoldsCode: 1 }), /^context\.action\.accountHoldsCode /],
+    ['actionInfo.answered', (action) => ({ ...action, actionInfo: { answered: 'yes' } }), /^context\.action\.actionInfo\.answered /],
+    ['actionInfo.value', (action) => ({ ...action, actionInfo: { answered: true } }), /^context\.action\.actionInfo\.value /],
   ])('a malformed %s throws the same TypeError message from both', (_member, change, path) => {
     const described = thrownBy(() => describeSetup(DRAFT, { ...CONTEXT, action: change(CONTEXT.action) } as unknown as typeof CONTEXT));
     const validated = thrownBy(() =>

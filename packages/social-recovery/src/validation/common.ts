@@ -35,10 +35,14 @@ export function methodTable<Value>(entries: readonly (readonly [Address, Value])
   return table;
 }
 
-/** Refuses action reads whose records are not the shapes they declare. */
+/** Refuses action reads whose records are not the shapes they declare, an answered `actionInfo` without a value among them. */
 export function assertActionReads(action: ActionReads, path: string): void {
   assertObject(action, path);
   assertObject(action.actionInfo, `${path}.actionInfo`);
+  assertBool(action.actionInfo.answered, `${path}.actionInfo.answered`);
+
+  if (action.actionInfo.answered) assertObject(action.actionInfo.value, `${path}.actionInfo.value`);
+
   assertBool(action.supportsAccount, `${path}.supportsAccount`);
   assertBool(action.accountHoldsCode, `${path}.accountHoldsCode`);
 }

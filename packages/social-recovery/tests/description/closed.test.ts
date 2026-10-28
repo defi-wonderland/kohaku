@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { describeRequest, describeSetup, describeStatus } from '../../src/index';
 import { approvalFromVector, cancellationFromVector, codecRegistry, describingMethod, handoverRows, methodRegistry, strictCodec } from './request-fixtures';
-import { CONTEXT, DRAFT, serialize, SUPPLIED_SALT } from './setup-fixtures';
+import { ACTION_INFO, CONTEXT, DRAFT, serialize, SUPPLIED_SALT } from './setup-fixtures';
 import { at, METHOD_A, paused, PAYLOAD, RECOVERY_STATE, SCOPE, SETUP_STATE, started } from './status-fixtures';
 
-/** Keys whose string values are the holder's or a module's own words rather than codes. */
-const FREE_TEXT_KEYS = new Set(['label', 'methodName', 'app']);
+/** Keys whose string values are the holder's or a module's own words rather than codes; `name` and `version` are the action's self-stated `actionInfo()`. */
+const FREE_TEXT_KEYS = new Set(['label', 'methodName', 'app', 'name', 'version']);
 
 /** Every (key, value) pair reachable in a value. */
 function entries(value: unknown, key = ''): (readonly [string, unknown])[] {
@@ -63,6 +63,15 @@ describe('every description is a closed record of values and codes', () => {
     );
 
     expect(sentences).toEqual([]);
+  });
+});
+
+describe('the action\'s self-stated words are the only sentences it adds', () => {
+  it('the setup description carries the action\'s name and version as stated, with their spaces', () => {
+    const stated = entries(descriptions.setup()).filter(([key, value]) => (key === 'name' || key === 'version') && typeof value === 'string');
+
+    expect(/\s/.test(ACTION_INFO.name)).toBe(true);
+    expect(stated).toEqual(expect.arrayContaining([['name', ACTION_INFO.name], ['version', ACTION_INFO.version]]));
   });
 });
 

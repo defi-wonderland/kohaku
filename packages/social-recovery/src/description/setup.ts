@@ -3,6 +3,7 @@ import { assertArray, assertBool, assertBytes, assertObject, assertUintNumber, i
 import {
   METHOD_TIERS,
   type Address,
+  type DescribedAction,
   type DescribedClause,
   type FailureDomain,
   type RemovedKey,
@@ -22,6 +23,9 @@ function assertDescriptionContext(context: SetupDescriptionContext): void {
   assertObject(context.descriptor, 'context.descriptor');
   assertObject(context.configuration, 'context.configuration');
   assertObject(context.action, 'context.action');
+  assertObject(context.action.actionInfo, 'context.action.actionInfo');
+  assertBool(context.action.supportsAccount, 'context.action.supportsAccount');
+  assertBool(context.action.accountHoldsCode, 'context.action.accountHoldsCode');
   assertUintNumber(context.configuration.defaultWait, FORMATS_SAFE_INTEGER_BITS, 'context.configuration.defaultWait');
 }
 
@@ -107,12 +111,31 @@ function failureDomainsOf(draft: SetupDraft, credentials: readonly PlacedCredent
   });
 }
 
+/** Whether the action is the descriptor's own. */
+function shippedAction(context: SetupDescriptionContext): boolean {
+  const action = normalizeAddress(context.action.address, 'context.action.address');
+
+  return action === normalizeAddress(context.descriptor.action, 'context.descriptor.action');
+}
+
 /** False where the action is the descriptor's own, whose account cannot be upgraded in place; absent otherwise. */
 function upgradeOf(context: SetupDescriptionContext): SetupDescription['upgrade'] {
-  const action = normalizeAddress(context.action.address, 'context.action.address');
-  const shipped = normalizeAddress(context.descriptor.action, 'context.descriptor.action');
+  return shippedAction(context) ? { upgradeableInPlace: false } : {};
+}
 
-  return action === shipped ? { upgradeableInPlace: false } : {};
+/** The committed action with its own `actionInfo` answer, the deployment's view of it and its fit where the account holds code. */
+function actionOf(context: SetupDescriptionContext): DescribedAction {
+  const address = normalizeAddress(context.action.address, 'context.action.address');
+  const audited = normalizeAddresses(context.descriptor.auditedActions, 'context.descriptor.auditedActions');
+  const { actionInfo, supportsAccount, accountHoldsCode } = context.action;
+
+  return {
+    address,
+    info: actionInfo,
+    shipped: shippedAction(context),
+    audited: audited.includes(address),
+    ...(accountHoldsCode ? { supportsAccount } : {}),
+  };
 }
 
 /**
@@ -146,6 +169,7 @@ export function describeSetup(draft: SetupDraft, context: SetupDescriptionContex
     reveals: { suppliedSaltPlaces },
     cancel: { cancelByVeto: !draft.ignoresPause },
     upgrade: upgradeOf(context),
+    action: actionOf(context),
     pause: pauseOf(credentials, table, draft.ignoresPause),
   };
 }

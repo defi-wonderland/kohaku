@@ -17,7 +17,7 @@ export function placeOrderFindings(request: CheckedRequest, findings: Findings):
  * `proof.place-out-of-range` per proof past the body's credential count, and `request.rule-unsatisfied`
  * per clause whose filled places miss its threshold, or once for a rule nothing satisfies.
  */
-export function ruleCountFindings(request: CheckedRequest, findings: Findings): void {
+export function ruleCountFindings(request: Pick<CheckedRequest, 'body' | 'proofs'>, findings: Findings): void {
   const { body } = request;
 
   if (body === undefined) return;

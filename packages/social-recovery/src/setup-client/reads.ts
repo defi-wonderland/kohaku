@@ -4,6 +4,7 @@ import {
   METHOD_TIERS,
   type ActionInfo,
   type Address,
+  type IMethodCodec,
   type IRecoveryMethod,
   type KitNotification,
   type MethodTier,
@@ -34,7 +35,14 @@ function tierOf(implementation: IRecoveryMethod | undefined): MethodTier | undef
   return tier !== undefined && METHOD_TIERS.includes(tier) ? tier : undefined;
 }
 
-/** One method module's reads at the block, beside whether this build serves it and the tier it states. */
+/** The implementation's codec, where it has a `decodeConfig` to judge configs with. */
+function codecOf(implementation: IRecoveryMethod | undefined): Pick<IMethodCodec, 'decodeConfig'> | undefined {
+  const codec = implementation?.codec;
+
+  return typeof codec?.decodeConfig === 'function' ? codec : undefined;
+}
+
+/** One method module's reads at the block, beside whether this build serves it, the tier it states and its config decoder. */
 async function methodReads(parts: SetupClientParts, module: Address, block: PinnedBlock): Promise<MethodReads> {
   const [moduleInfo, trustedParties, paused] = await Promise.all([
     parts.policyManager.moduleInfo(module, block),
@@ -43,8 +51,17 @@ async function methodReads(parts: SetupClientParts, module: Address, block: Pinn
   ]);
   const implementation = implementationOf(parts, module);
   const tier = tierOf(implementation);
+  const codec = codecOf(implementation);
 
-  return { module, moduleInfo, trustedParties, paused, implemented: implementation !== undefined, ...(tier === undefined ? {} : { tier }) };
+  return {
+    module,
+    moduleInfo,
+    trustedParties,
+    paused,
+    implemented: implementation !== undefined,
+    ...(tier === undefined ? {} : { tier }),
+    ...(codec === undefined ? {} : { codec }),
+  };
 }
 
 /** The action's identity at the block; any rejection, a revert, an undecodable answer or a failed transport, reads as unanswered. */

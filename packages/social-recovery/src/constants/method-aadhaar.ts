@@ -1,4 +1,5 @@
 import type { DeviceBinding, ReplyFailure } from '../interfaces/records';
+import type { AnonAadhaarArtifacts } from '../types/method-aadhaar';
 
 /** The two vector files this implementation's tests replay. */
 export const METHOD_AADHAAR_VECTOR_FILES = Object.freeze(['method-aadhaar-config.json', 'method-aadhaar-proof.json'] as const);
@@ -43,23 +44,13 @@ export const METHOD_AADHAAR_PROOF_FIELDS = Object.freeze(['a', 'b', 'c', 'inputs
 /** The proof's exact length in bytes. */
 export const METHOD_AADHAAR_PROOF_BYTES = 544;
 
-/** The words in one Groth16 coordinate pair. */
+/** The words in one Groth16 coordinate pair, and the pairs in the Groth16 `b` point. */
 export const METHOD_AADHAAR_PAIR_WORDS = 2;
-
-/** The pairs in the Groth16 `b` point. */
 export const METHOD_AADHAAR_B_PAIRS = 2;
 
 /** The public inputs by position, in the circuit's order. */
 export const METHOD_AADHAAR_PUBLIC_INPUTS = Object.freeze([
-  'pubkeyHash',
-  'nullifier',
-  'timestamp',
-  'ageAbove18',
-  'gender',
-  'pincode',
-  'state',
-  'nullifierSeed',
-  'signalHash',
+  'pubkeyHash', 'nullifier', 'timestamp', 'ageAbove18', 'gender', 'pincode', 'state', 'nullifierSeed', 'signalHash',
 ] as const);
 
 /** The number of public inputs. */
@@ -77,12 +68,8 @@ export const METHOD_AADHAAR_MILLISECONDS_PER_SECOND = 1000;
 /** The width in bits of every config and proof word. */
 export const METHOD_AADHAAR_WORD_BITS = 256;
 
-/**
- * The circuit's scalar field; a seed at or above it would enter the circuit
- * reduced and prove a seed other than the one the config records.
- */
-export const METHOD_AADHAAR_SNARK_SCALAR_FIELD =
-  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
+/** The circuit's scalar field; a seed at or above it would enter the circuit reduced and prove a seed other than the one the config records. */
+export const METHOD_AADHAAR_SNARK_SCALAR_FIELD = 21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 
 /** The right shift that brings keccak256 of the digest inside the circuit's field. */
 export const METHOD_AADHAAR_SIGNAL_HASH_SHIFT = 3n;
@@ -112,11 +99,7 @@ export const METHOD_AADHAAR_STACK_VERSION = '2.4.3';
 export const METHOD_AADHAAR_STACK_CALLS = Object.freeze(['init', 'generateArgs', 'prove', 'verify'] as const);
 
 /** The calls the default stack reads a QR's signing time with, without `init`; a peer missing one still loads, its `signedAt` answering undefined. */
-export const METHOD_AADHAAR_STACK_TIME_CALLS = Object.freeze([
-  'timestampToUTCUnix',
-  'decompressByteArray',
-  'convertBigIntToByteArray',
-] as const);
+export const METHOD_AADHAAR_STACK_TIME_CALLS = Object.freeze(['timestampToUTCUnix', 'decompressByteArray', 'convertBigIntToByteArray'] as const);
 
 /** The stack's members naming its two signing keys: UIDAI's 2021 key and its own test key, the one `verify` refuses locally outside test mode. */
 export const METHOD_AADHAAR_STACK_KEY_MEMBERS = Object.freeze(['productionPublicKeyHash', 'testPublicKeyHash'] as const);
@@ -127,6 +110,30 @@ export const METHOD_AADHAAR_STACK_DEFAULT_MEMBER = 'default';
 
 /** The artifact origins the stack's `ArtifactsOrigin` names. */
 export const METHOD_AADHAAR_ARTIFACT_ORIGINS = Object.freeze(['server', 'local', 'chunked'] as const);
+
+/** anon-aadhaar's public v2 bucket, the base of both bucket records; it answers cross-origin GET only, and an extension page needs it in its host permissions. */
+export const METHOD_AADHAAR_BUCKET_URL = 'https://anon-aadhaar-artifacts.s3.eu-central-1.amazonaws.com/v2.0.0';
+const METHOD_AADHAAR_BUCKET_FILES = { wasmURL: `${METHOD_AADHAAR_BUCKET_URL}/aadhaar-verifier.wasm`, vkeyURL: `${METHOD_AADHAAR_BUCKET_URL}/vkey.json` };
+
+/**
+ * The bucket in the peer's browser mode: the 10 MB wasm, then the zkey in ten gzip pieces (296 MB) the peer caches in the browser's storage under
+ * their file names alone, so two chunked sources share one cache. Browser only: a Node caller passes `METHOD_AADHAAR_BUCKET_SERVER` or `local` paths.
+ */
+export const METHOD_AADHAAR_BUCKET_CHUNKED: AnonAadhaarArtifacts = Object.freeze({
+  ...METHOD_AADHAAR_BUCKET_FILES,
+  zkeyURL: `${METHOD_AADHAAR_BUCKET_URL}/chunked_zkey`,
+  artifactsOrigin: 'chunked',
+});
+
+/** The bucket fetched whole: the 10 MB wasm and the 612 MB zkey, which the peer downloads again on every proof. */
+export const METHOD_AADHAAR_BUCKET_SERVER: AnonAadhaarArtifacts = Object.freeze({
+  ...METHOD_AADHAAR_BUCKET_FILES,
+  zkeyURL: `${METHOD_AADHAAR_BUCKET_URL}/circuit_final.zkey`,
+  artifactsOrigin: 'server',
+});
+
+/** The artifacts `anonAadhaarMethod` proves with where its options name neither a stack nor artifacts. */
+export const METHOD_AADHAAR_DEFAULT_ARTIFACTS = METHOD_AADHAAR_BUCKET_CHUNKED;
 
 /** Where the proof is made: a prover running in the approver's browser. */
 export const METHOD_AADHAAR_DEVICE_BINDING: DeviceBinding = 'in-browser-prover';
@@ -185,6 +192,7 @@ export const METHOD_AADHAAR_STACK_SURFACE_MESSAGE = 'does not expose the expecte
 export const METHOD_AADHAAR_STACK_MISSING_MESSAGE = 'is not installed';
 export const METHOD_AADHAAR_STACK_ORIGIN_MESSAGE = 'the stack names no such artifacts origin';
 export const METHOD_AADHAAR_STACK_INIT_MESSAGE = 'the stack could not initialise with the given artifacts';
+/** Kept for compatibility; no longer raised, since the installed stack defaults to `METHOD_AADHAAR_DEFAULT_ARTIFACTS`. */
 export const METHOD_AADHAAR_NO_ARTIFACTS_MESSAGE = 'no artifacts were given';
 export const METHOD_AADHAAR_SIGNAL_FAULT_MESSAGE =
   'the material signal threw while this module read it or added or removed its abort listener';

@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { METHOD_AADHAAR_BUCKET_CHUNKED } from '../../src/constants';
 import type { Hex } from '../../src/interfaces';
 import { anonAadhaarMethod } from '../../src/method-aadhaar';
 import type { ProofWords, Signals } from './fixtures';
@@ -25,6 +26,28 @@ const NULLIFIER = 1234n;
 const SEED = 42n;
 const CTX = ctxFor(configBytes(NULLIFIER, SEED), DIGEST);
 const MODES = [false, true] as const;
+
+const core = vi.hoisted(() => ({
+  init: vi.fn((): Promise<void> => Promise.resolve()),
+  generateArgs: vi.fn((): Promise<unknown> => Promise.resolve({})),
+  prove: vi.fn((): Promise<unknown> => Promise.resolve({})),
+  verify: vi.fn<(pcd: unknown, testMode?: boolean) => Promise<boolean>>(() => Promise.resolve(true)),
+}));
+
+/** The peer, stubbed so the default bucket never reaches the network. */
+vi.mock('@anon-aadhaar/core', () => ({
+  ...core,
+  ArtifactsOrigin: { server: 0, local: 1, chunked: 2 },
+  productionPublicKeyHash: '18063425702624337643644061197836918910810808173893535653269228433734128853484',
+  testPublicKeyHash: '15134874015316324267425466444584014077184337590635665158241104437045239495873',
+}));
+
+/** What the peer's init receives for the default bucket. */
+const CHUNKED_INIT = { ...METHOD_AADHAAR_BUCKET_CHUNKED, artifactsOrigin: 2 };
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 clockForFile(FRESH_NOW);
 
@@ -86,8 +109,18 @@ describe('verify hands the stack the test-mode flag', () => {
     expect(double.verifyFlags).toEqual([testMode]);
   });
 
-  it('with no stack at all, test mode answers not-judged as the default does', async () => {
+  it('under the default bucket, test mode rejects a proof not under the test key without the peer\'s verify', async () => {
+    expect(await anonAadhaarMethod({ testMode: true }).verify(CTX, proofWith())).toBe('rejected');
+    expect(core.init.mock.calls).toEqual([[CHUNKED_INIT]]);
+    expect(core.verify).not.toHaveBeenCalled();
+  });
+
+  it('under the default bucket whose init the peer refuses, test mode answers not-judged as the default does', async () => {
+    core.init.mockRejectedValueOnce(new Error('No available storage method found.')).mockRejectedValueOnce(new Error('No available storage method found.'));
+
     expect(await anonAadhaarMethod({ testMode: true }).verify(CTX, proofWith())).toBe('not-judged');
+    expect(await anonAadhaarMethod().verify(CTX, proofWith())).toBe('not-judged');
+    expect(core.verify).not.toHaveBeenCalled();
   });
 });
 

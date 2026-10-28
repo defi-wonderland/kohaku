@@ -1,5 +1,6 @@
 import { FORMATS_ZERO_ADDRESS } from '../constants/formats';
 import {
+  METHOD_AADHAAR_DEFAULT_ARTIFACTS,
   METHOD_AADHAAR_DEFAULT_TEST_MODE,
   METHOD_AADHAAR_DEVICE_BINDING,
   METHOD_AADHAAR_DEVICE_FACTS,
@@ -170,13 +171,17 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
   }
 }
 
-/** The Aadhaar method, over an injected stack or the installed `@anon-aadhaar/core`, either in test mode; passing both stacks throws. */
+/**
+ * The Aadhaar method, over an injected stack or the installed `@anon-aadhaar/core` with the given artifacts or
+ * `METHOD_AADHAAR_DEFAULT_ARTIFACTS`, either in test mode; passing a stack and artifacts throws a `TypeError`.
+ */
 export function anonAadhaarMethod(options: AnonAadhaarMethodOptions = {}): IRecoveryMethod {
   if (options.stack !== undefined && options.artifacts !== undefined) {
     throw new TypeError(METHOD_AADHAAR_STACK_AND_ARTIFACTS_MESSAGE);
   }
 
-  const stack = options.stack ?? coreStack(options.artifacts && readArtifacts(options.artifacts));
+  const artifacts = options.artifacts === undefined ? METHOD_AADHAAR_DEFAULT_ARTIFACTS : readArtifacts(options.artifacts);
+  const stack = options.stack ?? coreStack(artifacts);
 
   return new AnonAadhaarMethod(stack, options.testMode ?? METHOD_AADHAAR_DEFAULT_TEST_MODE);
 }

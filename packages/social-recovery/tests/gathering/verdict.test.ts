@@ -279,6 +279,29 @@ function pastTheCount(filed: readonly number[]): Gathering {
 
 const PAST = { code: 'proof.place-out-of-range', subject: 'request', values: { place: 4, count: 4 } };
 
+const PAST_5 = { code: 'proof.place-out-of-range', subject: 'request', values: { place: 5, count: 4 } };
+
+/** A hand-built record: places 0 to 5 in the map, the body counting four, replies filed in the given order. */
+function pastTheCountTwice(filed: readonly number[]): Gathering {
+  const places = [0, 1, 2, 3, 4, 5].map((p) => placeEntry(p));
+  const start = approvalGathering(places);
+
+  return approvalGathering(places, undefined, filed.map((place) => replyFor(start, place)));
+}
+
+describe('orderVerdict: out-of-range findings keep the ascending place order', () => {
+  it.each<[string, readonly number[] | undefined]>([
+    ['replies filed in reverse order, no selection', undefined],
+    ['a selection naming the places in reverse order', [5, 4, 0, 1, 2]],
+  ])('%s', (_name, selection) => {
+    const record = pastTheCountTwice([5, 4, 0, 1, 2]);
+    const verdict = orderVerdict(record, selection, NOW);
+
+    expect(verdict).toStrictEqual({ outcome: 'refused', reason: 'place-out-of-range', findings: { errors: [PAST, PAST_5], warnings: [] } });
+    expect(thrownBy(() => rig().client.complete(record, selection, NOW))).toMatchObject({ findings: { errors: [PAST, PAST_5] } });
+  });
+});
+
 describe('orderVerdict: place-out-of-range', () => {
   it.each<[string, readonly number[], readonly number[] | undefined, unknown]>([
     ['the filed places, the rule otherwise holding', [0, 1, 2, 4], undefined, { errors: [PAST], warnings: [] }],

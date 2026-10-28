@@ -43,8 +43,9 @@ export function orderVerdict(record: Gathering, selection: Selection | undefined
   if (!places.every((place) => filled.has(place))) throw new RangeError(GATHERING_SELECTION_UNFILLED_MESSAGE);
 
   const findings = emptyFindings();
+  const ascending = [...places].sort((left, right) => left - right);
 
-  ruleCountFindings({ body, proofs: places.map((place) => ({ place })) }, findings);
+  ruleCountFindings({ body, proofs: ascending.map((place) => ({ place })) }, findings);
 
   if (findings.errors.length > 0) {
     const outOfRange = findings.errors.some(({ code }) => code === 'proof.place-out-of-range');

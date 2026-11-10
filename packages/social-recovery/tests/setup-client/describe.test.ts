@@ -55,6 +55,7 @@ const expectedContext = (draft: SetupDraft, authority: readonly boolean[], remov
     actionInfo: { answered: true, value: ACTION_INFO },
     supportsAccount: true,
     accountHoldsCode: true,
+    manager: { answered: true, value: MANAGER },
     fallbackHandlerEntry: { answered: false },
   },
   candidateKeys: [KEY_1, KEY_2].map((key, index) => ({ key, isAuthority: authority[index] ?? false })),

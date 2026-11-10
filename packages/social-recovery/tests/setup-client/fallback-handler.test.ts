@@ -26,9 +26,11 @@ const HANDLER_WORD: Hex = `0x${'00'.repeat(12)}${HANDLER.slice(2).toLowerCase()}
 
 const MEMBERS = ['describeSetup', 'validateSetup'] as const;
 
-/** The calls the client sent the provider, addresses and data lower-cased. */
+/** The calls the client sent the provider for the account, addresses and data lower-cased; the action's `MANAGER()` call is not one. */
 const callsOf = (seen: ReturnType<typeof build>['seen']) =>
-  seen.calls.map((call) => ({ ...call, to: call.to.toLowerCase(), data: call.data.toLowerCase() }));
+  seen.calls
+    .map((call) => ({ ...call, to: call.to.toLowerCase(), data: call.data.toLowerCase() }))
+    .filter((call) => call.to === ACCOUNT.toLowerCase());
 
 const handlerWarnings = (result: ValidationResult) => result.warnings.filter((finding) => finding.code === 'account.fallback-handler');
 
@@ -56,11 +58,11 @@ describe("the account's fallback handler read", () => {
     ['the account holds no code', { world: { code: '0x' } }],
     ['the action does not serve the account', { world: { supportsAccount: false } }],
     ["the bound action is not the deployment's", { action: OTHER_ACTION }],
-  ])('makes no call where %s, and discloses no handler', async (_name, options) => {
+  ])('makes no call to the account where %s, and discloses no handler', async (_name, options) => {
     for (const member of MEMBERS) {
       const { seen, answered } = await judged(member, { ...options, world: { ...options.world, simulate: answeringHandler(HANDLER_WORD) } });
 
-      expect(seen.calls, member).toEqual([]);
+      expect(callsOf(seen), member).toEqual([]);
       expect(seen.codes, member).toHaveLength(1);
 
       if (member === 'describeSetup') expect('fallbackHandler' in answered).toBe(false);

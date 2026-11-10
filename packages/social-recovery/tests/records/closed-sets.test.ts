@@ -314,10 +314,10 @@ describe('the finding codes', () => {
     expect([...tuple]).toEqual(table);
   });
 
-  it("ValidationError's code is the setup and request errors together, twenty-nine codes", () => {
+  it("ValidationError's code is the setup and request errors together, thirty codes", () => {
     const expected = sorted([...new Set([...SETUP_ERRORS, ...REQUEST_ERRORS])]);
 
-    expect(expected).toHaveLength(29);
+    expect(expected).toHaveLength(30);
     expect(literalsOf('ValidationError', 'code')).toEqual(expected);
   });
 

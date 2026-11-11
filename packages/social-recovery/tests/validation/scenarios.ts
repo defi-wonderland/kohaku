@@ -151,7 +151,7 @@ export function requestScenarios(): readonly [string, AttemptRequest | CancelReq
       state: { ...WAITING_STATE, attempt: { ...WAITING_STATE.attempt, setupNonce: 2n }, setupCommitment: oracleCommitment(ACCOUNT, ACTION, 3n, CANCEL.setupBody) },
     }],
     ['a cancellation read at a skewed moment', lateCancel, { ...CANCEL_CONTEXT, moment: T + 1_000 }],
-    ['every payment warning', { ...OPENING, validUntil: T + 300_000, order: { token: OTHER_TOKEN, amount: 5n, payee: ZERO } }, {
+    ['every payment warning and a wide window', { ...OPENING, validUntil: T + 300_000, order: { token: OTHER_TOKEN, amount: 5n, payee: ZERO } }, {
       ...REQUEST_CONTEXT,
       balance: 1n,
       implementedMethods: [],

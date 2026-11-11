@@ -51,6 +51,7 @@ describe('the finding catalogue', () => {
       'payment.sponsor-sees',
       'payment.token-unknown',
       'request.moment-skew',
+      'request.window-wide',
     ]);
   });
 

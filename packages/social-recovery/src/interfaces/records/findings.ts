@@ -64,6 +64,7 @@ export const REQUEST_WARNING_CODES = [
   'method.unshipped',
   'payment.open-payee',
   'payment.token-unknown',
+  'request.window-wide',
   'request.window-short',
   'request.moment-skew',
   'cancel.window-late',

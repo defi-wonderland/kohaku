@@ -174,6 +174,7 @@ const REQUEST_WARNINGS = [
   'method.unshipped', // also a setup warning, so the ValidationWarning union holds it once
   'payment.open-payee',
   'payment.token-unknown',
+  'request.window-wide',
   'request.window-short',
   'request.moment-skew',
   'cancel.window-late',
@@ -312,7 +313,7 @@ describe('the finding codes', () => {
     ['setup errors', SETUP_ERROR_CODES, SETUP_ERRORS, 14],
     ['setup warnings', SETUP_WARNING_CODES, SETUP_WARNINGS, 16],
     ['request errors', REQUEST_ERROR_CODES, REQUEST_ERRORS, 18],
-    ['request warnings', REQUEST_WARNING_CODES, REQUEST_WARNINGS, 8],
+    ['request warnings', REQUEST_WARNING_CODES, REQUEST_WARNINGS, 9],
   ] as const)('the %s tuple is the table, in its order', (_label, tuple, table, count) => {
     expect(table).toHaveLength(count);
     expect([...tuple]).toEqual(table);
@@ -328,7 +329,7 @@ describe('the finding codes', () => {
   it("ValidationWarning's code is the setup and request warnings together, method.unshipped once", () => {
     const expected = sorted([...new Set([...SETUP_WARNINGS, ...REQUEST_WARNINGS])]);
 
-    expect(expected).toHaveLength(23);
+    expect(expected).toHaveLength(24);
     expect(literalsOf('ValidationWarning', 'code')).toEqual(expected);
   });
 

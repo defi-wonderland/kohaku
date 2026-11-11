@@ -679,9 +679,9 @@ export const lastArgument = (call: PartCall): unknown => call.args[call.args.len
 /** The members the client called on the parts, in order. */
 export const members = (seen: Seen): string[] => seen.parts.map((call) => `${call.part}.${call.member}`);
 
-/** The provider calls the doubles answered as simulations: neither the action's `MANAGER()` nor the account's handler read. */
+/** The provider calls the doubles answered as simulations: neither the action's `MANAGER()` or `AMBIRE_IMPLEMENTATION()` nor the account's handler read. */
 export const simulationCalls = (seen: Seen): Seen['calls'] =>
-  seen.calls.filter((call) => ![MANAGER_SELECTOR, HANDLER_SELECTOR].includes(call.data.slice(0, 10).toLowerCase() as Hex));
+  seen.calls.filter((call) => ![MANAGER_SELECTOR, IMPLEMENTATION_SELECTOR, HANDLER_SELECTOR].includes(call.data.slice(0, 10).toLowerCase() as Hex));
 
 /** The members of the parts that read or prepare against a block; `fetch` takes a range instead. */
 export const pinnedPartCalls = (seen: Seen): PartCall[] => seen.parts.filter((call) => call.part !== 'events');

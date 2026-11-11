@@ -185,10 +185,12 @@ export type Outcome<T> = { readonly value: T } | { readonly rejects: unknown };
 /** What each double answers; every read is recorded in `reads` before it is answered. */
 export type World = {
   readonly notifications: Outcome<readonly KitNotification[]>;
-  /** Present: what `fetch` resolves to around the notifications, in place of a record that skipped nothing. */
+  /** Present: what `fetch` over the account filter resolves to around the notifications, in place of a record that skipped nothing. */
   readonly fetched?: (notifications: readonly KitNotification[]) => unknown;
   /** What `fetch` answers over the privilege filter; no notification when absent. */
   readonly privileges?: Outcome<readonly KitNotification[]>;
+  /** Present: what `fetch` over the privilege filter resolves to around its notifications, as `fetched` does for the account filter. */
+  readonly privilegesFetched?: (notifications: readonly KitNotification[]) => unknown;
   /** Lower-cased keys `isAuthority` confirms; a key in `rejects` rejects instead. */
   readonly authorities: ReadonlySet<string>;
   readonly authorityRejects?: ReadonlyMap<string, unknown>;
@@ -238,9 +240,11 @@ export const rig = (world: World, overrides: Partial<RemovedKeyInputs> = {}, cod
       fetch: async (filter, range) => {
         record({ kind: 'fetch', filter, range: { ...range } });
 
-        const notifications = await answer(filter === PRIVILEGE_FILTER ? (world.privileges ?? { value: [] }) : world.notifications);
+        const privileged = filter === PRIVILEGE_FILTER;
+        const notifications = await answer(privileged ? (world.privileges ?? { value: [] }) : world.notifications);
+        const shape = privileged ? world.privilegesFetched : world.fetched;
 
-        return (world.fetched === undefined ? { notifications, skipped: [] } : world.fetched(notifications)) as FetchedNotifications;
+        return (shape === undefined ? { notifications, skipped: [] } : shape(notifications)) as FetchedNotifications;
       },
     },
     action: {

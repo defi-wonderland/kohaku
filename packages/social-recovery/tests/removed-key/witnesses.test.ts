@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { AmbireActionCodec, inferRemovedKey, type Address, type KitNotification, type RemovedKeyInputs } from '../../src/index';
 import { removedKeyReading } from '../../src/removed-key/infer';
+import { bareArray, skippedAt, withSkipped } from '../helpers/fetched';
 import {
   ACCOUNT,
   ACCOUNT_FILTER,
@@ -154,6 +155,11 @@ describe('one confirmed address: the walk\'s answer, unchanged', () => {
     ['a kit-slot write isAuthority denies', { authorities: keySet(key(1)), ...writes(privilege(key(4), PRIV_SLOT, { block: 150 })) }],
     ['the privilege scan rejecting', { authorities: keySet(key(1), key(3)), privileges: { rejects: new Error('logs down') } }],
     ['the privilege scan answering no array', { authorities: keySet(key(1), key(3)), privileges: { value: { length: 1 } as never } }],
+    [
+      'the privilege scan skipping a log, its decoded writes unused',
+      { authorities: keySet(key(1), key(3)), ...live, privilegesFetched: withSkipped(skippedAt(positionAt({ block: 160 }), new Error('bad log'))) },
+    ],
+    ['the privilege scan answering a bare array', { authorities: keySet(key(1), key(3)), ...live, privilegesFetched: bareArray }],
     [
       'the privilege scan answering an entry without a position',
       { authorities: keySet(key(1), key(3)), privileges: { value: [{ kind: 'privilege-changed', account: ACCOUNT, addr: key(3), priv: PRIV_KEY }] as never } },

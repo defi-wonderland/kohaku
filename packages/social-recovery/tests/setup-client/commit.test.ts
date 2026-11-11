@@ -354,3 +354,33 @@ describe('prepareCommitSetup: the version escape', () => {
     await expect(client.prepareCommitSetup(DRAFT, PASSWORD)).resolves.toBeDefined();
   });
 });
+
+describe('the draft the prepare judges and commits', () => {
+  const thresholdOf = (draft: SetupDraft, threshold: number): void => {
+    (draft.clauses[0] as { threshold: number }).threshold = threshold;
+  };
+
+  it('refuses a draft with an error though the caller repairs it while the prepare runs', async () => {
+    const draft = structuredClone(withBackup(BAD_DRAFT, 'empty'));
+    const prepared = build().client.prepareCommitSetup(draft);
+
+    thresholdOf(draft, 1);
+
+    const thrown: unknown = await prepared.catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(KitRefusalError);
+    expect((thrown as KitRefusalError).findings?.errors.map((finding) => finding.code)).toEqual(['clause.threshold-above-count']);
+  });
+
+  it('commits the draft as it stood at the call though the caller breaks it while the prepare runs', async () => {
+    const draft = structuredClone(withBackup(DRAFT, 'empty'));
+    const pending = build().client.prepareCommitSetup(draft);
+
+    thresholdOf(draft, 3);
+
+    const prepared = (await pending) as PreparedBatch;
+    const decoded = decodeFunctionData({ abi: POLICY_MANAGER_WRITES_ABI, data: prepared.calls[1]?.data ?? '0x' });
+
+    expect(decoded.args?.[1]).toBe(referenceCommitment(withBackup(DRAFT, 'empty'), ACCOUNT, ACTION, 1n));
+  });
+});

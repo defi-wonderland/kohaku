@@ -56,14 +56,16 @@ async function backupBytes(
  * transaction it composes.
  * It runs setup validation at that block and, while an error stands, refuses with a `KitRefusalError` carrying the findings
  * before any call is built; warnings never block. Before any read it refuses with a `RangeError` a body past its ABI widths,
- * and with a `KitRefusalError` carrying `backup.too-wide` an encrypted backup too wide to seal.
+ * and with a `KitRefusalError` carrying `backup.too-wide` an encrypted backup too wide to seal. It judges and commits one copy of
+ * the draft taken at the call, so a change to the draft while the prepare runs reaches neither.
  */
 export async function prepareCommit(
   parts: SetupClientParts,
-  draft: SetupDraft,
+  input: SetupDraft,
   password: string | undefined,
   options: PrepareOptions | undefined,
 ): Promise<PreparedCall | PreparedBatch> {
+  const draft = structuredClone(input);
   const credentials = checkedDraft(draft);
 
   assertBackupPassword(draft, password);

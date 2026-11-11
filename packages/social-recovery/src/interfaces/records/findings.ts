@@ -43,6 +43,8 @@ export const REQUEST_ERROR_CODES = [
   'request.attempt-active',
   'request.no-active-attempt',
   'request.stale-attempt',
+  'request.no-setup',
+  'request.setup-nonce',
   'request.body-mismatch',
   'request.rule-unsatisfied',
   'request.method-stopped',

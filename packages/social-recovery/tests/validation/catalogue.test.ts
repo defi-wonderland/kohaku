@@ -128,6 +128,7 @@ describe('the finding catalogue', () => {
       'request.expired',
       'request.method-stopped',
       'request.rule-unsatisfied',
+      'request.setup-nonce',
     ]);
   });
 

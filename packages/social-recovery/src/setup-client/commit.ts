@@ -1,6 +1,12 @@
 import { bytesToHex } from 'viem';
-import { BACKUP_NONCE_SIZE, BACKUP_PADDING_SIZE, BACKUP_PAYLOAD_VERSION, FORMATS_SETUP_NONCE_BITS } from '../constants';
-import { configurationBody, simulatePrepared } from '../client-core';
+import {
+  BACKUP_NONCE_SIZE,
+  BACKUP_PADDING_SIZE,
+  BACKUP_PAYLOAD_VERSION,
+  FORMATS_SETUP_NONCE_BITS,
+  SETUP_CLIENT_VALIDATION_REFUSED_MESSAGE,
+} from '../constants';
+import { configurationBody, KitRefusalError, simulatePrepared } from '../client-core';
 import { sealBackup, serializeConfiguration } from '../encryption';
 import { encodeSetupBody, setupCommitment } from '../formats';
 import { assertObject, assertUintBigint } from '../formats/guards';
@@ -8,6 +14,7 @@ import type { Configuration, Hex, PreparedBatch, PreparedCall, PrepareOptions, S
 import type { SetupClientParts } from '../types/setup-client';
 import { assertBackupFits, assertBackupPassword, assertOptions } from './check';
 import { checkedDraft, draftConfiguration, publicMetadataOf } from './draft';
+import { validationAt } from './judgments';
 import { authorizedGiven, holdsCode, pinRead } from './reads';
 
 /** A fresh random AES-GCM nonce, drawn for every seal. */
@@ -47,9 +54,9 @@ async function backupBytes(
  * Where the account holds no code yet the batch comes back unsimulated whatever the options say, since separate calls cannot
  * model a deployment: it is the inner batch the integrator wraps in its own deployment of the account, and simulates as the
  * transaction it composes.
- * It runs no setup validation: the integrator calls `validateSetup` on the draft first. Before any read it refuses with a
- * `RangeError` a body past its ABI widths, and with a `KitRefusalError` carrying `backup.too-wide` an encrypted backup too
- * wide to seal.
+ * It runs setup validation at that block and, while an error stands, refuses with a `KitRefusalError` carrying the findings
+ * before any call is built; warnings never block. Before any read it refuses with a `RangeError` a body past its ABI widths,
+ * and with a `KitRefusalError` carrying `backup.too-wide` an encrypted backup too wide to seal.
  */
 export async function prepareCommit(
   parts: SetupClientParts,
@@ -71,7 +78,13 @@ export async function prepareCommit(
   const pinned = await pinRead(parts);
   const { block } = pinned;
   const deployed = holdsCode(parts, block);
-  const [state, authorized] = await Promise.all([parts.policyManager.stateOf(block), authorizedGiven(parts, deployed, block)]);
+  const [findings, state, authorized] = await Promise.all([
+    validationAt(parts, draft, credentials, pinned, deployed),
+    parts.policyManager.stateOf(block),
+    authorizedGiven(parts, deployed, block),
+  ]);
+
+  if (findings.errors.length > 0) throw new KitRefusalError(SETUP_CLIENT_VALIDATION_REFUSED_MESSAGE, { findings });
 
   assertObject(state, 'state');
   assertUintBigint(state.setupNonce, FORMATS_SETUP_NONCE_BITS, 'state.setupNonce');

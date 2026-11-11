@@ -7,6 +7,7 @@ import {
   openBackup,
   POLICY_MANAGER_WRITES_ABI,
   serializeConfiguration,
+  SETUP_CLIENT_VALIDATION_REFUSED_MESSAGE,
   type Hex,
   type PreparedBatch,
   type PreparedCall,
@@ -186,25 +187,30 @@ describe('prepareCommitSetup: the backup the draft names', () => {
   });
 });
 
-describe('prepareCommitSetup: no validation inside the prepare', () => {
-  it('prepares a draft validateSetup refuses, leaving the judgment to the integrator', async () => {
+describe('prepareCommitSetup: validation inside the prepare', () => {
+  it('refuses a draft validateSetup refuses with a KitRefusalError carrying its findings, preparing nothing', async () => {
     const findings = await build().client.validateSetup(BAD_DRAFT);
 
-    expect(findings.errors.length).toBeGreaterThan(0);
+    expect(findings.errors.map((error) => error.code)).toContain('clause.threshold-above-count');
 
     const { client, seen } = build();
-    const prepared = await client.prepareCommitSetup(BAD_DRAFT, PASSWORD);
+    const thrown = await client.prepareCommitSetup(BAD_DRAFT, PASSWORD).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
 
-    expect(prepared.kind).toBe('batch');
-    expect(members(seen)).toContain('manager.prepareCommitSetup');
+    expect((thrown as object).constructor).toBe(KitRefusalError);
+    expect((thrown as KitRefusalError).message).toBe(SETUP_CLIENT_VALIDATION_REFUSED_MESSAGE);
+    expect((thrown as KitRefusalError).findings).toEqual(findings);
+    expect(members(seen)).not.toContain('manager.prepareCommitSetup');
+    expect(members(seen)).not.toContain('action.armingCall');
   });
 
-  it('commits the refused draft under its own commitment', async () => {
+  it('refuses the draft under an empty backup too, committing nothing', async () => {
     const { client, seen } = build();
 
-    await client.prepareCommitSetup(withBackup(BAD_DRAFT, 'empty'));
-
-    expect(commitArguments(seen)[1]).toBe(referenceCommitment(BAD_DRAFT, ACCOUNT, ACTION, 1n));
+    await expect(client.prepareCommitSetup(withBackup(BAD_DRAFT, 'empty'))).rejects.toThrow(SETUP_CLIENT_VALIDATION_REFUSED_MESSAGE);
+    expect(seen.parts.find((part) => part.member === 'prepareCommitSetup')).toBeUndefined();
   });
 
   it('prepares a draft with a warning as before', async () => {
@@ -258,17 +264,25 @@ describe('prepareCommitSetup: the ABI widths before the pin', () => {
     },
   );
 
-  it('prepares at the widest values the fields hold, an unsatisfiable threshold left to validateSetup', async () => {
+  it('passes the widest values the fields hold through the width check, then refuses them on validation', async () => {
     const draft: SetupDraft = {
       ...withBackup(DRAFT, 'empty'),
       wait: 2 ** 48 - 1,
       clauses: [{ threshold: 255, credentials: DRAFT.clauses[0]?.credentials ?? [] }],
     };
     const { client, seen } = build();
+    const thrown = await client.prepareCommitSetup(draft).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
 
-    await expect(client.prepareCommitSetup(draft)).resolves.toBeDefined();
-    expect(members(seen)).toContain('manager.prepareCommitSetup');
-    expect(commitArguments(seen)[1]).toBe(referenceCommitment(draft, ACCOUNT, ACTION, 1n));
+    expect(thrown).not.toBeInstanceOf(RangeError);
+    expect((thrown as object).constructor).toBe(KitRefusalError);
+    expect((thrown as KitRefusalError).findings?.errors.map((error) => error.code)).toEqual(
+      expect.arrayContaining(['clause.threshold-above-count', 'wait.field-width', 'wait.above-maximum']),
+    );
+    expect(seen.provider).not.toEqual([]);
+    expect(members(seen)).not.toContain('manager.prepareCommitSetup');
   });
 });
 
@@ -311,11 +325,14 @@ describe('prepareCommitSetup: the nonce bound', () => {
 });
 
 describe('prepareCommitSetup: a code-less account', () => {
-  it('reads the code first and, on 0x, makes no isAuthorized call and arms', async () => {
+  it('reads the code first and, on 0x, makes no isAuthorized call and refuses with account.not-deployed', async () => {
     const { client, seen } = build({ world: { code: '0x', authorized: { rejects: { data: '0x' } } } });
-    const prepared = await client.prepareCommitSetup(DRAFT, PASSWORD);
+    const thrown = await client.prepareCommitSetup(DRAFT, PASSWORD).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
 
-    expect(prepared.kind).toBe('batch');
+    expect((thrown as KitRefusalError).findings?.errors.map((error) => error.code)).toContain('account.not-deployed');
     expect(members(seen)).not.toContain('action.isAuthorized');
     expect(seen.codes.map((code) => code.address.toLowerCase())).toContain(ACCOUNT.toLowerCase());
     expect(seen.codes.every((code) => code.block === PIN.number)).toBe(true);

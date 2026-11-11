@@ -13,7 +13,7 @@ import { assertObject, assertUintBigint } from '../formats/guards';
 import type { Configuration, Hex, PreparedBatch, PreparedCall, PrepareOptions, SetupDraft } from '../interfaces';
 import type { SetupClientParts } from '../types/setup-client';
 import { assertBackupFits, assertBackupPassword, assertOptions } from './check';
-import { checkedDraft, draftConfiguration, publicMetadataOf } from './draft';
+import { checkedDraft, draftConfiguration, draftSnapshot, publicMetadataOf } from './draft';
 import { validationAt } from './judgments';
 import { authorizedGiven, holdsCode, pinRead } from './reads';
 
@@ -65,7 +65,9 @@ export async function prepareCommit(
   password: string | undefined,
   options: PrepareOptions | undefined,
 ): Promise<PreparedCall | PreparedBatch> {
-  const draft = structuredClone(input);
+  checkedDraft(input);
+
+  const draft = draftSnapshot(input);
   const credentials = checkedDraft(draft);
 
   assertBackupPassword(draft, password);

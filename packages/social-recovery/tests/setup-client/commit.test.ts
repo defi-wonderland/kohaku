@@ -383,4 +383,14 @@ describe('the draft the prepare judges and commits', () => {
 
     expect(decoded.args?.[1]).toBe(referenceCommitment(withBackup(DRAFT, 'empty'), ACCOUNT, ACTION, 1n));
   });
+
+  it('prepares a draft held behind proxies, as reactive UI state keeps it, as it prepares the plain draft', async () => {
+    const proxied = <T>(value: T): T =>
+      typeof value === 'object' && value !== null ? new Proxy(value as object, { get: (target, key) => proxied(Reflect.get(target, key)) }) as T : value;
+    const draft = withBackup(DRAFT, 'empty');
+    const prepared = (await build().client.prepareCommitSetup(proxied(draft))) as PreparedBatch;
+    const decoded = decodeFunctionData({ abi: POLICY_MANAGER_WRITES_ABI, data: prepared.calls[1]?.data ?? '0x' });
+
+    expect(decoded.args?.[1]).toBe(referenceCommitment(draft, ACCOUNT, ACTION, 1n));
+  });
 });

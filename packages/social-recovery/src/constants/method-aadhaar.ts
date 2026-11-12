@@ -118,6 +118,9 @@ export const METHOD_AADHAAR_STACK_TIME_CALLS = Object.freeze([
   'convertBigIntToByteArray',
 ] as const);
 
+/** The prover states the peer reports while it downloads the circuit's files; a proof that fails in one of them is the device's failure. */
+export const METHOD_AADHAAR_DOWNLOAD_STATES = Object.freeze(['fetching-wasm', 'fetching-zkey'] as const);
+
 /** The stack's members naming its two signing keys: UIDAI's 2021 key and its own test key, the one `verify` refuses locally outside test mode. */
 export const METHOD_AADHAAR_STACK_KEY_MEMBERS = Object.freeze(['productionPublicKeyHash', 'testPublicKeyHash'] as const);
 

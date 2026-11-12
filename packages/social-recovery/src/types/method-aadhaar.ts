@@ -1,4 +1,5 @@
 import type { METHOD_AADHAAR_ARTIFACT_ORIGINS, METHOD_AADHAAR_PUBLIC_INPUTS } from '../constants/method-aadhaar';
+import type { Hex } from '../interfaces';
 
 /** The prover's progress callback, called with the stack's `ProverState` values. */
 export type AadhaarProgress = (state: string) => void;
@@ -65,6 +66,9 @@ export type AnonAadhaarArtifacts = {
   readonly artifactsOrigin: (typeof METHOD_AADHAAR_ARTIFACT_ORIGINS)[number];
 };
 
+/** The sha256 of an artifact set's three files, as `0x`-prefixed hex. */
+export type AadhaarArtifactHashes = { readonly wasm: Hex; readonly zkey: Hex; readonly vkey: Hex };
+
 /** The installed stack's package root, declared here because the package ships its types as raw source. */
 export type AadhaarCoreSurface = {
   readonly init: (args: unknown) => Promise<void>;
@@ -86,8 +90,10 @@ export type AnonAadhaarMethodOptions = {
   readonly stack?: AnonAadhaarStack;
   /**
    * Where the installed stack reads the circuit's files: a bucket record, `METHOD_AADHAAR_BUCKET_CHUNKED` (the default) or
-   * `METHOD_AADHAAR_BUCKET_SERVER`, or the integrator's own URLs or paths. The SDK hosts no file and checks only that the URLs are
-   * non-empty strings and the origin is known. `chunked` runs in a browser only, `local` in Node only, where each URL is a file
+   * `METHOD_AADHAAR_BUCKET_SERVER`, or the integrator's own URLs or paths. The SDK hosts no file and checks that the URLs are
+   * non-empty strings and the origin is known; where the wasm and vkey URLs are the bucket's own, the installed stack fetches both once,
+   * checks them against `METHOD_AADHAAR_BUCKET_SHA256` and hands them to the peer as object URLs, and it fetches no integrator URL.
+   * `chunked` runs in a browser only, `local` in Node only, where each URL is a file
    * path; a browser caller holding the files passes `URL.createObjectURL(file)` for each under `server`. The peer's `init` is
    * page-global: the stack initialises once, on first use, and the last `init` on the page sets the files every stack proves with.
    */

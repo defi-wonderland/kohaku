@@ -212,12 +212,15 @@ describe('the package surface', () => {
     expect([...second.keys()]).toEqual(expect.arrayContaining(constantNames(program)));
   }, PROGRAM_TIMEOUT);
 
-  it('the bucket file declares exactly the four bucket constants', () => {
+  it('the bucket file declares exactly the four bucket constants, the pinned hashes and the two messages', () => {
     expect(Object.keys(aadhaarBucketFile).sort()).toEqual([
+      'METHOD_AADHAAR_ARTIFACT_HASH_MESSAGE',
       'METHOD_AADHAAR_BUCKET_CHUNKED',
       'METHOD_AADHAAR_BUCKET_SERVER',
+      'METHOD_AADHAAR_BUCKET_SHA256',
       'METHOD_AADHAAR_BUCKET_URL',
       'METHOD_AADHAAR_DEFAULT_ARTIFACTS',
+      'METHOD_AADHAAR_STACK_DOWNLOAD_MESSAGE',
     ]);
   });
 

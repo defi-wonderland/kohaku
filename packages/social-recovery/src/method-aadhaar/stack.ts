@@ -1,4 +1,5 @@
 import {
+  METHOD_AADHAAR_DOWNLOAD_STATES,
   METHOD_AADHAAR_STACK_CALLS,
   METHOD_AADHAAR_STACK_DEFAULT_MEMBER,
   METHOD_AADHAAR_STACK_INIT_MESSAGE,
@@ -10,11 +11,24 @@ import {
   METHOD_AADHAAR_STACK_SURFACE_MESSAGE,
   METHOD_AADHAAR_STACK_TIME_CALLS,
 } from '../constants/method-aadhaar';
+import {
+  METHOD_AADHAAR_ARTIFACT_HASH_MESSAGE,
+  METHOD_AADHAAR_BUCKET_SHA256,
+  METHOD_AADHAAR_STACK_DOWNLOAD_MESSAGE,
+} from '../constants/method-aadhaar-bucket';
 import { assertDependency } from '../formats/guards';
-import type { AadhaarCoreSurface, AadhaarPcd, AnonAadhaarArtifacts, AnonAadhaarStack } from '../types/method-aadhaar';
+import type {
+  AadhaarCoreSurface,
+  AadhaarPcd,
+  AadhaarProgress,
+  AadhaarProverArgs,
+  AnonAadhaarArtifacts,
+  AnonAadhaarStack,
+} from '../types/method-aadhaar';
+import { pinnedArtifacts } from './artifacts';
 import { isRecord } from './inputs';
 
-/** Thrown when the default stack cannot be loaded or initialised. */
+/** Thrown when the default stack cannot be loaded or initialised, or fails while downloading the circuit's files. */
 export class AadhaarStackUnavailable extends Error {}
 
 /** The loaded peer with the three time calls present, the shape `signedAt` reads. */
@@ -45,7 +59,10 @@ async function importCore(): Promise<AadhaarCoreSurface> {
   return surface;
 }
 
-/** Imports the peer and calls its `init`; a refused `init` is the device's failure, not the material's. */
+/**
+ * Imports the peer, checks the SDK's own bucket files and calls its `init`; a refused `init` or a bucket file that fails its fetch
+ * or check is the device's failure, not the material's.
+ */
 async function initialise(artifacts: AnonAadhaarArtifacts): Promise<AadhaarCoreSurface> {
   let core: AadhaarCoreSurface;
 
@@ -61,8 +78,12 @@ async function initialise(artifacts: AnonAadhaarArtifacts): Promise<AadhaarCoreS
 
   if (typeof origin !== 'number') throw new AadhaarStackUnavailable(METHOD_AADHAAR_STACK_ORIGIN_MESSAGE);
 
+  const files = await pinnedArtifacts(artifacts, METHOD_AADHAAR_BUCKET_SHA256);
+
+  if (files === undefined) throw new AadhaarStackUnavailable(METHOD_AADHAAR_ARTIFACT_HASH_MESSAGE);
+
   try {
-    await core.init({ ...artifacts, artifactsOrigin: origin });
+    await core.init({ ...files, artifactsOrigin: origin });
   } catch (error) {
     throw new AadhaarStackUnavailable(METHOD_AADHAAR_STACK_INIT_MESSAGE, { cause: error });
   }
@@ -113,8 +134,30 @@ async function signedAtOf(qrData: string): Promise<bigint | undefined> {
   }
 }
 
+const isDownloadState = (state: unknown): boolean => (METHOD_AADHAAR_DOWNLOAD_STATES as readonly unknown[]).includes(state);
+
+/**
+ * The peer's proof, its every state recorded before it reaches the page's callback unchanged; a rejection whose last state is a
+ * download is `AadhaarStackUnavailable`, any other rejection is the peer's own.
+ */
+async function proveRecorded(core: AadhaarCoreSurface, args: AadhaarProverArgs, onProgress?: AadhaarProgress): Promise<AadhaarPcd> {
+  let last: string | undefined;
+
+  try {
+    return await core.prove(args, (state) => {
+      last = state;
+      onProgress?.(state);
+    });
+  } catch (error) {
+    if (isDownloadState(last)) throw new AadhaarStackUnavailable(METHOD_AADHAAR_STACK_DOWNLOAD_MESSAGE, { cause: error });
+
+    throw error;
+  }
+}
+
 /**
  * The default stack over the artifacts, loaded and initialised once on first use; a failed load rejects with `AadhaarStackUnavailable` and is retried on the next call.
+ * Loading fetches and checks the SDK's own bucket wasm and vkey first, and a proof that fails while the peer downloads also rejects with it.
  * Once loaded, `verify` answers false without calling the peer for a test-key proof outside test mode and for any
  * other key in it; outside test mode a key the peer does not know is left to the peer's throw, `not-judged`.
  * `signedAt` imports the peer without `init`, so it downloads no artifact; a peer without the three time calls still loads, and
@@ -136,7 +179,7 @@ export function coreStack(artifacts: AnonAadhaarArtifacts): AnonAadhaarStack {
   return {
     generateArgs: async (options) =>
       (await load()).generateArgs({ ...options, fieldsToRevealArray: [...options.fieldsToRevealArray] }),
-    prove: async (args, onProgress) => (await load()).prove(args, onProgress),
+    prove: async (args, onProgress) => proveRecorded(await load(), args, onProgress),
     signedAt: signedAtOf,
     verify: async (pcd, testMode) => {
       const core = await load();

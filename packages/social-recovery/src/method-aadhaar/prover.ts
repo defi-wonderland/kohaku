@@ -128,6 +128,8 @@ function gatedProgress(onProgress: AadhaarProgress | undefined, signal: AbortSig
  * `material-rejected`, since the stack then fails the witness. The stack gets the page's progress
  * gated on the signal: an abort settles the call `device-refused` at once and forwards no later state,
  * while the installed stack's download and proving run on until they end; an injected stack may stop on the signal.
+ * A failed download is `device-unavailable`, except a zkey piece under `chunked`, whose error the peer drops: that proof
+ * reads `material-rejected`, and the piece stays in the browser's storage under its file name until the site's data is cleared.
  */
 export async function runProver(
   stack: AnonAadhaarStack,

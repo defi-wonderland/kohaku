@@ -127,3 +127,22 @@ describe('every description is pure', () => {
     expect(describeRequest(frozen(structuredClone(approval)), codecs, methods)).toEqual(descriptions.approval());
   });
 });
+
+describe('the status of a recovery that left its setup standing', () => {
+  const recovered = { ...RECOVERY_STATE, attempt: { ...RECOVERY_STATE.attempt, state: 'Consumed' as const } };
+  const build = () => describeStatus(SETUP_STATE, recovered, [started(5n, [0n, 2n], PAYLOAD, at(96)), paused(METHOD_A, at(97))], SCOPE);
+
+  it('owes a re-commit and holds no salt key and no sentence', () => {
+    expect(build().recommitOwed).toBe(true);
+    expect(entries(build()).filter(([path]) => keyOf(path) === 'salt')).toEqual([]);
+    expect(sentencesIn(build())).toEqual([]);
+  });
+
+  it('neither writes to its inputs nor depends on anything else', () => {
+    const latest = frozen([started(5n, [0n], PAYLOAD, at(96))]);
+    const setup = frozen(structuredClone(SETUP_STATE));
+    const recovery = frozen(structuredClone(recovered));
+
+    expect(describeStatus(setup, recovery, latest, SCOPE)).toStrictEqual(describeStatus(SETUP_STATE, recovered, latest, SCOPE));
+  });
+});

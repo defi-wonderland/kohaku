@@ -1,4 +1,4 @@
-import type { AbiParameter, Address, DescribedHandover } from '../interfaces/records';
+import type { AbiParameter, Address, AttemptState, DescribedHandover } from '../interfaces/records';
 
 /** The passkey method's config layout, `abi.encode(uint256 x, uint256 y, bytes32 rpIdHash)`. */
 export const DESCRIPTION_PASSKEY_CONFIG_ABI = [
@@ -36,3 +36,6 @@ export const DESCRIPTION_ZKPASSPORT_OPTIONAL_KEY = 6;
 
 /** The Aadhaar method's trusted-key names, its one word. */
 export const DESCRIPTION_ISSUER_KEY_NAMES = Object.freeze(['issuerKeyHash'] as const);
+
+/** The state a consumed attempt holds on the recovery record. */
+export const DESCRIPTION_CONSUMED_ATTEMPT_STATE: AttemptState = 'Consumed';

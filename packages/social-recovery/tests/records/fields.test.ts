@@ -956,3 +956,23 @@ void configuration;
     expect(members.filter((member) => fieldsOf(member).join() === 'password')).toHaveLength(1);
   });
 });
+
+describe('the status description', () => {
+  it('StatusDescription carries exactly block, an optional attempt, armed, setup, stops and a required recommitOwed', () => {
+    const status = typeOf('StatusDescription');
+
+    expect(fieldsOf(status)).toEqual(sorted(['block', 'attempt', 'armed', 'setup', 'stops', 'recommitOwed']));
+    expect(fieldsOf(status).filter((name) => optional(status, name))).toEqual(['attempt']);
+  });
+
+  it('recommitOwed is a boolean', () => {
+    expect(hasFlag(field(typeOf('StatusDescription'), 'recommitOwed'), ts.TypeFlags.Boolean)).toBe(true);
+    expectTypeOf<core.StatusDescription['recommitOwed']>().toEqualTypeOf<boolean>();
+  });
+
+  it('StatusAttempt keeps its members and carries no setup nonce', () => {
+    expect(fieldsOf(typeOf('StatusAttempt'))).toEqual(
+      sorted(['state', 'attemptId', 'consumableAfter', 'blockTimestamp', 'usedMethods', 'usedPlaces', 'ignoresPause', 'payload', 'order']),
+    );
+  });
+});

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { describeRequest, describeSetup, describeStatus } from '../../src/index';
 import { approvalFromVector, cancellationFromVector, codecRegistry, describingMethod, handoverRows, methodRegistry, strictCodec } from './request-fixtures';
-import { ACTION_INFO, CONTEXT, DRAFT, serialize, SUPPLIED_SALT } from './setup-fixtures';
+import { ACTION_INFO, CONTEXT, DRAFT, LABELLED_CONTEXT, serialize, SUPPLIED_SALT } from './setup-fixtures';
 import { at, METHOD_A, paused, PAYLOAD, RECOVERY_STATE, SCOPE, SETUP_STATE, started } from './status-fixtures';
 
 /** Keys whose string values are the holder's or a module's own words rather than codes, wherever they sit. */
@@ -56,6 +56,7 @@ const descriptions = {
   setup: () => describeSetup(DRAFT, CONTEXT),
   'handler-disclosing setup': () =>
     describeSetup(DRAFT, { ...CONTEXT, action: { ...CONTEXT.action, fallbackHandlerEntry: { answered: true, value: `0x${'ff'.repeat(12)}${'69'.repeat(20)}` } } }),
+  'labelled setup': () => describeSetup(DRAFT, LABELLED_CONTEXT),
   approval: () => describeRequest(approval, codecs, methods),
   cancellation: () => describeRequest(cancellation, codecs, methods),
   status: () => describeStatus(SETUP_STATE, RECOVERY_STATE, [started(5n, [0n, 2n], PAYLOAD, at(96)), paused(METHOD_A, at(97))], SCOPE),

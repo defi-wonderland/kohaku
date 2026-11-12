@@ -18,3 +18,21 @@ export const DESCRIPTION_UNREAD_PURPOSE_MESSAGE = 'request.purpose must be appro
 
 /** The handover of a payload whose codec threw or whose decoded keys do not encode back to its bytes. */
 export const DESCRIPTION_ROUND_TRIP_FAILED: DescribedHandover = { decoded: false, cause: 'round-trip-failed' };
+
+/** The zkPassport method's trusted-key names, one per word in the method's order. */
+export const DESCRIPTION_ZKPASSPORT_KEY_NAMES = Object.freeze([
+  'version',
+  'rootVerifier',
+  'subVerifier',
+  'verifierHelper',
+  'rootRegistry',
+  'rootAdmin',
+  'rootGuardian',
+  'subVerifierAdmin',
+] as const);
+
+/** The one zkPassport trusted-key word the method accepts as zero, the root guardian. */
+export const DESCRIPTION_ZKPASSPORT_OPTIONAL_KEY = 6;
+
+/** The Aadhaar method's trusted-key names, its one word. */
+export const DESCRIPTION_ISSUER_KEY_NAMES = Object.freeze(['issuerKeyHash'] as const);

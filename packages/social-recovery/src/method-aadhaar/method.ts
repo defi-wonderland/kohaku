@@ -1,6 +1,5 @@
 import { FORMATS_ZERO_ADDRESS } from '../constants/formats';
 import {
-  METHOD_AADHAAR_DEFAULT_TEST_MODE,
   METHOD_AADHAAR_DEVICE_BINDING,
   METHOD_AADHAAR_DEVICE_FACTS,
   METHOD_AADHAAR_ENROLL_KIND,
@@ -10,10 +9,8 @@ import {
   METHOD_AADHAAR_REQUEST_UNSUPPORTED,
   METHOD_AADHAAR_SEED_MISMATCH_MESSAGE,
   METHOD_AADHAAR_SEED_PARAM,
-  METHOD_AADHAAR_STACK_AND_ARTIFACTS_MESSAGE,
   METHOD_AADHAAR_VECTOR_FILES,
 } from '../constants/method-aadhaar';
-import { METHOD_AADHAAR_DEFAULT_ARTIFACTS } from '../constants/method-aadhaar-bucket';
 import { sameAddress } from '../formats/guards';
 import type {
   Address,
@@ -32,12 +29,11 @@ import type {
   ReplyFailure,
   Verdict,
 } from '../interfaces';
-import type { AadhaarConfig, AnonAadhaarMethodOptions, AnonAadhaarStack } from '../types/method-aadhaar';
+import type { AadhaarConfig, AnonAadhaarStack } from '../types/method-aadhaar';
 import { aadhaarCodec, decodeConfig, encodeConfig, encodeProof } from './codec';
-import { argsOptions, readArtifacts, readInput, readMaterial, readParams } from './inputs';
+import { argsOptions, readInput, readMaterial, readParams } from './inputs';
 import { abortFailure, isFailure, packProof, runProver, untilSettled } from './prover';
 import { isDigest, signalFromDigest, signalHashFromDigest } from './signal';
-import { coreStack } from './stack';
 import { agedBeforeProving, bindsTo, isFresh, judge, nowInSeconds } from './verdict';
 import { inputAt } from './words';
 
@@ -65,7 +61,10 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
     return { kind: METHOD_AADHAAR_ENROLL_KIND, nullifierSeed, certificateFile, fieldsToRevealArray: [] };
   }
 
-  /** Proves once, under the stack's default signal, and returns the nullifier, its seed and the fixed window as the config. */
+  /**
+   * Proves once, under the stack's default signal, and returns the nullifier, its seed and the fixed window as the config.
+   * An abort settles it `device-refused` at once with no config; the installed stack's proving runs on until it ends.
+   */
   async configFrom(input: EnrollInput, material: Material): Promise<Hex | EnrollFailure> {
     const params = input?.kind === METHOD_AADHAAR_ENROLL_KIND ? readInput(input) : undefined;
     const supplied = readMaterial(material);
@@ -108,7 +107,8 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
    * by the system clock, or the local verdict rejects it. A config window under the minimum is `request-unsupported`
    * before proving, and a QR the stack's `signedAt` reads as older than the window by more than the slack is
    * `material-rejected` before proving. The chain accepts the proof until one window after the QR's signing time, whatever the request's
-   * validity, so the holder's simulation refuses one that aged. An abort at any point, the time read and verification included, is `device-refused`.
+   * validity, so the holder's simulation refuses one that aged. An abort at any point, the time read and verification included, is `device-refused`
+   * at once with no proof and no further progress; the installed stack's download and proving run on until they end.
    */
   async replyFrom(ctx: Ctx, input: Input, material: Material): Promise<Hex | ReplyFailure> {
     const params = readInput(input);
@@ -169,19 +169,4 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
   describe(): DeviceFacts {
     return { ...METHOD_AADHAAR_DEVICE_FACTS };
   }
-}
-
-/**
- * The Aadhaar method, over an injected stack or the installed `@anon-aadhaar/core` with the given artifacts or
- * `METHOD_AADHAAR_DEFAULT_ARTIFACTS`, either in test mode; passing a stack and artifacts throws a `TypeError`.
- */
-export function anonAadhaarMethod(options: AnonAadhaarMethodOptions = {}): IRecoveryMethod {
-  if (options.stack !== undefined && options.artifacts !== undefined) {
-    throw new TypeError(METHOD_AADHAAR_STACK_AND_ARTIFACTS_MESSAGE);
-  }
-
-  const artifacts = options.artifacts === undefined ? METHOD_AADHAAR_DEFAULT_ARTIFACTS : readArtifacts(options.artifacts);
-  const stack = options.stack ?? coreStack(artifacts);
-
-  return new AnonAadhaarMethod(stack, options.testMode ?? METHOD_AADHAAR_DEFAULT_TEST_MODE);
 }

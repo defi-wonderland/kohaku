@@ -1,0 +1,7 @@
+---
+"@kohaku-eth/social-recovery": patch
+---
+
+An aborted Aadhaar proof now forwards no more progress, and the method documents what an abort stops. The Aadhaar method hands the proving stack the page's `onProgress` gated on the material's `signal`, so a state reaches the page only while the signal reads neither aborted nor throwing; an injected stack receives that gated callback as the second argument of `AnonAadhaarStack.prove`, beside the signal as before. The JSDoc of `AadhaarMaterial.signal`, `AnonAadhaarStack.prove`, `configFrom`, `replyFrom` and `anonAadhaarMethod` states the contract: an abort before or during any step settles that call `device-refused` at once, and that call returns no proof or config and forwards no later progress. The SDK starts no worker, so the installed `@anon-aadhaar/core` stack's download and proving are not stopped and hold their memory and CPU until they end. A call started meanwhile proves alongside them. An injected stack receives the signal and may stop its own work. `anonAadhaarMethod` moved unchanged into its own source file and both entries export it as before. No record, closed set, constant, device fact or signature changes.
+
+Compatibility: a page's `onProgress` is no longer called after its signal aborts, so a later step's status is no longer overwritten by an aborted proof. An injected stack whose `prove` compared the callback it receives with the page's own by identity now receives a wrapper. A page with no `onProgress` sees no change.

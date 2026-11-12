@@ -209,7 +209,7 @@ describe('signing', () => {
     expect(options?.fieldsToRevealArray ?? []).toEqual([]);
     expect(BigInt(options?.signal ?? '-1')).toBe(BigInt(DIGEST));
     expect(double.proveCalls).toHaveLength(1);
-    expect(double.proveCalls[0]?.onProgress).toBe(onProgress);
+    expect(double.proveCalls[0]?.onProgress).toEqual(expect.any(Function));
     expect(double.proveCalls[0]?.signal).toBe(controller.signal);
     expect(states).toEqual(['proving', 'completed']);
     expect(double.order.slice(0, 2)).toEqual(['generateArgs', 'prove']);

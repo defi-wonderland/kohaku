@@ -13,6 +13,7 @@ import type {
   AadhaarGroth16,
   AadhaarMaterial,
   AadhaarPcd,
+  AadhaarProgress,
   AadhaarProof,
   AnonAadhaarStack,
 } from '../types/method-aadhaar';
@@ -113,9 +114,20 @@ export async function untilSettled<T>(work: Promise<T>, signal: AbortSignal | un
 const failureOf = (error: unknown): ReplyFailure =>
   error instanceof AadhaarStackUnavailable ? METHOD_AADHAAR_DEVICE_UNAVAILABLE : METHOD_AADHAAR_MATERIAL_REJECTED;
 
+/** The page's callback, forwarding a state only while the signal reads neither aborted nor throwing. */
+function gatedProgress(onProgress: AadhaarProgress | undefined, signal: AbortSignal | undefined): AadhaarProgress | undefined {
+  if (onProgress === undefined) return undefined;
+
+  return (state) => {
+    if (abortFailure(signal) === undefined) onProgress(state);
+  };
+}
+
 /**
  * Runs the prover once. A QR code whose signature fails under the certificate is
- * `material-rejected`, since the stack then fails the witness.
+ * `material-rejected`, since the stack then fails the witness. The stack gets the page's progress
+ * gated on the signal: an abort settles the call `device-refused` at once and forwards no later state,
+ * while the installed stack's download and proving run on until they end; an injected stack may stop on the signal.
  */
 export async function runProver(
   stack: AnonAadhaarStack,
@@ -127,12 +139,14 @@ export async function runProver(
 
   if (aborted !== undefined) return aborted;
 
+  const progress = gatedProgress(onProgress, signal);
+
   try {
     const args = await untilSettled(stack.generateArgs(options), signal);
 
     if (isFailure(args)) return args;
 
-    return await untilSettled(stack.prove(args, onProgress, signal), signal);
+    return await untilSettled(stack.prove(args, progress, signal), signal);
   } catch (error) {
     return failureOf(error);
   }

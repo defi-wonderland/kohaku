@@ -11,6 +11,9 @@ export const METHOD_ZKPASSPORT_CONFIG_LAYOUT = [
 /** The trusted-key word holding the version the module accepts, the word the peer's `params.version` equals. */
 export const METHOD_ZKPASSPORT_VERSION_KEY = 0;
 
+/** The number of trusted-key words the module holds, the length a session's `trustedKeys` must have. */
+export const METHOD_ZKPASSPORT_TRUSTED_KEY_COUNT = 8;
+
 /** The version word's parts, major, minor and patch, in that order. */
 export const METHOD_ZKPASSPORT_VERSION_PARTS = 3;
 
@@ -127,6 +130,9 @@ export const METHOD_ZKPASSPORT_DEVICE_UNAVAILABLE: ReplyFailure = Object.freeze(
 /** The failure a reply answers where the committed config's domain or scope is one no request can be made for. */
 export const METHOD_ZKPASSPORT_REQUEST_UNSUPPORTED: ReplyFailure = Object.freeze({ kind: 'reply-failure', cause: 'request-unsupported' });
 
+/** The failure an enrollment or reply answers where the session carries `trustedKeys` and the proof's version is not the one they accept. */
+export const METHOD_ZKPASSPORT_MATERIAL_UNTRUSTED: ReplyFailure = Object.freeze({ kind: 'reply-failure', cause: 'material-untrusted' });
+
 /** The names the codec's refusals give the two layouts. */
 export const METHOD_ZKPASSPORT_CONFIG_NAME = 'method-zkpassport config';
 export const METHOD_ZKPASSPORT_PROOF_NAME = 'method-zkpassport proof';
@@ -155,6 +161,9 @@ export const METHOD_ZKPASSPORT_DOMAIN_MESSAGE = 'method-zkpassport: "domain" mus
 
 /** Thrown where a shown text is given but is not a string. */
 export const METHOD_ZKPASSPORT_DISPLAY_MESSAGE = 'method-zkpassport: "name", "logo" and "purpose" must be strings where given';
+
+/** Thrown where the parameters give `trustedKeys` that are not the module's trusted-key words with a version word first. */
+export const METHOD_ZKPASSPORT_TRUSTED_KEYS_MESSAGE = 'method-zkpassport: "trustedKeys" must be the module\'s 8 trusted-key words of 32 bytes each, the first a version word: major, minor and patch as three big-endian uint16 values and zero after them';
 
 /**
  * The shortest validity period, in seconds, a config may carry. The root verifier accepts a proof only while its date plus

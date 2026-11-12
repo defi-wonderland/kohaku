@@ -95,6 +95,7 @@ const REPLY_FAILURE = [
   { meaning: 'the device refused', spelling: 'device-refused' },
   { meaning: 'the device was unavailable', spelling: 'device-unavailable' },
   { meaning: 'the material was rejected as the wrong shape for this method', spelling: 'material-rejected' },
+  { meaning: "the material proves, but under an issuer key or version the method's module does not trust now", spelling: 'material-untrusted' },
   { meaning: 'no implementation serves the method the request names', spelling: 'method-unsupported' },
   { meaning: "the request's kind or version is one this build does not read", spelling: 'request-unsupported' },
 ] as const;
@@ -224,13 +225,13 @@ describe('the fourteen notification shapes', () => {
   });
 });
 
-describe('the five ReplyFailure causes', () => {
-  it('derives five distinct meanings', () => {
-    expect(new Set(REPLY_FAILURE.map((entry) => entry.meaning)).size).toBe(5);
+describe('the six ReplyFailure causes', () => {
+  it('derives six distinct meanings', () => {
+    expect(new Set(REPLY_FAILURE.map((entry) => entry.meaning)).size).toBe(6);
   });
 
-  it('REPLY_FAILURE_CAUSES holds five causes, one per meaning', () => {
-    expect(REPLY_FAILURE_CAUSES).toHaveLength(5);
+  it('REPLY_FAILURE_CAUSES holds six causes, one per meaning', () => {
+    expect(REPLY_FAILURE_CAUSES).toHaveLength(6);
     expect(sorted(REPLY_FAILURE_CAUSES)).toEqual(sorted(REPLY_FAILURE.map((entry) => entry.spelling)));
   });
 

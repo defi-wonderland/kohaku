@@ -175,7 +175,7 @@ describe('the method\'s constants', () => {
     const unsupported = await method.replyFrom(ctx, method.signingInput(ctx, PARAMS), { proofs: [stackProof('outer_evm_count_5', DIGEST)] });
 
     expect(constants.METHOD_ZKPASSPORT_REQUEST_UNSUPPORTED).toEqual({ kind: 'reply-failure', cause: 'request-unsupported' });
-    expect(REPLY_FAILURE_CAUSES).toHaveLength(5);
+    expect(REPLY_FAILURE_CAUSES).toHaveLength(6);
     expect(REPLY_FAILURE_CAUSES).toContain(constants.METHOD_ZKPASSPORT_REQUEST_UNSUPPORTED.cause);
     expect(Object.isFrozen(constants.METHOD_ZKPASSPORT_REQUEST_UNSUPPORTED)).toBe(true);
     expect(unsupported).toEqual(constants.METHOD_ZKPASSPORT_REQUEST_UNSUPPORTED);

@@ -97,6 +97,9 @@ export const METHOD_ZKPASSPORT_SCOPE_HASH_BYTES = 31;
 /** The proof mode every request asks for. */
 export const METHOD_ZKPASSPORT_REQUEST_MODE = 'compressed-evm';
 
+/** The unique identifier type every request asks for, `NullifierType.NON_SALTED` of `@zkpassport/sdk`, the only one the module accepts. */
+export const METHOD_ZKPASSPORT_REQUESTED_IDENTIFIER_TYPE = 0 as const;
+
 /** Dev mode where the factory's options leave it unset: off. */
 export const METHOD_ZKPASSPORT_DEFAULT_DEV_MODE = false;
 

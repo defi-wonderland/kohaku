@@ -1,4 +1,5 @@
 import {
+  METHOD_ZKPASSPORT_REQUESTED_IDENTIFIER_TYPE,
   METHOD_ZKPASSPORT_CUSTOM_DATA_KEY,
   METHOD_ZKPASSPORT_DISPLAY_MESSAGE,
   METHOD_ZKPASSPORT_DISPLAY_FIELDS,
@@ -63,6 +64,7 @@ export const requestArgs = (session: ZkPassportSession, devMode: boolean): ZkPas
   scope: session.scope,
   mode: METHOD_ZKPASSPORT_REQUEST_MODE,
   devMode,
+  uniqueIdentifierType: METHOD_ZKPASSPORT_REQUESTED_IDENTIFIER_TYPE,
 });
 
 /**

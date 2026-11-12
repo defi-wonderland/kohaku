@@ -1,4 +1,4 @@
-import type { METHOD_ZKPASSPORT_CUSTOM_DATA_KEY, METHOD_ZKPASSPORT_REQUEST_MODE } from '../constants';
+import type { METHOD_ZKPASSPORT_CUSTOM_DATA_KEY, METHOD_ZKPASSPORT_REQUEST_MODE, METHOD_ZKPASSPORT_REQUESTED_IDENTIFIER_TYPE } from '../constants';
 import type { Hex } from '../interfaces';
 
 /** The config record: the committed identifier and the service its proofs are scoped to. */
@@ -46,6 +46,7 @@ export type ZkPassportRequestArgs = {
   readonly scope: string;
   readonly mode: typeof METHOD_ZKPASSPORT_REQUEST_MODE;
   readonly devMode: boolean;
+  readonly uniqueIdentifierType: typeof METHOD_ZKPASSPORT_REQUESTED_IDENTIFIER_TYPE;
 };
 
 /** The request result the page renders and listens on. */

@@ -3,7 +3,6 @@ import {
   METHOD_AADHAAR_DEVICE_BINDING,
   METHOD_AADHAAR_DEVICE_FACTS,
   METHOD_AADHAAR_ENROLL_KIND,
-  METHOD_AADHAAR_FRESHNESS_WINDOW,
   METHOD_AADHAAR_MATERIAL_REJECTED,
   METHOD_AADHAAR_MIN_FRESHNESS_WINDOW,
   METHOD_AADHAAR_REQUEST_UNSUPPORTED,
@@ -31,7 +30,7 @@ import type {
 } from '../interfaces';
 import type { AadhaarConfig, AnonAadhaarStack } from '../types/method-aadhaar';
 import { aadhaarCodec, decodeConfig, encodeConfig, encodeProof } from './codec';
-import { argsOptions, readInput, readMaterial, readParams } from './inputs';
+import { argsOptions, readInput, readInputWindow, readMaterial, readParams, readWindow } from './inputs';
 import { abortFailure, isFailure, packProof, runProver, untilSettled } from './prover';
 import { isDigest, signalFromDigest, signalHashFromDigest } from './signal';
 import { agedBeforeProving, bindsTo, isFresh, judge, nowInSeconds } from './verdict';
@@ -54,22 +53,28 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
     return sameAddress(descriptor.methodAadhaar, FORMATS_ZERO_ADDRESS) ? [] : [descriptor.methodAadhaar];
   }
 
-  /** The enrollment ceremony's proving arguments, all but the QR code. */
+  /**
+   * The enrollment ceremony's proving arguments, all but the QR code, with the holder's freshness window, the default where the
+   * params name none; a `TypeError` or `RangeError` for malformed params.
+   */
   enrollInput(params: Params): EnrollInput {
     const { nullifierSeed, certificateFile } = readParams(params);
+    const freshnessWindow = readWindow(params);
 
-    return { kind: METHOD_AADHAAR_ENROLL_KIND, nullifierSeed, certificateFile, fieldsToRevealArray: [] };
+    return { kind: METHOD_AADHAAR_ENROLL_KIND, nullifierSeed, certificateFile, fieldsToRevealArray: [], freshnessWindow };
   }
 
   /**
-   * Proves once, under the stack's default signal, and returns the nullifier, its seed and the fixed window as the config.
+   * Proves once, under the stack's default signal, and returns the nullifier, its seed and the input's freshness window as the
+   * config, the default for an input that carries none; a window the bounds refuse is `material-rejected` before proving.
    * An abort settles it `device-refused` at once with no config; the installed stack's proving runs on until it ends.
    */
   async configFrom(input: EnrollInput, material: Material): Promise<Hex | EnrollFailure> {
     const params = input?.kind === METHOD_AADHAAR_ENROLL_KIND ? readInput(input) : undefined;
+    const freshnessWindow = readInputWindow(input);
     const supplied = readMaterial(material);
 
-    if (params === undefined || supplied === undefined) return METHOD_AADHAAR_MATERIAL_REJECTED;
+    if (params === undefined || freshnessWindow === undefined || supplied === undefined) return METHOD_AADHAAR_MATERIAL_REJECTED;
 
     const pcd = await runProver(this.#stack, argsOptions(params, supplied.qrData), supplied);
 
@@ -81,7 +86,7 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
 
     if (nullifier === undefined || !seedKept) return METHOD_AADHAAR_MATERIAL_REJECTED;
 
-    return encodeConfig({ nullifier, nullifierSeed: params.nullifierSeed, freshnessWindow: METHOD_AADHAAR_FRESHNESS_WINDOW });
+    return encodeConfig({ nullifier, nullifierSeed: params.nullifierSeed, freshnessWindow });
   }
 
   /** The proving arguments with the digest as the signal; a `TypeError` or `RangeError` for malformed params or a seed the config does not hold. */

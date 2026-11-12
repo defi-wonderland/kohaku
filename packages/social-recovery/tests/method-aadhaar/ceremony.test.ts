@@ -77,17 +77,17 @@ describe('enrollment', () => {
     expect(double.total()).toBe(0);
   });
 
-  it('configFrom writes abi.encode(nullifier, seed, the fixed window) from the prover proof', async () => {
+  it('configFrom writes abi.encode(nullifier, seed, the default window) from the prover proof', async () => {
     const double = stackDouble({ pcd: pcdOf(SYNTHETIC_UPSTREAM, signalsFor(22n, 77n, DIGEST)) });
     const method = anonAadhaarMethod({ stack: double.stack });
     const config = await method.configFrom(method.enrollInput(PARAMS), { qrData: QR_DATA });
 
     expect(METHOD_AADHAAR_FRESHNESS_WINDOW).toBe(FRESHNESS_WINDOW);
-    expect(config).toBe(configBytes(22n, 77n, 86_400n));
-    expect(method.codec.decodeConfig(config as Hex)).toEqual({ nullifier: 22n, nullifierSeed: 77n, freshnessWindow: 86_400n });
+    expect(config).toBe(configBytes(22n, 77n, 4_500n));
+    expect(method.codec.decodeConfig(config as Hex)).toEqual({ nullifier: 22n, nullifierSeed: 77n, freshnessWindow: 4_500n });
   });
 
-  it('configFrom writes the config vector bytes but for the window, which the vector sets to 4500', async () => {
+  it('configFrom under the default window writes the config vector bytes, whose window is 4500', async () => {
     const double = stackDouble({ pcd: pcdOf(SYNTHETIC_UPSTREAM, signalsFor(22n, 77n, DIGEST)) });
     const method = anonAadhaarMethod({ stack: double.stack });
     const config = (await method.configFrom(method.enrollInput(PARAMS), { qrData: QR_DATA })) as Hex;
@@ -96,6 +96,7 @@ describe('enrollment', () => {
     expect(config.slice(0, twoWords)).toBe(configRow.expected.encoded.slice(0, twoWords));
     expect(BigInt(`0x${configRow.expected.encoded.slice(twoWords)}`)).toBe(4_500n);
     expect(config).toBe(configBytes(22n, 77n, METHOD_AADHAAR_FRESHNESS_WINDOW));
+    expect(config).toBe(configRow.expected.encoded);
   });
 
   it('configFrom proves once and hands the prover the QR code, the seed and the certificate, no reveal', async () => {

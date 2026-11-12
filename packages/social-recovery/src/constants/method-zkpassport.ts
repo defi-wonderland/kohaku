@@ -91,6 +91,12 @@ export const METHOD_ZKPASSPORT_SERVICE_SCOPE_INPUT = 3;
 /** The outer proof's public input holding the service subscope, the hash of the request's scope. */
 export const METHOD_ZKPASSPORT_SERVICE_SUBSCOPE_INPUT = 4;
 
+/** The outer proof's public input holding its date, in seconds, from which the module measures the config's validity period. */
+export const METHOD_ZKPASSPORT_PROOF_DATE_INPUT = 2;
+
+/** Thrown by the codec's `proofExpiry` on a proof with fewer public inputs than `METHOD_ZKPASSPORT_SCOPED_MIN_PUBLIC_INPUTS`. */
+export const METHOD_ZKPASSPORT_PROOF_DATE_MESSAGE = 'method-zkpassport: the proof holds too few public inputs to carry its date';
+
 /** The fewest public inputs that hold the five leading values and the three trailing ones. */
 export const METHOD_ZKPASSPORT_SCOPED_MIN_PUBLIC_INPUTS = 8;
 

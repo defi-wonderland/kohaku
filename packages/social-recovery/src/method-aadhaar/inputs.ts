@@ -43,6 +43,9 @@ const inField = (seed: bigint): boolean => seed >= 0n && seed < METHOD_AADHAAR_S
 const fitsWindow = (window: bigint): boolean =>
   window >= METHOD_AADHAAR_MIN_FRESHNESS_WINDOW && window < 1n << BigInt(METHOD_AADHAAR_WORD_BITS);
 
+/** Whether a value is a bigint that fits a `uint256`. */
+const isWord = (value: unknown): value is bigint => typeof value === 'bigint' && value >= 0n && value < 1n << BigInt(METHOD_AADHAAR_WORD_BITS);
+
 function readSeed(value: unknown): bigint | undefined {
   const seed = bigintOf(value);
 
@@ -71,14 +74,19 @@ export function readParams(params: Params | undefined): AadhaarParams {
   return { nullifierSeed: seed, certificateFile };
 }
 
-/** The seed and the certificate off an input this method returned, or `undefined`. */
+/** The seed, the certificate and any trusted key off an input this method returned, or `undefined` where one is malformed. */
 export function readInput(input: Input | undefined): AadhaarParams | undefined {
   if (!isRecord(input)) return undefined;
 
   const nullifierSeed = readSeed(input[METHOD_AADHAAR_SEED_PARAM]);
   const certificateFile = readCertificate(input[METHOD_AADHAAR_CERTIFICATE_INPUT]);
+  const { trustedKey } = input;
 
-  return nullifierSeed === undefined || certificateFile === undefined ? undefined : { nullifierSeed, certificateFile };
+  if (nullifierSeed === undefined || certificateFile === undefined) return undefined;
+
+  if (trustedKey === undefined) return { nullifierSeed, certificateFile };
+
+  return isWord(trustedKey) ? { nullifierSeed, certificateFile, trustedKey } : undefined;
 }
 
 /**

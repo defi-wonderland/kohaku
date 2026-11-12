@@ -45,6 +45,10 @@ export function isFresh(proof: AadhaarProof, config: AadhaarConfig, now: bigint)
   return signedAt !== undefined && !(signedAt < now && now - signedAt > config.freshnessWindow);
 }
 
+/** Whether the proof's issuer-key input is the module's trusted key, or no trusted key was given. */
+export const issuerTrusted = (proof: AadhaarProof, trustedKey?: bigint): boolean =>
+  trustedKey === undefined || inputAt(proof.inputs, 'pubkeyHash') === trustedKey;
+
 /**
  * Whether the stack reads the QR as signed before `now` by more than the config's window and the slack; an unread
  * time, a throwing read or a stack without `signedAt` leaves the judgment to the prover and `isFresh`.

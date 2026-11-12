@@ -109,6 +109,8 @@ export type AnonAadhaarMethodOptions = {
 export type AadhaarParams = {
   readonly nullifierSeed: bigint;
   readonly certificateFile: string;
+  /** The method module's trusted key as the integrator read it, where given; a proof under another issuer key is `material-untrusted`. */
+  readonly trustedKey?: bigint;
 };
 
 /** What the page supplies to a proving call. */

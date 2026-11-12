@@ -139,6 +139,7 @@ export const METHOD_AADHAAR_MATERIAL_REJECTED: ReplyFailure = Object.freeze({ ki
 export const METHOD_AADHAAR_DEVICE_REFUSED: ReplyFailure = Object.freeze({ kind: 'reply-failure', cause: 'device-refused' });
 export const METHOD_AADHAAR_DEVICE_UNAVAILABLE: ReplyFailure = Object.freeze({ kind: 'reply-failure', cause: 'device-unavailable' });
 export const METHOD_AADHAAR_REQUEST_UNSUPPORTED: ReplyFailure = Object.freeze({ kind: 'reply-failure', cause: 'request-unsupported' });
+export const METHOD_AADHAAR_MATERIAL_UNTRUSTED: ReplyFailure = Object.freeze({ kind: 'reply-failure', cause: 'material-untrusted' });
 
 /** The device kind `describe` reports. */
 export const METHOD_AADHAAR_DEVICE_KIND = 'in-page-prover';

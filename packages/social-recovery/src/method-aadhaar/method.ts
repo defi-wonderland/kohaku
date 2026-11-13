@@ -35,7 +35,7 @@ import { argsOptions, readInput, readInputWindow, readMaterial, readParams, read
 import { abortFailure, isFailure, packProof, runProver, untilSettled } from './prover';
 import { isDigest, signalFromDigest, signalHashFromDigest } from './signal';
 import { readTrustedKey } from './trusted-key';
-import { agedBeforeProving, bindsTo, isFresh, issuerTrusted, judge, nowInSeconds } from './verdict';
+import { agedBeforeProving, bindsTo, isFresh, issuerTrusted, judge, nowInSeconds, replyVerdict } from './verdict';
 import { inputAt } from './words';
 
 export class AnonAadhaarMethod implements IRecoveryMethod {
@@ -126,7 +126,8 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
    * before proving, and a QR the stack's `signedAt` reads as older than the window by more than the slack is
    * `material-rejected` before proving. The chain accepts the proof until one window after the QR's signing time, whatever the request's
    * validity, so the holder's simulation refuses one that aged. A fresh proof whose issuer key is not the input's trusted key is
-   * `material-untrusted` without the local verdict. An abort at any point, the time read and verification included, is `device-refused`
+   * `material-untrusted` without the local verdict. A stack that cannot load or initialise, before proving or before the local
+   * verdict, is `device-unavailable`. An abort at any point, the time read and verification included, is `device-refused`
    * at once with no proof, and no progress is forwarded after the signal aborts or the call settles; the installed stack's
    * download and proving run on until they end.
    */
@@ -176,7 +177,7 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
 
     const proof = encodeProof(packed);
 
-    const verdict = await untilSettled(judge(this.#stack, ctx.request.config, ctx.digest, proof, this.#testMode), supplied.signal);
+    const verdict = await untilSettled(replyVerdict(this.#stack, ctx.request.config, ctx.digest, proof, this.#testMode), supplied.signal);
 
     if (isFailure(verdict)) return verdict;
 

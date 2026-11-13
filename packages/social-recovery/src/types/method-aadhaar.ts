@@ -70,6 +70,12 @@ export type AnonAadhaarArtifacts = {
 /** The sha256 of an artifact set's three files, as `0x`-prefixed hex. */
 export type AadhaarArtifactHashes = { readonly wasm: Hex; readonly zkey: Hex; readonly vkey: Hex };
 
+/** The checked wasm and vkey, behind their object URLs. */
+export type PinnedPair = Pick<AnonAadhaarArtifacts, 'wasmURL' | 'vkeyURL'>;
+
+/** The hashes a pair is checked against. */
+export type PinnedHashes = Pick<AadhaarArtifactHashes, 'wasm' | 'vkey'>;
+
 /** The installed stack's package root, declared here because the package ships its types as raw source. */
 export type AadhaarCoreSurface = {
   readonly init: (args: unknown) => Promise<void>;

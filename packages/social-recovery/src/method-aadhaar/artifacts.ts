@@ -1,13 +1,7 @@
 import { sha256 } from 'viem';
 import { METHOD_AADHAAR_BUCKET_CHUNKED } from '../constants/method-aadhaar-bucket';
 import type { Hex } from '../interfaces';
-import type { AadhaarArtifactHashes, AnonAadhaarArtifacts } from '../types/method-aadhaar';
-
-/** The checked wasm and vkey, behind their object URLs. */
-type PinnedPair = Pick<AnonAadhaarArtifacts, 'wasmURL' | 'vkeyURL'>;
-
-/** The hashes a pair is checked against. */
-type PinnedHashes = Pick<AadhaarArtifactHashes, 'wasm' | 'vkey'>;
+import type { AadhaarArtifactHashes, AnonAadhaarArtifacts, PinnedHashes, PinnedPair } from '../types/method-aadhaar';
 
 /** The page's one pair per bucket files and pinned hashes, in flight or checked; a failed load leaves no entry. */
 const pairs = new Map<string, Promise<PinnedPair | undefined>>();

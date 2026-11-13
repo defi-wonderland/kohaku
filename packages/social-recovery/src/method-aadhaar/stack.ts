@@ -97,7 +97,7 @@ async function initPeer({ core, argument }: AadhaarLoadedPeer): Promise<void> {
  * Whether the proof may reach the peer's `verify` under the mode. Test mode exists only for the peer's test QR, so in it
  * any other key answers false. Outside it the device refuses only the test key; a key the peer does not know (UIDAI
  * rotates its certificate, the module's key admin follows with `setTrustedKeys`, the peer only with a release) reaches
- * the peer, whose throw `judge` reads as `not-judged`, leaving the proof to the chain. An unparsable key answers false.
+ * the peer, whose throw the local verdict reads as `not-judged`, leaving the proof to the chain. An unparsable key answers false.
  */
 function signedByModeKey(core: AadhaarCoreSurface, pcd: AadhaarPcd, testMode: boolean): boolean {
   try {

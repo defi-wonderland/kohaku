@@ -99,7 +99,55 @@ function pendingProof(): (pcd: unknown) => void {
   return proof.resolve;
 }
 
-const enrol = (method: IRecoveryMethod, material: Material = { qrData: QR_DATA }): Promise<unknown> => method.configFrom(method.enrollInput(PARAMS), material);
+/** The peer's `generateArgs` held pending until the test settles it, once. */
+function pendingArgs(): (args: unknown) => void {
+  const args = deferred<unknown>();
+
+  core.generateArgs.mockImplementationOnce(() => args.promise);
+
+  return args.resolve;
+}
+
+const BUSY = [
+  ['the default stack', 'default'],
+  ['an integrator stack', 'integrator'],
+] as const;
+
+/** A stack over `busyFiles` and one over the other files, both loaded with the peer holding the first's, and each one's `init` argument. */
+async function twoStacks(busyFiles: 'default' | 'integrator') {
+  const { anonAadhaarMethod } = await fresh();
+  const busy = busyFiles === 'default' ? anonAadhaarMethod() : anonAadhaarMethod({ artifacts: INTEGRATOR });
+  const idle = busyFiles === 'default' ? anonAadhaarMethod({ artifacts: INTEGRATOR }) : anonAadhaarMethod();
+
+  await idle.verify(ctx, production);
+  await busy.verify(ctx, production);
+
+  const [idleInit, busyInit] = initArgs();
+
+  return { busy, idle, idleInit, busyInit };
+}
+
+/**
+ * Starts `work` on the busy stack, waits until its `reached` peer call is pending, queues a verdict on the idle stack's other files
+ * behind it, then settles the pending call; answers both calls.
+ */
+async function otherFilesQueued<T>(work: () => Promise<T>, reached: typeof core.prove | typeof core.generateArgs, idle: IRecoveryMethod, settle: () => void) {
+  const working = work();
+
+  await vi.waitFor(() => expect(reached).toHaveBeenCalledTimes(1));
+
+  const judging = idle.verify(ctx, production);
+
+  await sleep(20);
+
+  expect(core.init).toHaveBeenCalledTimes(2);
+
+  settle();
+
+  return { working, judging };
+}
+
+const enrol =(method: IRecoveryMethod, material: Material = { qrData: QR_DATA }): Promise<unknown> => method.configFrom(method.enrollInput(PARAMS), material);
 const reply = (method: IRecoveryMethod, material: Material = { qrData: QR_DATA }): Promise<unknown> => method.replyFrom(ctx, method.signingInput(ctx, PARAMS), material);
 
 const RUNS = [
@@ -224,6 +272,52 @@ describe('two stacks with different files take turns on the peer', () => {
 
     expect(await enrolling).toBe(configBytes(22n, 77n));
   });
+
+  it.each([
+    ['the same default stack', false],
+    ['another default stack', true],
+  ] as const)('first come, first served: with A1 pending under the bucket files and B queued with other files, A2 on %s waits behind B; B inits and runs, then A2 inits and runs', async (_where, another) => {
+    const { coreStack } = await fresh();
+    const first = coreStack(METHOD_AADHAAR_BUCKET_CHUNKED);
+    const second = another ? coreStack(METHOD_AADHAAR_BUCKET_CHUNKED) : first;
+    const theirs = coreStack(INTEGRATOR);
+
+    await theirs.verify(boundPcd, false);
+    await first.verify(boundPcd, false);
+    await second.verify(boundPcd, false);
+
+    const trace: string[] = [];
+    const held = deferred<unknown>();
+    const filesOf = (args: unknown): string => (String((args as { readonly wasmURL: unknown }).wasmURL).startsWith('blob:') ? 'A' : 'B');
+
+    core.init.mockImplementation((args) => {
+      trace.push(`init ${filesOf(args)}`);
+
+      return Promise.resolve();
+    });
+    core.prove.mockImplementation((args) => {
+      const { from } = args as { readonly from: string };
+
+      trace.push(`prove ${from}`);
+
+      return from === 'A1' ? held.promise : Promise.resolve(boundPcd);
+    });
+
+    const proofs = [first.prove({ from: 'A1' })];
+
+    await vi.waitFor(() => expect(trace).toStrictEqual(['prove A1']));
+
+    proofs.push(theirs.prove({ from: 'B' }), second.prove({ from: 'A2' }));
+
+    await sleep(20);
+
+    expect(trace).toStrictEqual(['prove A1']);
+
+    held.resolve(boundPcd);
+
+    expect(await Promise.all(proofs)).toStrictEqual([boundPcd, boundPcd, boundPcd]);
+    expect(trace).toStrictEqual(['prove A1', 'init B', 'prove B', 'init A', 'prove A2']);
+  });
 });
 
 describe('a waiting prove whose signal aborts never reaches the peer', () => {
@@ -327,6 +421,63 @@ describe('a failed re-initialisation', () => {
     expect(await theirs.verify(ctx, production)).toBe('satisfied');
     expect(initArgs()).toStrictEqual([checked, INTEGRATOR_INIT, checked, INTEGRATOR_INIT]);
   });
+
+  it.each(BUSY)('replyFrom on %s, refused its init before verifying once a stack with other files took its turn, is device-unavailable with no peer verify, and the next call inits again', async (_name, busyFiles) => {
+    const { busy, idle, idleInit, busyInit } = await twoStacks(busyFiles);
+
+    core.init.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('init failed'));
+
+    const finish = pendingProof();
+    const { working, judging } = await otherFilesQueued(() => reply(busy), core.prove, idle, () => finish(boundPcd));
+
+    expect(isFailure(await working, 'device-unavailable')).toBe(true);
+    expect(await judging).toBe('satisfied');
+    expect(initArgs()).toStrictEqual([idleInit, busyInit, idleInit, busyInit]);
+    expect(core.verify).toHaveBeenCalledTimes(3);
+
+    core.prove.mockResolvedValueOnce(boundPcd);
+
+    expect(typeof (await reply(busy))).toBe('string');
+    expect(initArgs()).toStrictEqual([idleInit, busyInit, idleInit, busyInit, busyInit]);
+    expect(core.verify).toHaveBeenCalledTimes(4);
+  });
+
+  it.each(BUSY)('replyFrom on %s, granted its init before verifying after the same turns but thrown at by the peer verify, still reads not-judged and hands the proof on', async (_name, busyFiles) => {
+    const { busy, idle, idleInit, busyInit } = await twoStacks(busyFiles);
+
+    core.verify.mockResolvedValueOnce(true).mockRejectedValueOnce(new Error('unknown issuer key'));
+
+    const finish = pendingProof();
+    const { working, judging } = await otherFilesQueued(() => reply(busy), core.prove, idle, () => finish(boundPcd));
+
+    expect(typeof (await working)).toBe('string');
+    expect(await judging).toBe('satisfied');
+    expect(initArgs()).toStrictEqual([idleInit, busyInit, idleInit, busyInit]);
+    expect(core.verify).toHaveBeenCalledTimes(4);
+  });
+
+  it.each(RUNS)('%s, refused its init before proving once a stack with other files took its turn after the arguments, is device-unavailable and never proves', async (_name, run) => {
+    const { busy, idle, idleInit, busyInit } = await twoStacks('default');
+
+    core.init.mockResolvedValueOnce(undefined).mockRejectedValueOnce(new Error('init failed'));
+
+    const settle = pendingArgs();
+    const { working, judging } = await otherFilesQueued(() => run(busy), core.generateArgs, idle, () => settle({}));
+
+    expect(isFailure(await working, 'device-unavailable')).toBe(true);
+    expect(await judging).toBe('satisfied');
+    expect(core.prove).not.toHaveBeenCalled();
+    expect(initArgs()).toStrictEqual([idleInit, busyInit, idleInit, busyInit]);
+  });
+
+  it('the method\'s own verify keeps its three verdicts: an init refused before the peer verifies reads not-judged', async () => {
+    const { idle } = await twoStacks('default');
+
+    core.init.mockRejectedValueOnce(new Error('init failed'));
+
+    expect(await idle.verify(ctx, production)).toBe('not-judged');
+    expect(core.verify).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('the turns on the peer, documented', () => {
@@ -353,5 +504,22 @@ describe('the turns on the peer, documented', () => {
 
     expect(text).toMatch(/turns/i);
     expect(text).toMatch(/revoke/i);
+  });
+
+  /** Whether one sentence of the text matches both patterns. */
+  const inOneSentence = (text: string, first: RegExp, second: RegExp): boolean =>
+    flat(text)
+      .split(/(?<=\.)\s+/)
+      .some((sentence) => first.test(sentence) && second.test(sentence));
+
+  it('replyFrom says a stack that cannot initialise before its local verdict is device-unavailable', () => {
+    expect(inOneSentence(jsDocOf(join(SRC_ROOT, 'method-aadhaar', 'method.ts'), 'replyFrom'), /verdict/i, /device-unavailable/)).toBe(true);
+  });
+
+  it('the artifact checks\' changeset says the init before the reply\'s local verdict reads device-unavailable, and any other verify throw not-judged', () => {
+    const text = readFileSync(join(REPO_ROOT, '.changeset', 'aadhaar-artifact-checks.md'), 'utf8');
+
+    expect(inOneSentence(text, /verdict/i, /device-unavailable/)).toBe(true);
+    expect(inOneSentence(text, /device-unavailable/, /not-judged/)).toBe(true);
   });
 });

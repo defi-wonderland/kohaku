@@ -8,6 +8,7 @@ import {
 import { anonAadhaarMethod } from '../../src/method-aadhaar';
 import { coreStack } from '../../src/method-aadhaar/stack';
 import { CERTIFICATE, clockAt, configBytes, ctxFor, FRESH_NOW, isFailure, nine, pcdOf, proofBytes, QR_DATA, signalsFor, stackDouble, SYNTHETIC_UPSTREAM } from './fixtures';
+import { newPagePerTest } from './new-page';
 import { serveBucket, servedInit } from './served-bucket';
 
 const core = vi.hoisted(() => ({
@@ -41,6 +42,8 @@ vi.mock('../../src/constants/method-aadhaar-bucket', async (importOriginal) => {
 });
 
 serveBucket(METHOD_AADHAAR_BUCKET_CHUNKED);
+
+newPagePerTest();
 
 /** The proof vector's digest. */
 const DIGEST = '0x17498ba208aefe001e6e2f2adec41cd16d0285e23660df6e310d3daac040c339';

@@ -20,6 +20,7 @@ import {
   stackDouble,
   SYNTHETIC_UPSTREAM,
 } from './fixtures';
+import { newPagePerTest } from './new-page';
 import { serveBucket, servedInit } from './served-bucket';
 
 const DIGESTS: readonly (readonly [string, Hex])[] = [
@@ -58,6 +59,8 @@ vi.mock('../../src/constants/method-aadhaar-bucket', async (importOriginal) => {
 });
 
 serveBucket(METHOD_AADHAAR_BUCKET_CHUNKED);
+
+newPagePerTest();
 
 /** What the peer's init receives for the default bucket: object URLs for its checked wasm and vkey, its zkey URL as given. */
 const CHUNKED_INIT = servedInit(METHOD_AADHAAR_BUCKET_CHUNKED, 2);

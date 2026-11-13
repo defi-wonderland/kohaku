@@ -4,6 +4,7 @@ import type { Hex } from '../../src/interfaces';
 import { anonAadhaarMethod } from '../../src/method-aadhaar';
 import type { ProofWords, Signals } from './fixtures';
 import { configBytes, configRow, ctxFor, MIN_FRESHNESS_WINDOW, nine, proofBytes, proofRow, signalsFor, stackDouble } from './fixtures';
+import { newPagePerTest } from './new-page';
 import { serveBucket, servedInit } from './served-bucket';
 
 const DIGEST: Hex = `0x${'ab'.repeat(32)}`;
@@ -34,6 +35,8 @@ vi.mock('../../src/constants/method-aadhaar-bucket', async (importOriginal) => {
 });
 
 serveBucket(METHOD_AADHAAR_BUCKET_CHUNKED);
+
+newPagePerTest();
 
 /** What the peer's init receives for the default bucket: object URLs for its checked wasm and vkey, its zkey URL as given. */
 const CHUNKED_INIT = servedInit(METHOD_AADHAAR_BUCKET_CHUNKED, 2);

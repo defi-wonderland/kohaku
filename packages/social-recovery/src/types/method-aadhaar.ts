@@ -47,8 +47,8 @@ export type AnonAadhaarStack = {
   readonly generateArgs: (options: AadhaarArgsOptions) => Promise<AadhaarProverArgs>;
   /**
    * Receives the page's progress, which forwards no state after the signal aborts or the call settles, and the page's abort
-   * signal. The installed stack's `prove` does not take the signal, so its download and proving run on after an abort; an
-   * injected stack may stop on it.
+   * signal. The installed stack reads the signal only to drop a proof still waiting for the peer, so once its download and
+   * proving start they run on after an abort; an injected stack may stop on it.
    */
   readonly prove: (args: AadhaarProverArgs, onProgress?: AadhaarProgress, signal?: AbortSignal) => Promise<AadhaarPcd>;
   readonly verify: (pcd: AadhaarPcd, testMode?: boolean) => Promise<boolean>;
@@ -59,7 +59,7 @@ export type AnonAadhaarStack = {
   readonly signedAt?: (qrData: string) => Promise<bigint | undefined>;
 };
 
-/** Where the circuit's artifacts are, the arguments of the stack's `init`. */
+/** Where the circuit's artifacts are, the arguments of the stack's `init`; stacks over different artifacts on one page take turns on the peer. */
 export type AnonAadhaarArtifacts = {
   readonly wasmURL: string;
   readonly zkeyURL: string;
@@ -86,17 +86,24 @@ export type AadhaarCoreSurface = {
   readonly convertBigIntToByteArray?: (bigInt: bigint) => Uint8Array;
 };
 
+/** What the peer's `init` takes: the artifacts' URLs, with the origin as the peer's own value. */
+export type AadhaarInitArgument = Omit<AnonAadhaarArtifacts, 'artifactsOrigin'> & { readonly artifactsOrigin: number };
+
+/** The loaded peer and the argument its `init` takes for one stack's files. */
+export type AadhaarLoadedPeer = { readonly core: AadhaarCoreSurface; readonly argument: AadhaarInitArgument };
+
 /** An injected stack or the installed stack's artifacts, not both; with neither the installed stack reads `METHOD_AADHAAR_DEFAULT_ARTIFACTS`. */
 export type AnonAadhaarMethodOptions = {
   readonly stack?: AnonAadhaarStack;
   /**
    * Where the installed stack reads the circuit's files: a bucket record, `METHOD_AADHAAR_BUCKET_CHUNKED` (the default) or
    * `METHOD_AADHAAR_BUCKET_SERVER`, or the integrator's own URLs or paths. The SDK hosts no file and checks that the URLs are
-   * non-empty strings and the origin is known; where the wasm and vkey URLs are the bucket's own, the installed stack fetches both once,
-   * checks them against `METHOD_AADHAAR_BUCKET_SHA256` and hands them to the peer as object URLs, and it fetches no integrator URL.
-   * `chunked` runs in a browser only, `local` in Node only, where each URL is a file
-   * path; a browser caller holding the files passes `URL.createObjectURL(file)` for each under `server`. The peer's `init` is
-   * page-global: the stack initialises once, on first use, and the last `init` on the page sets the files every stack proves with.
+   * non-empty strings and the origin is known; where the wasm and vkey URLs are the bucket's own, the installed stack fetches both once
+   * per page, checks them against `METHOD_AADHAAR_BUCKET_SHA256` and hands them to the peer as object URLs, which every later stack over
+   * them reuses and nothing revokes, and it fetches no integrator URL. `chunked` runs in a browser only, `local` in Node only, where each
+   * URL is a file path; a browser caller holding the files passes `URL.createObjectURL(file)` for each under `server`. The peer's `init`
+   * is page-global, so two stacks with different files on one page take turns on the peer: before a call, a stack whose files the peer
+   * does not hold waits for every call in flight under the files it holds to settle, then calls `init` with its own.
    */
   readonly artifacts?: AnonAadhaarArtifacts;
   /**
@@ -121,8 +128,8 @@ export type AadhaarMaterial = {
   /**
    * Aborting settles the call `device-refused` at once, with no proof or config, and no progress is forwarded after the signal
    * aborts or the call settles. The SDK starts no worker: the installed stack's download and proving run on, holding their memory
-   * and CPU until they end, and a call started meanwhile proves alongside them; an injected stack receives the signal and may stop
-   * its own work.
+   * and CPU until they end, and a call started meanwhile over the same files proves alongside them, one over other files after them;
+   * an injected stack receives the signal and may stop its own work.
    */
   readonly signal?: AbortSignal;
 };

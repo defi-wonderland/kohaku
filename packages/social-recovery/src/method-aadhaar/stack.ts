@@ -19,6 +19,7 @@ import {
 import { assertDependency } from '../formats/guards';
 import type {
   AadhaarCoreSurface,
+  AadhaarLoadedPeer,
   AadhaarPcd,
   AadhaarProgress,
   AadhaarProverArgs,
@@ -27,6 +28,7 @@ import type {
 } from '../types/method-aadhaar';
 import { pinnedArtifacts } from './artifacts';
 import { isRecord } from './inputs';
+import { underBinding } from './peer-binding';
 
 /** Thrown when the default stack cannot be loaded or initialised, or fails while downloading the circuit's files. */
 export class AadhaarStackUnavailable extends Error {}
@@ -59,11 +61,8 @@ async function importCore(): Promise<AadhaarCoreSurface> {
   return surface;
 }
 
-/**
- * Imports the peer, checks the SDK's own bucket files and calls its `init`; a refused `init` or a bucket file that fails its fetch
- * or check is the device's failure, not the material's.
- */
-async function initialise(artifacts: AnonAadhaarArtifacts): Promise<AadhaarCoreSurface> {
+/** The imported peer and its `init` argument for the artifacts, the SDK's own bucket files checked; a failed fetch or check is the device's failure. */
+async function loadPeer(artifacts: AnonAadhaarArtifacts): Promise<AadhaarLoadedPeer> {
   let core: AadhaarCoreSurface;
 
   try {
@@ -82,13 +81,16 @@ async function initialise(artifacts: AnonAadhaarArtifacts): Promise<AadhaarCoreS
 
   if (files === undefined) throw new AadhaarStackUnavailable(METHOD_AADHAAR_ARTIFACT_HASH_MESSAGE);
 
+  return { core, argument: { ...files, artifactsOrigin: origin } };
+}
+
+/** Calls the peer's `init` with a copy of the argument; a refused `init` is the device's failure, not the material's. */
+async function initPeer({ core, argument }: AadhaarLoadedPeer): Promise<void> {
   try {
-    await core.init({ ...files, artifactsOrigin: origin });
+    await core.init({ ...argument });
   } catch (error) {
     throw new AadhaarStackUnavailable(METHOD_AADHAAR_STACK_INIT_MESSAGE, { cause: error });
   }
-
-  return core;
 }
 
 /**
@@ -156,18 +158,20 @@ async function proveRecorded(core: AadhaarCoreSurface, args: AadhaarProverArgs, 
 }
 
 /**
- * The default stack over the artifacts, loaded and initialised once on first use; a failed load rejects with `AadhaarStackUnavailable` and is retried on the next call.
+ * The default stack over the artifacts, loaded once on first use; a failed load rejects with `AadhaarStackUnavailable` and is retried on the next call.
  * Loading fetches and checks the SDK's own bucket wasm and vkey first, and a proof that fails while the peer downloads also rejects with it.
- * Once loaded, `verify` answers false without calling the peer for a test-key proof outside test mode and for any
- * other key in it; outside test mode a key the peer does not know is left to the peer's throw, `not-judged`.
- * `signedAt` imports the peer without `init`, so it downloads no artifact; a peer without the three time calls still loads, and
- * `signedAt` answers undefined.
+ * The peer's `init` is page-global, so two stacks with different files on one page take turns on the peer: before a call that reads the files,
+ * a stack whose files the peer does not hold waits until every call in flight under the files it holds has settled, then calls `init` with its
+ * own; a proof whose signal aborts while it waits never reaches the peer, and a refused `init` rejects with `AadhaarStackUnavailable`.
+ * Once loaded, `verify` answers false without calling the peer for a test-key proof outside test mode and for any other key in it;
+ * outside test mode a key the peer does not know is left to the peer's throw, `not-judged`. `signedAt` imports the peer without `init`,
+ * so it downloads no artifact; a peer without the three time calls still loads, and `signedAt` answers undefined.
  */
 export function coreStack(artifacts: AnonAadhaarArtifacts): AnonAadhaarStack {
-  let loading: Promise<AadhaarCoreSurface> | undefined;
+  let loading: Promise<AadhaarLoadedPeer> | undefined;
 
-  const load = (): Promise<AadhaarCoreSurface> => {
-    loading ??= initialise(artifacts).catch((error: unknown) => {
+  const load = (): Promise<AadhaarLoadedPeer> => {
+    loading ??= loadPeer(artifacts).catch((error: unknown) => {
       loading = undefined;
 
       throw error;
@@ -175,17 +179,21 @@ export function coreStack(artifacts: AnonAadhaarArtifacts): AnonAadhaarStack {
 
     return loading;
   };
+  const onPeer = async <T>(use: (core: AadhaarCoreSurface) => Promise<T>, signal?: AbortSignal): Promise<T> => {
+    const loaded = await load();
+
+    return underBinding(loaded.argument, () => initPeer(loaded), () => use(loaded.core), signal);
+  };
 
   return {
-    generateArgs: async (options) =>
-      (await load()).generateArgs({ ...options, fieldsToRevealArray: [...options.fieldsToRevealArray] }),
-    prove: async (args, onProgress) => proveRecorded(await load(), args, onProgress),
+    generateArgs: (options) => onPeer((core) => core.generateArgs({ ...options, fieldsToRevealArray: [...options.fieldsToRevealArray] })),
+    prove: (args, onProgress, signal) => onPeer((core) => proveRecorded(core, args, onProgress), signal),
     signedAt: signedAtOf,
-    verify: async (pcd, testMode) => {
-      const core = await load();
-      const mode = testMode === true;
+    verify: (pcd, testMode) =>
+      onPeer(async (core) => {
+        const mode = testMode === true;
 
-      return signedByModeKey(core, pcd, mode) && core.verify(pcd, mode);
-    },
+        return signedByModeKey(core, pcd, mode) && core.verify(pcd, mode);
+      }),
   };
 }

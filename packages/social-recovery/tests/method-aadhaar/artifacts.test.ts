@@ -14,6 +14,7 @@ import { pinnedArtifacts } from '../../src/method-aadhaar/artifacts';
 import { AadhaarStackUnavailable, coreStack } from '../../src/method-aadhaar/stack';
 import { REPO_ROOT } from '../helpers/source';
 import { CERTIFICATE, clockForFile, configBytes, ctxFor, FRESH_NOW, isFailure, nine, pcdOf, proofBytes, QR_DATA, signalsFor, SYNTHETIC_UPSTREAM } from './fixtures';
+import { newPagePerTest } from './new-page';
 import { SERVED_VKEY, SERVED_WASM, servedInit } from './served-bucket';
 
 const core = vi.hoisted(() => ({
@@ -61,6 +62,8 @@ const ARTIFACTS = {
 const EXPECTED = { wasm: sha256(SERVED_WASM), vkey: sha256(SERVED_VKEY) } as const;
 
 clockForFile(FRESH_NOW);
+
+newPagePerTest();
 
 /** One byte flipped, so the hash no longer matches. */
 const tampered = (bytes: Uint8Array<ArrayBuffer>): Uint8Array<ArrayBuffer> => bytes.map((byte, index) => (index === 0 ? byte ^ 1 : byte));
@@ -257,6 +260,194 @@ describe('the default stack over the bucket, the pinned hashes those of the serv
     expect(await anonAadhaarMethod({ artifacts: ARTIFACTS }).verify(ctx, production)).toBe('satisfied');
     expect(served.fetched).toEqual([]);
     expect(core.init.mock.calls).toEqual([[{ ...ARTIFACTS, artifactsOrigin: 0 }]]);
+  });
+});
+
+/** The method folder and the bucket check loaded afresh, so no pair an earlier test checked is in memory. */
+async function freshModules() {
+  vi.resetModules();
+
+  const { anonAadhaarMethod: method } = await import('../../src/method-aadhaar');
+  const { pinnedArtifacts: pinned } = await import('../../src/method-aadhaar/artifacts');
+
+  return { anonAadhaarMethod: method, pinnedArtifacts: pinned };
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const realCreate = URL.createObjectURL.bind(URL);
+const realRevoke = URL.revokeObjectURL.bind(URL);
+
+/** Spies on the object URL calls, the real ones still answering, with every URL created and every URL revoked. */
+function watchObjectUrls() {
+  const create = vi.spyOn(URL, 'createObjectURL');
+  const revoke = vi.spyOn(URL, 'revokeObjectURL');
+  const created = (): string[] => create.mock.results.flatMap((result) => (result.type === 'return' ? [result.value] : []));
+  const revoked = (): string[] => revoke.mock.calls.map(([url]) => url);
+
+  return { create, revoke, created, revoked, live: (): string[] => created().filter((url) => !revoked().includes(url)).sort() };
+}
+
+/** The wasm and vkey URLs of one `init` argument, sorted. */
+const pairOf = (args: unknown): string[] => {
+  const { wasmURL, vkeyURL } = args as { wasmURL: string; vkeyURL: string };
+
+  return [wasmURL, vkeyURL].sort();
+};
+
+const initArgs = (): unknown[] => core.init.mock.calls.map((call) => (call as unknown[])[0]);
+const wasmFetches = (): number => served.fetched.filter((url) => url === METHOD_AADHAAR_BUCKET_CHUNKED.wasmURL).length;
+
+describe('one checked pair per page, whatever number of default stacks', () => {
+  let urls: ReturnType<typeof watchObjectUrls>;
+
+  beforeEach(() => {
+    urls = watchObjectUrls();
+  });
+
+  afterEach(() => {
+    const made = urls.created();
+
+    urls.create.mockRestore();
+    urls.revoke.mockRestore();
+
+    for (const url of made) realRevoke(url);
+  });
+
+  it('three default stacks in turn: each bucket file fetched once, two object URLs in all, every init on that pair, none revoked', async () => {
+    const fresh = await freshModules();
+
+    for (let stack = 0; stack < 3; stack += 1) expect(await fresh.anonAadhaarMethod().verify(ctx, production)).toBe('satisfied');
+
+    const [first] = initArgs();
+
+    expect([...served.fetched].sort()).toEqual([METHOD_AADHAAR_BUCKET_CHUNKED.vkeyURL, METHOD_AADHAAR_BUCKET_CHUNKED.wasmURL].sort());
+    expect(urls.create).toHaveBeenCalledTimes(2);
+    expect(first).toStrictEqual(servedInit(METHOD_AADHAAR_BUCKET_CHUNKED, 2));
+
+    for (const args of initArgs()) expect(args).toStrictEqual(first);
+
+    expect(urls.live()).toEqual(pairOf(first));
+  });
+
+  it('three default stacks whose loads overlap while the first fetch is pending share that fetch of each file and one pair', async () => {
+    const fresh = await freshModules();
+    const serving = globalThis.fetch;
+    let opened: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      opened = resolve;
+    });
+    let asked = 0;
+
+    vi.stubGlobal('fetch', (input: string | URL | Request): Promise<Response> => {
+      asked += 1;
+
+      return gate.then(() => serving(input));
+    });
+
+    const loads = [fresh.anonAadhaarMethod().verify(ctx, production)];
+
+    await vi.waitFor(() => expect(asked).toBeGreaterThan(0));
+
+    for (let later = 0; later < 2; later += 1) {
+      loads.push(fresh.anonAadhaarMethod().verify(ctx, production));
+      // spaced so no two loads import the mocked peer at once, which a vitest factory mock does not support
+      await sleep(20);
+    }
+
+    opened();
+
+    const verdicts = await Promise.all(loads);
+
+    expect(verdicts).toEqual(['satisfied', 'satisfied', 'satisfied']);
+    expect([...served.fetched].sort()).toEqual([METHOD_AADHAAR_BUCKET_CHUNKED.vkeyURL, METHOD_AADHAAR_BUCKET_CHUNKED.wasmURL].sort());
+    expect(urls.create).toHaveBeenCalledTimes(2);
+    expect(new Set(initArgs().map((args) => pairOf(args).join(' '))).size).toBe(1);
+  });
+
+  it.each([
+    ['a wasm one byte off', (): void => {
+      served.wasm = tampered(SERVED_WASM);
+    }],
+    ['a vkey fetch that rejects', (): void => {
+      served.vkey = 'reject';
+    }],
+    ['a wasm answered 500', (): void => {
+      served.wasm = 500;
+    }],
+  ] as const)('%s, then a new stack that loads, then two more: the failure is retried once, one pair is created and stays live', async (_why, arrange) => {
+    const fresh = await freshModules();
+    const failed = fresh.anonAadhaarMethod();
+
+    arrange();
+
+    expect(await failed.verify(ctx, production)).toBe('not-judged');
+
+    served.wasm = SERVED_WASM;
+    served.vkey = SERVED_VKEY;
+
+    expect(await fresh.anonAadhaarMethod().verify(ctx, production)).toBe('satisfied');
+    expect(await failed.verify(ctx, production)).toBe('satisfied');
+    expect(await fresh.anonAadhaarMethod().verify(ctx, production)).toBe('satisfied');
+    expect(wasmFetches()).toBe(2);
+    expect(urls.created()).toHaveLength(2);
+    expect(urls.live()).toEqual(pairOf(initArgs()[0]));
+  });
+
+  it('a throw creating the second object URL revokes the first, reads device-unavailable, and the next load fetches again', async () => {
+    const fresh = await freshModules();
+    const method = fresh.anonAadhaarMethod();
+
+    urls.create.mockImplementationOnce(realCreate).mockImplementationOnce(() => {
+      throw new RangeError('Array buffer allocation failed');
+    });
+
+    expect(isFailure(await method.configFrom(method.enrollInput(PARAMS), { qrData: QR_DATA }), 'device-unavailable')).toBe(true);
+    expect(core.init).not.toHaveBeenCalled();
+
+    const abandoned = urls.created();
+
+    expect(abandoned).toHaveLength(1);
+    expect(urls.revoked()).toEqual(abandoned);
+
+    expect(await fresh.anonAadhaarMethod().verify(ctx, production)).toBe('satisfied');
+    expect(wasmFetches()).toBe(2);
+    expect(urls.live()).toEqual(pairOf(initArgs()[0]));
+  });
+
+  it('the server record reuses the pair the chunked record checked, with its own zkey URL and origin, and fetches nothing', async () => {
+    const fresh = await freshModules();
+    const chunked = await fresh.pinnedArtifacts(METHOD_AADHAAR_BUCKET_CHUNKED, EXPECTED);
+    const fetched = served.fetched.length;
+
+    expect(await fresh.pinnedArtifacts(METHOD_AADHAAR_BUCKET_SERVER, EXPECTED)).toStrictEqual({
+      wasmURL: chunked?.wasmURL,
+      zkeyURL: METHOD_AADHAAR_BUCKET_SERVER.zkeyURL,
+      vkeyURL: chunked?.vkeyURL,
+      artifactsOrigin: 'server',
+    });
+    expect(served.fetched).toHaveLength(fetched);
+    expect(urls.create).toHaveBeenCalledTimes(2);
+  });
+
+  it('another expected record is another pair: its mismatch neither revokes nor replaces the checked one', async () => {
+    const fresh = await freshModules();
+    const checked = await fresh.pinnedArtifacts(METHOD_AADHAAR_BUCKET_CHUNKED, EXPECTED);
+
+    expect(await fresh.pinnedArtifacts(METHOD_AADHAAR_BUCKET_CHUNKED, { wasm: EXPECTED.vkey, vkey: EXPECTED.wasm })).toBeUndefined();
+
+    const fetched = served.fetched.length;
+
+    expect(await fresh.pinnedArtifacts(METHOD_AADHAAR_BUCKET_CHUNKED, EXPECTED)).toStrictEqual(checked);
+    expect(served.fetched).toHaveLength(fetched);
+    expect(urls.revoke).not.toHaveBeenCalled();
+  });
+
+  it('the integrator\'s own URLs create no object URL', async () => {
+    const fresh = await freshModules();
+
+    expect(await fresh.pinnedArtifacts(ARTIFACTS, EXPECTED)).toStrictEqual(ARTIFACTS);
+    expect(urls.create).not.toHaveBeenCalled();
   });
 });
 

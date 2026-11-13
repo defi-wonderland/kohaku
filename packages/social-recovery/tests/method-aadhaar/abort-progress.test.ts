@@ -22,6 +22,12 @@ clockForFile(FRESH_NOW);
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
+/** A JSDoc block or a changeset on one line, its line breaks and leading asterisks gone. */
+const flat = (text: string): string => text.replace(/\s*\n\s*\*?\s*/g, ' ');
+
+/** The settled half of the progress contract: no state after the call settles, whatever ended it. */
+const SETTLES = /\bcall (?:settles|has settled)\b/i;
+
 /** The value, or `TIMED_OUT` when it does not settle within `ms`. */
 const within = <T>(work: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> =>
   Promise.race([work, sleep(ms).then((): typeof TIMED_OUT => TIMED_OUT)]);
@@ -34,6 +40,8 @@ type SteppedStack = {
   readonly emit: (state: string) => void;
   /** Settles the pending `prove` with a proof. */
   readonly finish: (pcd: Pcd) => void;
+  /** Rejects the pending `prove`, as a stack whose witness fails. */
+  readonly fail: (error: unknown) => void;
   readonly received: () => Progress;
   readonly signals: (AbortSignal | undefined)[];
   readonly verifyCalls: () => number;
@@ -45,6 +53,7 @@ type SteppedStack = {
 function steppedStack(): SteppedStack {
   let received: Progress;
   let settle: (pcd: Pcd) => void = () => undefined;
+  let refuse: (error: unknown) => void = () => undefined;
   let entered: () => void = () => undefined;
   let done = false;
   let verifies = 0;
@@ -60,10 +69,14 @@ function steppedStack(): SteppedStack {
       signals.push(signal);
       entered();
 
-      return new Promise<Pcd>((resolve) => {
+      return new Promise<Pcd>((resolve, reject) => {
         settle = (pcd) => {
           done = true;
           resolve(pcd);
+        };
+        refuse = (error) => {
+          done = true;
+          reject(error);
         };
       });
     },
@@ -79,6 +92,7 @@ function steppedStack(): SteppedStack {
     proving,
     emit: (state) => received?.(state),
     finish: (pcd) => settle(pcd),
+    fail: (error) => refuse(error),
     received: () => received,
     signals,
     verifyCalls: () => verifies,
@@ -210,6 +224,44 @@ describe('an aborted proof forwards no more progress', () => {
   });
 });
 
+/** A proof the method refuses: another nullifier and another seed than the config and the enrollment carry. */
+const unboundPcd = pcdOf(SYNTHETIC_UPSTREAM, signalsFor(23n, 78n, DIGEST));
+const PEER_FAILURE = '[AnonAAdhaarProver]: Error while generating the proof';
+
+/** How the stack ends the proof, whether a live signal rides along, and what the call then returns. */
+const SETTLEMENTS: readonly (readonly [string, boolean, (stepped: SteppedStack) => void, 'a proof' | 'material-rejected'])[] = [
+  ['a proof, no signal', false, (stepped) => stepped.finish(boundPcd), 'a proof'],
+  ['a proof, a live signal', true, (stepped) => stepped.finish(boundPcd), 'a proof'],
+  ['a proof the method refuses, no signal', false, (stepped) => stepped.finish(unboundPcd), 'material-rejected'],
+  ['a proof the method refuses, a live signal', true, (stepped) => stepped.finish(unboundPcd), 'material-rejected'],
+  ['a rejection, no signal', false, (stepped) => stepped.fail(new Error(PEER_FAILURE)), 'material-rejected'],
+  ['a rejection, a live signal', true, (stepped) => stepped.fail(new Error(PEER_FAILURE)), 'material-rejected'],
+];
+
+const SETTLED = RUNS.flatMap(([name, run]) => SETTLEMENTS.map(([why, live, settle, outcome]) => [name, why, run, live, settle, outcome] as const));
+
+describe('a settled call forwards no more progress', () => {
+  it.each(SETTLED)('%s, %s: the state before settlement reaches the page once, none the stack reports after it', async (_name, _why, run, live, settle, outcome) => {
+    const stepped = steppedStack();
+    const seen = page();
+    const pending = run(stepped.stack, { qrData: QR_DATA, onProgress: seen.onProgress, ...(live ? { signal: new AbortController().signal } : {}) });
+
+    await stepped.proving;
+    stepped.emit('proving');
+    settle(stepped);
+
+    const result = await within(pending, BOUND_MS);
+
+    stepped.emit('completed');
+    stepped.emit('error');
+    await sleep(20);
+
+    expect(outcome === 'a proof' ? typeof result === 'string' : isFailure(result, outcome)).toBe(true);
+    expect(seen.states).toEqual(['proving']);
+    expect(unhandled).toBe(0);
+  });
+});
+
 /** A signal whose `aborted` getter reads false until `explode` is called, then throws on every read. */
 function explodingSignal(): { readonly signal: AbortSignal; readonly explode: () => void } {
   let exploded = false;
@@ -285,6 +337,17 @@ describe('the abort contract, documented where the page and an injected stack re
     expect(doc).toMatch(/abort/i);
     expect(doc).toMatch(/injected/i);
   });
+
+  it.each([
+    ['runProver', join(SRC_ROOT, 'method-aadhaar', 'prover.ts'), undefined],
+    ['gatedProgress', join(SRC_ROOT, 'method-aadhaar', 'prover.ts'), undefined],
+    ['signal', TYPES, 'AadhaarMaterial'],
+    ['prove', TYPES, 'AnonAadhaarStack'],
+    ['replyFrom', join(SRC_ROOT, 'method-aadhaar', 'method.ts'), 'AnonAadhaarMethod'],
+    ['anonAadhaarMethod', join(SRC_ROOT, 'method-aadhaar', 'factory.ts'), undefined],
+  ] as const)('%s says progress stops once the call settles, not only on an abort', (name, path, within) => {
+    expect(flat(jsDocOf(path, name, within))).toMatch(SETTLES);
+  });
 });
 
 describe('the abort contract\'s changeset', () => {
@@ -296,5 +359,14 @@ describe('the abort contract\'s changeset', () => {
     expect(text).toMatch(/no worker/i);
     expect(text).toContain('Compatibility');
     expect(text).not.toMatch(/^\s*(\*\*)?breaking/im);
+  });
+
+  it('says progress stops once the call settles', () => {
+    expect(flat(text)).toMatch(SETTLES);
+  });
+
+  it('names the recovery-methods entry as the one exporting the factory, never both entries', () => {
+    expect(text).toMatch(/recovery-methods/);
+    expect(text).not.toMatch(/both entries/i);
   });
 });

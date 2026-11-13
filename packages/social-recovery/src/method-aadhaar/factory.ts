@@ -9,8 +9,9 @@ import { coreStack } from './stack';
 /**
  * The Aadhaar method, over an injected stack or the installed `@anon-aadhaar/core` with the given artifacts or
  * `METHOD_AADHAAR_DEFAULT_ARTIFACTS`, either in test mode; passing a stack and artifacts throws a `TypeError`.
- * The SDK starts no worker: an abort settles the call `device-refused` at once and forwards no more progress, while the
- * installed stack's download and proving run on in the page until they end, beside any call started meanwhile.
+ * The SDK starts no worker: an abort settles the call `device-refused` at once, no progress is forwarded after the signal
+ * aborts or the call settles, and the installed stack's download and proving run on in the page until they end, beside any
+ * call started meanwhile.
  */
 export function anonAadhaarMethod(options: AnonAadhaarMethodOptions = {}): IRecoveryMethod {
   if (options.stack !== undefined && options.artifacts !== undefined) {

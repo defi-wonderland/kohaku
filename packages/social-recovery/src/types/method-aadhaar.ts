@@ -46,8 +46,9 @@ export type AadhaarPcd = { readonly proof: AadhaarStackProof; readonly [member: 
 export type AnonAadhaarStack = {
   readonly generateArgs: (options: AadhaarArgsOptions) => Promise<AadhaarProverArgs>;
   /**
-   * Receives the page's progress, which forwards no state once the signal aborts, and the page's abort signal. The installed
-   * stack's `prove` does not take the signal, so its download and proving run on after an abort; an injected stack may stop on it.
+   * Receives the page's progress, which forwards no state after the signal aborts or the call settles, and the page's abort
+   * signal. The installed stack's `prove` does not take the signal, so its download and proving run on after an abort; an
+   * injected stack may stop on it.
    */
   readonly prove: (args: AadhaarProverArgs, onProgress?: AadhaarProgress, signal?: AbortSignal) => Promise<AadhaarPcd>;
   readonly verify: (pcd: AadhaarPcd, testMode?: boolean) => Promise<boolean>;
@@ -118,9 +119,10 @@ export type AadhaarMaterial = {
   readonly qrData: string;
   readonly onProgress?: AadhaarProgress;
   /**
-   * Aborting settles the call `device-refused` at once, with no proof or config, and forwards no progress after it. The SDK starts
-   * no worker: the installed stack's download and proving run on, holding their memory and CPU until they end, and a call started
-   * meanwhile proves alongside them; an injected stack receives the signal and may stop its own work.
+   * Aborting settles the call `device-refused` at once, with no proof or config, and no progress is forwarded after the signal
+   * aborts or the call settles. The SDK starts no worker: the installed stack's download and proving run on, holding their memory
+   * and CPU until they end, and a call started meanwhile proves alongside them; an injected stack receives the signal and may stop
+   * its own work.
    */
   readonly signal?: AbortSignal;
 };

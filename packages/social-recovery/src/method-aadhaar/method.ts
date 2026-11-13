@@ -72,7 +72,8 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
    * Proves once, under the stack's default signal, and returns the nullifier, its seed and the input's freshness window as the
    * config, the default for an input that carries none; a window the bounds refuse is `material-rejected` before proving, and a
    * proof whose issuer key is not the input's trusted key is `material-untrusted`.
-   * An abort settles it `device-refused` at once with no config; the installed stack's proving runs on until it ends.
+   * An abort settles it `device-refused` at once with no config, and no progress is forwarded after the signal aborts or the
+   * call settles; the installed stack's proving runs on until it ends.
    */
   async configFrom(input: EnrollInput, material: Material): Promise<Hex | EnrollFailure> {
     const params = input?.kind === METHOD_AADHAAR_ENROLL_KIND ? readInput(input) : undefined;
@@ -126,7 +127,8 @@ export class AnonAadhaarMethod implements IRecoveryMethod {
    * `material-rejected` before proving. The chain accepts the proof until one window after the QR's signing time, whatever the request's
    * validity, so the holder's simulation refuses one that aged. A fresh proof whose issuer key is not the input's trusted key is
    * `material-untrusted` without the local verdict. An abort at any point, the time read and verification included, is `device-refused`
-   * at once with no proof and no further progress; the installed stack's download and proving run on until they end.
+   * at once with no proof, and no progress is forwarded after the signal aborts or the call settles; the installed stack's
+   * download and proving run on until they end.
    */
   async replyFrom(ctx: Ctx, input: Input, material: Material): Promise<Hex | ReplyFailure> {
     const params = readInput(input);

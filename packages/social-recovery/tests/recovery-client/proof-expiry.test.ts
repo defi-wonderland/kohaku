@@ -23,7 +23,7 @@ import { anonAadhaarMethod } from '../../src/method-aadhaar';
 import { zkPassportMethod } from '../../src/method-zkpassport';
 import { approvalGathering, PINNED_AT, placeEntry, replyFor, VALID_UNTIL } from '../gathering/support';
 import { jsDocOf, PACKAGE_ROOT, SRC_ROOT } from '../helpers/source';
-import { encodeConfig, encodeProof, outerInputs, PARAMS, stackDouble, word } from '../method-zkpassport/fixtures';
+import { encodeConfig, encodeProof, outerInputs, PARAMS, stackDouble, thrown, word } from '../method-zkpassport/fixtures';
 import { ACCOUNT, ACTION, CLIENT_CONFIGURATION, DESCRIPTOR, rig } from './doubles';
 
 /** The zkPassport module, registered checksummed while the places carry it lower-cased. */
@@ -72,6 +72,76 @@ const methodWith = (proofExpiry: unknown): IRecoveryMethod => {
 
   return { codec: { ...codec, proofExpiry } as IMethodCodec } as IRecoveryMethod;
 };
+
+/** A second module, registered checksummed while its places carry it lower-cased. */
+const OTHER = getAddress(`0x${'cd'.repeat(20)}`);
+
+/** All four places filed in place order with proofs expiring at the given moments, otherwise at `T + 50`, the places in `others` under `OTHER`. */
+function mixedFiled(others: readonly number[], expiries: { readonly [place: number]: number } = {}): Gathering {
+  const methodOf = (place: number): Address => (others.includes(place) ? OTHER : ZK).toLowerCase() as Address;
+  const start = approvalGathering([0, 1, 2, 3].map((place) => placeEntry(place, { method: methodOf(place), config: zkConfig(place) })));
+
+  return [0, 1, 2, 3].reduce<Gathering>((record, place) => {
+    const filed = fileReply(record, replyFor(record, place, { proof: proofExpiringAt(expiries[place] ?? T + 50) }));
+
+    if (filed.outcome !== 'filed') throw new Error(`refused at ${place}`);
+
+    return filed.gathering;
+  }, start);
+}
+
+/** The zkPassport module at `ZK` and the given implementation at `OTHER`. */
+const mixedRegistry = (other: IRecoveryMethod): MethodRegistry => new Map([[ZK, zkPassportMethod({ stack: stackDouble().stack })], [OTHER, other]]);
+
+/** A method whose zkPassport codec sits behind a proxy that records every member asked of it. */
+function recordingMethod(): { readonly method: IRecoveryMethod; readonly asked: string[] } {
+  const asked: string[] = [];
+  const { codec } = zkPassportMethod({ stack: stackDouble().stack });
+  const spy = new Proxy(codec, {
+    get: (target, key, receiver): unknown => {
+      asked.push(`get ${String(key)}`);
+
+      return Reflect.get(target, key, receiver);
+    },
+    has: (target, key) => {
+      asked.push(`has ${String(key)}`);
+
+      return Reflect.has(target, key);
+    },
+    getOwnPropertyDescriptor: (target, key) => {
+      asked.push(`describe ${String(key)}`);
+
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    },
+    ownKeys: (target) => {
+      asked.push('keys');
+
+      return Reflect.ownKeys(target);
+    },
+  });
+
+  return { method: { codec: spy } as IRecoveryMethod, asked };
+}
+
+/** A method whose zkPassport codec keeps its `proofExpiry` but whose `decodeConfig` is not a function. */
+const decodeless = (): IRecoveryMethod => {
+  const { codec } = zkPassportMethod({ stack: stackDouble().stack });
+
+  return { codec: { ...codec, decodeConfig: 'none' } as unknown as IMethodCodec } as IRecoveryMethod;
+};
+
+/** Implementations the strict codec check refuses, each with the tail of the `TypeError` message it raises for a place of `OTHER`. */
+const MISCONFIGURED: readonly (readonly [string, () => IRecoveryMethod, string])[] = [
+  ['has a number for proofExpiry', () => methodWith(5), 'codec.proofExpiry must be a function'],
+  ['has a string for proofExpiry', () => methodWith('soon'), 'codec.proofExpiry must be a function'],
+  ['has null for proofExpiry', () => methodWith(null), 'codec.proofExpiry must be a function'],
+  ['has a record for proofExpiry', () => methodWith({ expiry: 1 }), 'codec.proofExpiry must be a function'],
+  ['is not an object', () => ({ codec: 7 }) as unknown as IRecoveryMethod, 'codec must be an object'],
+  ['has a proofExpiry but no decodeConfig function', decodeless, 'codec.decodeConfig must be a function'],
+];
+
+/** The `TypeError` message the strict check raises for a place of `OTHER`. */
+const otherMessage = (tail: string): string => `methods.get(${OTHER.toLowerCase()}).${tail}`;
 
 /** A finding with every integer value as a bigint, so a number and a bigint of one value compare equal. */
 const integral = (finding: Finding): unknown => ({
@@ -247,6 +317,75 @@ describe('complete refuses a chosen proof that has expired', () => {
 
   it('the expiry message tells the caller what to do', () => {
     expect(GATHERING_PROOF_EXPIRED_MESSAGE).toContain('a chosen proof has expired; ask its approver again or select other places');
+  });
+});
+
+describe('complete consults the codecs of the chosen places alone', () => {
+  it.each(MISCONFIGURED)('an unchosen place whose codec %s leaves the preferred set\'s completion as it is without that module', (_why, other) => {
+    const record = mixedFiled([3]);
+
+    expect(clientWith(mixedRegistry(other())).complete(record, undefined, T)).toStrictEqual(clientWith(zkRegistry()).complete(record, undefined, T));
+  });
+
+  it.each(MISCONFIGURED)('a selection leaving out a place whose codec %s completes with the places it names', (_why, other) => {
+    expect(proofPlaces(clientWith(mixedRegistry(other())).complete(mixedFiled([1]), [0, 2, 3], T))).toEqual([0, 2, 3]);
+  });
+
+  it.each(MISCONFIGURED)('beside an unchosen place whose codec %s, an expired chosen proof is still the expiry refusal', (_why, other) => {
+    const refusal = refusalOf(() => clientWith(mixedRegistry(other())).complete(mixedFiled([3], { 1: T }), undefined, T));
+
+    expect(refusal.message).toBe(GATHERING_PROOF_EXPIRED_MESSAGE);
+    expect(refusal.findings?.warnings).toEqual([]);
+    expect(refusal.findings?.errors.map(integral)).toEqual([expired(1, T, T)]);
+  });
+
+  it.each(MISCONFIGURED)('assess on the same record still throws the TypeError for the place whose codec %s', (_why, other, tail) => {
+    const error = thrown(() => clientWith(mixedRegistry(other())).assess(mixedFiled([3]), T));
+
+    expect(error).toBeInstanceOf(TypeError);
+    expect((error as TypeError).message).toBe(otherMessage(tail));
+  });
+
+  it.each(MISCONFIGURED)('a chosen place whose codec %s still makes complete throw that TypeError', (_why, other, tail) => {
+    const error = thrown(() => clientWith(mixedRegistry(other())).complete(mixedFiled([3]), [0, 1, 3], T));
+
+    expect(error).toBeInstanceOf(TypeError);
+    expect((error as TypeError).message).toBe(otherMessage(tail));
+  });
+
+  it('never asks an unchosen place\'s codec for anything, even where its proof has expired', () => {
+    const { method, asked } = recordingMethod();
+
+    expect(proofPlaces(clientWith(mixedRegistry(method)).complete(mixedFiled([3], { 3: T }), undefined, T))).toEqual([0, 1, 2]);
+    expect(asked).toEqual([]);
+  });
+
+  it('asks a chosen place\'s codec for its expiry, and refuses the expired place', () => {
+    const { method, asked } = recordingMethod();
+    const refusal = refusalOf(() => clientWith(mixedRegistry(method)).complete(mixedFiled([3], { 3: T }), [0, 1, 3], T));
+
+    expect(refusal.findings?.errors.map(integral)).toEqual([expired(3, T, T)]);
+    expect(asked).toContain('get proofExpiry');
+  });
+
+  it('assess still asks the codec of every filed place and reports the unchosen expired one', () => {
+    const { method, asked } = recordingMethod();
+    const findings = assessed(clientWith(mixedRegistry(method)), mixedFiled([3], { 3: T }), T);
+
+    expect(findings).toEqual([expired(3, T, T), expiring(0, T + 50), expiring(1, T + 50), expiring(2, T + 50)]);
+    expect(asked).toContain('get proofExpiry');
+  });
+
+  it.each([
+    ['under the zkPassport module', []],
+    ['under a second aging module', [3]],
+  ] as const)('an expired proof %s left out of the preferred set does not refuse it, and a selection naming it does', (_why, others) => {
+    const record = mixedFiled(others, { 3: T - 10 });
+    const client = clientWith(mixedRegistry(zkPassportMethod({ stack: stackDouble().stack })));
+
+    expect(proofPlaces(client.complete(record, undefined, T))).toEqual([0, 1, 2]);
+    expect(refusalOf(() => client.complete(record, [0, 1, 3], T)).findings?.errors.map(integral)).toEqual([expired(3, T - 10, T)]);
+    expect(assessed(client, record, T)[0]).toEqual(expired(3, T - 10, T));
   });
 });
 

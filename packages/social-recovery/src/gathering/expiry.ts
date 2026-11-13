@@ -1,6 +1,7 @@
 import { assertDependency, assertObject, sameAddress } from '../formats/guards';
 import type { Address, Gathering, IRecoveryMethod, Moment, ProofPlace, Reply, ValidationError, ValidationResult, ValidationWarning } from '../interfaces';
 import type { MethodRegistry } from '../types';
+import type { FiledPlace } from '../types/gathering';
 import { filedPlaces, windowFactsOf } from './edge';
 
 /** The registered implementation serving the method, if any. */
@@ -83,13 +84,15 @@ export function filedExpiryFindings(record: Gathering, methods: MethodRegistry, 
   return expiryFindings(proofExpiries(record, methods), windowFactsOf(record).validUntil, now);
 }
 
-/** The `proof.expired` findings of the places a completion chose, in place order. */
+/** The `proof.expired` findings of the places a completion chose, in place order; no other place's codec is asked. */
 export function expiredChoices(record: Gathering, methods: MethodRegistry, proofs: readonly ProofPlace[], now: Moment): readonly ValidationError[] {
-  const expiries = proofExpiries(record, methods);
+  const filed = filedPlaces(record);
   const chosen = new Map<number, bigint>();
 
   for (const { place } of proofs) {
-    const expiresAt = expiries.get(place);
+    const { reply } = filed.get(place) as FiledPlace;
+    const implementation = implementationOf(methods, reply.method);
+    const expiresAt = implementation === undefined ? undefined : expiryOf(implementation, reply);
 
     if (expiresAt !== undefined) chosen.set(place, expiresAt);
   }

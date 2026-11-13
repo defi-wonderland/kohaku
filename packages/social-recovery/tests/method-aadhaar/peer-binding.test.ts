@@ -377,7 +377,7 @@ describe('a waiting prove whose signal aborts never reaches the peer', () => {
     finish(boundPcd);
 
     expect(await proving).toBe(boundPcd);
-    expect(await within(waiting, BOUND_MS)).not.toBe('proved');
+    expect(await within(waiting, BOUND_MS)).toBe('refused');
     expect(core.prove.mock.calls.map(([args]) => args)).toEqual([{ from: 'ours' }]);
   });
 });
